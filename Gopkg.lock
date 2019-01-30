@@ -2,6 +2,14 @@
 
 
 [[projects]]
+  branch = "master"
+  digest = "1:f1976930cb2f6da9d51858bc9eb3620b2f9e75f1f22c878a50eadf236400265e"
+  name = "github.com/container-storage-interface/spec"
+  packages = ["lib/go/csi"]
+  pruneopts = "NUT"
+  revision = "37e74064635d27c8e33537c863b37ccb1182d4f8"
+
+[[projects]]
   digest = "1:ffe9824d294da03b391f44e1ae8281281b4afc1bdaa9588c9097785e3af10cec"
   name = "github.com/davecgh/go-spew"
   packages = ["spew"]
@@ -29,14 +37,17 @@
   revision = "c65c006176ff7ff98bb916961c7abbc6b0afc0aa"
 
 [[projects]]
-  digest = "1:63ccdfbd20f7ccd2399d0647a7d100b122f79c13bb83da9660b1598396fd9f62"
+  digest = "1:bff0ce7c8e3d6357fa5a8549bbe4bdb620bddc13c11ae569aa7248ea92e2139f"
   name = "github.com/golang/protobuf"
   packages = [
+    "descriptor",
     "proto",
+    "protoc-gen-go/descriptor",
     "ptypes",
     "ptypes/any",
     "ptypes/duration",
     "ptypes/timestamp",
+    "ptypes/wrappers",
   ]
   pruneopts = "NUT"
   revision = "aa810b61a9c79d51363740d207bb46cf8e620ed5"
@@ -109,6 +120,14 @@
   version = "v1.1.5"
 
 [[projects]]
+  digest = "1:2b060bb1a39127e592baf9ab62ec1e94100dc22107f915183f3cd1f6d1cd579a"
+  name = "github.com/kubernetes-csi/csi-lib-utils"
+  packages = ["protosanitizer"]
+  pruneopts = "NUT"
+  revision = "5853414e1d4771302e0df10d1870c444c2135799"
+  version = "v0.2.0"
+
+[[projects]]
   digest = "1:2f42fa12d6911c7b7659738758631bec870b7e9b4c6be5444f963cdcfccc191f"
   name = "github.com/modern-go/concurrent"
   packages = ["."]
@@ -158,7 +177,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:122db8a20246abd128a496d22b6c35d3c648de20e3445e583b370c86c2d96d53"
+  digest = "1:8940c3a0b58bb9c1fb3656ae43c5318345fbb1c15bd089cfd23dd373fb37950d"
   name = "golang.org/x/net"
   packages = [
     "context",
@@ -167,6 +186,8 @@
     "http2",
     "http2/hpack",
     "idna",
+    "internal/timeseries",
+    "trace",
   ]
   pruneopts = "NUT"
   revision = "927f97764cc334a6575f4b7a1584a147864d5723"
@@ -241,6 +262,54 @@
   version = "v1.4.0"
 
 [[projects]]
+  branch = "master"
+  digest = "1:077c1c599507b3b3e9156d17d36e1e61928ee9b53a5b420f10f28ebd4a0b275c"
+  name = "google.golang.org/genproto"
+  packages = ["googleapis/rpc/status"]
+  pruneopts = "NUT"
+  revision = "aa24cbd621fe1e2867110ea8c673d99a1a92efdc"
+
+[[projects]]
+  digest = "1:4837585442801f3c7ebd044a96fce852242529a73bdd96fcba2119ff74987b0b"
+  name = "google.golang.org/grpc"
+  packages = [
+    ".",
+    "balancer",
+    "balancer/base",
+    "balancer/roundrobin",
+    "binarylog/grpc_binarylog_v1",
+    "codes",
+    "connectivity",
+    "credentials",
+    "credentials/internal",
+    "encoding",
+    "encoding/proto",
+    "grpclog",
+    "internal",
+    "internal/backoff",
+    "internal/binarylog",
+    "internal/channelz",
+    "internal/envconfig",
+    "internal/grpcrand",
+    "internal/grpcsync",
+    "internal/syscall",
+    "internal/transport",
+    "keepalive",
+    "metadata",
+    "naming",
+    "peer",
+    "resolver",
+    "resolver/dns",
+    "resolver/passthrough",
+    "stats",
+    "status",
+    "tap",
+  ]
+  pruneopts = "NUT"
+  revision = "a02b0774206b209466313a0b525d2c738fe407eb"
+  version = "v1.18.0"
+
+[[projects]]
   digest = "1:2d1fbdc6777e5408cabeb02bf336305e724b925ff4546ded0fa8715a7267922a"
   name = "gopkg.in/inf.v0"
   packages = ["."]
@@ -257,7 +326,6 @@
   version = "v2.2.2"
 
 [[projects]]
-  branch = "master"
   digest = "1:114568926a27dc8e6304830dbe625d11467e565274010aeab708807db814f964"
   name = "k8s.io/api"
   packages = [
@@ -296,11 +364,11 @@
     "storage/v1beta1",
   ]
   pruneopts = "NUT"
-  revision = "173ce66c1e39d1d0f56e0b3347ff2988068aecd0"
+  revision = "dd23d9f710e22c20a1f105889a45bc13ed56677c"
+  version = "kubernetes-1.14.0-alpha.1"
 
 [[projects]]
-  branch = "master"
-  digest = "1:1675b63dd19a348d00c4c1c54ca6d4a3f2443695fddcf5e99d5699ed68ed09fa"
+  digest = "1:0b812348f69e5c2ffbc88f9560b00dc4c0d8c27de594127f8fea73a61ec785ca"
   name = "k8s.io/apimachinery"
   packages = [
     "pkg/api/errors",
@@ -347,11 +415,11 @@
     "third_party/forked/golang/reflect",
   ]
   pruneopts = "NUT"
-  revision = "b814ad55d7c53a68b9393b80646f3c2ca087e17b"
+  revision = "fa6ddc151d63306b3540a37d910a07b181e4a474"
+  version = "kubernetes-1.14.0-alpha.1"
 
 [[projects]]
-  branch = "master"
-  digest = "1:4343e0863ed35594d3f2490328dcc6c1abad58185d996b1ca03d598485cd173a"
+  digest = "1:021b92451896c9d3bb8222035c626b8118a18d23e9e639780d8652921827f01a"
   name = "k8s.io/client-go"
   packages = [
     "discovery",
@@ -496,7 +564,8 @@
     "util/workqueue",
   ]
   pruneopts = "NUT"
-  revision = "e88b66d04fb772c1810357e9e0ca473f7e8bf243"
+  revision = "b831b8de7155117e51afaffeb647007a756ddc92"
+  version = "kubernetes-1.14.0-alpha.1"
 
 [[projects]]
   digest = "1:9cc257b3c9ff6a0158c9c661ab6eebda1fe8a4a4453cd5c4044dc9a2ebfb992b"
@@ -526,18 +595,25 @@
   analyzer-name = "dep"
   analyzer-version = 1
   input-imports = [
+    "github.com/container-storage-interface/spec/lib/go/csi",
+    "github.com/kubernetes-csi/csi-lib-utils/protosanitizer",
+    "google.golang.org/grpc",
+    "google.golang.org/grpc/connectivity",
     "k8s.io/api/core/v1",
     "k8s.io/apimachinery/pkg/api/errors",
     "k8s.io/apimachinery/pkg/api/resource",
     "k8s.io/apimachinery/pkg/apis/meta/v1",
     "k8s.io/apimachinery/pkg/types",
+    "k8s.io/apimachinery/pkg/util/sets",
     "k8s.io/apimachinery/pkg/util/strategicpatch",
+    "k8s.io/apimachinery/pkg/util/validation",
     "k8s.io/apimachinery/pkg/util/wait",
     "k8s.io/client-go/informers",
     "k8s.io/client-go/kubernetes",
     "k8s.io/client-go/kubernetes/scheme",
     "k8s.io/client-go/kubernetes/typed/core/v1",
     "k8s.io/client-go/listers/core/v1",
+    "k8s.io/client-go/listers/storage/v1",
     "k8s.io/client-go/rest",
     "k8s.io/client-go/tools/cache",
     "k8s.io/client-go/tools/clientcmd",
