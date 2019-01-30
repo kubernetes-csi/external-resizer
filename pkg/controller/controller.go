@@ -48,16 +48,15 @@ type ResizeController interface {
 }
 
 type resizeController struct {
-	name            string
-	resizer         resizer.Resizer
-	kubeClient      kubernetes.Interface
-	claimQueue      workqueue.RateLimitingInterface
-	eventRecorder   record.EventRecorder
-	pvLister        corelisters.PersistentVolumeLister
-	pvSynced        cache.InformerSynced
-	pvcLister       corelisters.PersistentVolumeClaimLister
-	pvcSynced       cache.InformerSynced
-	informerFactory informers.SharedInformerFactory
+	name          string
+	resizer       resizer.Resizer
+	kubeClient    kubernetes.Interface
+	claimQueue    workqueue.RateLimitingInterface
+	eventRecorder record.EventRecorder
+	pvLister      corelisters.PersistentVolumeLister
+	pvSynced      cache.InformerSynced
+	pvcLister     corelisters.PersistentVolumeClaimLister
+	pvcSynced     cache.InformerSynced
 }
 
 // NewResizeController returns a ResizeController.
@@ -65,8 +64,8 @@ func NewResizeController(
 	name string,
 	resizer resizer.Resizer,
 	kubeClient kubernetes.Interface,
-	resyncPeriod time.Duration) ResizeController {
-	informerFactory := informers.NewSharedInformerFactory(kubeClient, resyncPeriod)
+	resyncPeriod time.Duration,
+	informerFactory informers.SharedInformerFactory) ResizeController {
 	pvInformer := informerFactory.Core().V1().PersistentVolumes()
 	pvcInformer := informerFactory.Core().V1().PersistentVolumeClaims()
 
@@ -80,16 +79,15 @@ func NewResizeController(
 		workqueue.DefaultControllerRateLimiter(), fmt.Sprintf("%s-pvc", name))
 
 	ctrl := &resizeController{
-		name:            name,
-		resizer:         resizer,
-		kubeClient:      kubeClient,
-		pvLister:        pvInformer.Lister(),
-		pvSynced:        pvInformer.Informer().HasSynced,
-		pvcLister:       pvcInformer.Lister(),
-		pvcSynced:       pvcInformer.Informer().HasSynced,
-		claimQueue:      claimQueue,
-		eventRecorder:   eventRecorder,
-		informerFactory: informerFactory,
+		name:          name,
+		resizer:       resizer,
+		kubeClient:    kubeClient,
+		pvLister:      pvInformer.Lister(),
+		pvSynced:      pvInformer.Informer().HasSynced,
+		pvcLister:     pvcInformer.Lister(),
+		pvcSynced:     pvcInformer.Informer().HasSynced,
+		claimQueue:    claimQueue,
+		eventRecorder: eventRecorder,
 	}
 
 	// Add a resync period as the PVC's request size can be resized again when we handling
@@ -166,7 +164,6 @@ func (ctrl *resizeController) Run(
 
 		stopCh := ctx.Done()
 
-		ctrl.informerFactory.Start(stopCh)
 		if !cache.WaitForCacheSync(stopCh, ctrl.pvSynced, ctrl.pvcSynced) {
 			klog.Errorf("Cannot sync pv/pvc caches")
 			return

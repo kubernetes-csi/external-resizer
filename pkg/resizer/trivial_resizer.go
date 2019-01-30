@@ -21,12 +21,18 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
+const exampleResizerName = "csi/example-resizer"
+
 // newTrivialResizer returns a trivial resizer which will mark all pvs' resize process as finished.
 func newTrivialResizer() Resizer {
 	return &trivialResizer{}
 }
 
 type trivialResizer struct{}
+
+func (r *trivialResizer) Name() string {
+	return exampleResizerName
+}
 
 func (r *trivialResizer) CanSupport(pv *v1.PersistentVolume) bool {
 	return true

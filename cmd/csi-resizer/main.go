@@ -24,6 +24,8 @@ import (
 	"github.com/kubernetes-csi/external-resizer/pkg/resizer"
 	"github.com/kubernetes-csi/external-resizer/pkg/util"
 
+	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/informers"
 	"k8s.io/klog"
 )
 
@@ -32,6 +34,9 @@ var (
 	kubeConfig   = flag.String("kubeconfig", "", "Absolute path to the kubeconfig")
 	resyncPeriod = flag.Duration("resync-period", time.Minute*10, "Resync period for cache")
 	workers      = flag.Int("workers", 10, "Concurrency to process multiple resize requests")
+
+	csiAddress = flag.String("csi-address", "/run/csi/socket", "Address of the CSI driver socket.")
+	csiTimeout = flag.Duration("csiTimeout", 15*time.Second, "Timeout for waiting for CSI driver socket.")
 
 	enableLeaderElection      = flag.Bool("leader-election", false, "Enable leader election.")
 	leaderElectionIdentity    = flag.String("leader-election-identity", "", "Unique identity of this resizer. Typically name of the pod where the resizer runs.")
@@ -58,12 +63,19 @@ func main() {
 	flag.Set("logtostderr", "true")
 	flag.Parse()
 
-	resizerName := "csi/example-resizer"
-
 	kubeClient, err := util.NewK8sClient(*master, *kubeConfig)
 	if err != nil {
 		klog.Fatal(err.Error())
 	}
+
+	informerFactory := informers.NewSharedInformerFactory(kubeClient, *resyncPeriod)
+
+	csiResizer, err := resizer.NewCSIResizer(*csiAddress, *csiTimeout, kubeClient, informerFactory)
+	if err != nil {
+		klog.Fatal(err.Error())
+	}
+
+	resizerName := csiResizer.Name()
 
 	var leaderElectionConfig *util.LeaderElectionConfig
 	if *enableLeaderElection {
@@ -80,6 +92,8 @@ func main() {
 		}
 	}
 
-	rc := controller.NewResizeController(resizerName, resizer.New(), kubeClient, *resyncPeriod)
+	rc := controller.NewResizeController(resizerName, csiResizer, kubeClient, *resyncPeriod, informerFactory)
+
+	informerFactory.Start(wait.NeverStop)
 	rc.Run(*workers, leaderElectionConfig)
 }
