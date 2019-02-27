@@ -23,13 +23,10 @@ import (
 
 // Resizer is responsible for handling pvc resize requests.
 type Resizer interface {
+	// Name returns the resizer's name.
+	Name() string
 	// CanSupport returns true if resizer supports resize operation of this PV.
 	CanSupport(pv *v1.PersistentVolume) bool
 	// Resize executes the resize operation of this PV.
 	Resize(pv *v1.PersistentVolume, requestSize resource.Quantity) (newSize resource.Quantity, fsResizeRequired bool, err error)
-}
-
-// New returns a default resizer.
-func New() Resizer {
-	return newTrivialResizer()
 }
