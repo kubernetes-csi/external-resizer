@@ -40,13 +40,13 @@
   name = "k8s.io/klog"
   version = "0.1.0"
 
-[[constraint]]
-  branch = "master"
+[[override]]
   name = "github.com/container-storage-interface/spec"
+  branch = "master"
 
 [[constraint]]
   name = "github.com/kubernetes-csi/csi-lib-utils"
-  version = "0.2.0"
+  version = ">=0.4.0-rc1"
 
 [prune]
    non-go = true

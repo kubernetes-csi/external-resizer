@@ -23,14 +23,18 @@ import (
 	"os"
 	"time"
 
-	"github.com/kubernetes-csi/external-resizer/pkg/csi"
+	"github.com/container-storage-interface/spec/lib/go/csi"
+	"github.com/kubernetes-csi/csi-lib-utils/connection"
+	csirpc "github.com/kubernetes-csi/csi-lib-utils/rpc"
+	"github.com/kubernetes-csi/external-resizer/pkg/client"
+
+	"google.golang.org/grpc"
 
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/validation"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	storagev1listers "k8s.io/client-go/listers/storage/v1"
@@ -47,31 +51,42 @@ func NewCSIResizer(
 	address string, timeout time.Duration,
 	k8sClient kubernetes.Interface, informerFactory informers.SharedInformerFactory) (Resizer, error) {
 
-	client, err := csi.New(address, timeout)
+	conn, err := connection.Connect(address)
 	if err != nil {
-		return nil, fmt.Errorf("connect to CSI driver failed: %v", err)
+		return nil, fmt.Errorf("failed to connect to CSI driver: %v", err)
 	}
 
-	if err := waitDriverReady(client, timeout); err != nil {
-		return nil, err
+	err = csirpc.ProbeForever(conn, timeout)
+	if err != nil {
+		return nil, fmt.Errorf("failed probing CSI driver: %v", err)
 	}
 
-	name, err := getDriverName(client, timeout)
+	name, err := csirpc.GetDriverName(context.Background(), conn)
 	if err != nil {
 		return nil, fmt.Errorf("get driver name failed: %v", err)
 	}
 
-	if err := supportsPluginControllerService(client, timeout); err != nil {
-		return nil, err
+	supports, err := supportsPluginControllerService(conn, timeout)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check if plugin supports controller service: %v", err)
 	}
 
-	if err := supportsControllerResize(client, timeout); err != nil {
-		return nil, err
+	if !supports {
+		return nil, errors.New("CSI driver does not support controller service")
+	}
+
+	supports, err = supportsControllerResize(conn, timeout)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check if plugin supports controller resize: %v", err)
+	}
+
+	if !supports {
+		return nil, fmt.Errorf("CSI driver does not support controller resize")
 	}
 
 	return &csiResizer{
 		name:    name,
-		client:  client,
+		client:  client.New(conn),
 		timeout: timeout,
 
 		k8sClient: k8sClient,
@@ -81,7 +96,7 @@ func NewCSIResizer(
 
 type csiResizer struct {
 	name    string
-	client  csi.Client
+	client  client.Client
 	timeout time.Duration
 
 	k8sClient kubernetes.Interface
@@ -144,55 +159,28 @@ func (r *csiResizer) Resize(pv *v1.PersistentVolume, requestSize resource.Quanti
 	return *resource.NewQuantity(newSizeBytes, resource.BinarySI), nodeResizeRequired, err
 }
 
-func waitDriverReady(client csi.Client, timeout time.Duration) error {
-	err := wait.PollImmediate(time.Second, timeout, func() (bool, error) {
-		ctx, cancel := timeoutCtx(timeout)
-		defer cancel()
-		if err := client.Probe(ctx); err != nil {
-			klog.V(4).Infof("Driver not ready: %v", err)
-			return false, nil
-		}
-		return true, nil
-	})
-	if err != nil {
-		if err == wait.ErrWaitTimeout {
-			return errors.New("waiting for driver ready timeout")
-		}
-		return err
-	}
-	return nil
-}
-
-func getDriverName(client csi.Client, timeout time.Duration) (string, error) {
+func supportsPluginControllerService(conn *grpc.ClientConn, timeout time.Duration) (bool, error) {
 	ctx, cancel := timeoutCtx(timeout)
 	defer cancel()
-	return client.GetDriverName(ctx)
+
+	caps, err := csirpc.GetPluginCapabilities(ctx, conn)
+	if err != nil {
+		return false, fmt.Errorf("error getting controller capabilities: %v", err)
+	}
+
+	return caps[csi.PluginCapability_Service_CONTROLLER_SERVICE], nil
 }
 
-func supportsPluginControllerService(client csi.Client, timeout time.Duration) error {
+func supportsControllerResize(conn *grpc.ClientConn, timeout time.Duration) (bool, error) {
 	ctx, cancel := timeoutCtx(timeout)
 	defer cancel()
-	support, err := client.SupportsPluginControllerService(ctx)
-	if err != nil {
-		return fmt.Errorf("check driver's controller service capacity failed: %v", err)
-	}
-	if !support {
-		return errors.New("driver not support controller service")
-	}
-	return nil
-}
 
-func supportsControllerResize(client csi.Client, timeout time.Duration) error {
-	ctx, cancel := timeoutCtx(timeout)
-	defer cancel()
-	support, err := client.SupportsControllerResize(ctx)
+	caps, err := csirpc.GetControllerCapabilities(ctx, conn)
 	if err != nil {
-		return fmt.Errorf("check driver's controller resize capacity failed: %v", err)
+		return false, fmt.Errorf("error getting controller capabilities: %v", err)
 	}
-	if !support {
-		return errors.New("driver not support controller resize")
-	}
-	return nil
+
+	return caps[csi.ControllerServiceCapability_RPC_EXPAND_VOLUME], nil
 }
 
 func timeoutCtx(timeout time.Duration) (context.Context, context.CancelFunc) {
