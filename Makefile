@@ -12,26 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-.PHONY: all csi-resizer clean test
 
-all: csi-resizer
+CMDS=csi-resizer
+all: build
 
-csi-resizer:
-	mkdir -p bin
-	go build -o bin/csi-resizer ./cmd/csi-resizer
-
-clean:
-	-rm -rf bin/
-
-test:
-	go test `go list ./... | grep -v 'vendor'`
-
-fmt:
-	find . -not \( \( -wholename '*/vendor/*' \) -prune \) -name '*.go' | xargs gofmt -s -w
-
-vet:
-	go vet `go list ./... | grep -v vendor`
-
-lint:
-	find . -not \( \( -wholename '*/vendor/*' \) -prune \) -name '*.go' | xargs -L1 golint
-
+include csi-release-tools/build.make
