@@ -16,4 +16,4 @@
 CMDS=csi-resizer
 all: build
 
-include csi-release-tools/build.make
+include release-tools/build.make
