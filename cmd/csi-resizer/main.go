@@ -18,6 +18,8 @@ package main
 
 import (
 	"flag"
+	"fmt"
+	"os"
 	"time"
 
 	"github.com/kubernetes-csi/external-resizer/pkg/controller"
@@ -35,8 +37,9 @@ var (
 	resyncPeriod = flag.Duration("resync-period", time.Minute*10, "Resync period for cache")
 	workers      = flag.Int("workers", 10, "Concurrency to process multiple resize requests")
 
-	csiAddress = flag.String("csi-address", "/run/csi/socket", "Address of the CSI driver socket.")
-	csiTimeout = flag.Duration("csiTimeout", 15*time.Second, "Timeout for waiting for CSI driver socket.")
+	csiAddress  = flag.String("csi-address", "/run/csi/socket", "Address of the CSI driver socket.")
+	csiTimeout  = flag.Duration("csiTimeout", 15*time.Second, "Timeout for waiting for CSI driver socket.")
+	showVersion = flag.Bool("version", false, "Show version")
 
 	enableLeaderElection      = flag.Bool("leader-election", false, "Enable leader election.")
 	leaderElectionIdentity    = flag.String("leader-election-identity", "", "Unique identity of this resizer. Typically name of the pod where the resizer runs.")
@@ -56,12 +59,19 @@ var (
 			"slot. This is effectively the maximum duration that a leader can be stopped "+
 			"before it is replaced by another candidate. This is only applicable if leader "+
 			"election is enabled.")
+	version = "unknown"
 )
 
 func main() {
 	klog.InitFlags(nil)
 	flag.Set("logtostderr", "true")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Println(os.Args[0], version)
+		os.Exit(0)
+	}
+	klog.Infof("Version : %s", version)
 
 	kubeClient, err := util.NewK8sClient(*master, *kubeConfig)
 	if err != nil {
