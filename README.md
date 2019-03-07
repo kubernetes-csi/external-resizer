@@ -1,6 +1,7 @@
 # external-resizer
 
-TBD
+This is an external Kubernetes controller which can expand volumes using CSI volume Drivers. It's under heavy development
+and of alpha quality.
 
 ## Community, discussion, contribution, and support
 
