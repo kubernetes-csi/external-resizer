@@ -41,6 +41,10 @@ type Client interface {
 	// in ControllerGetCapabilities() gRPC call.
 	SupportsControllerResize(ctx context.Context) (bool, error)
 
+	// SupportsNodeResize returns whether the CSI driver reports EXPAND_VOLUME
+	// in NodeGetCapabilities() gRPC call.
+	SupportsNodeResize(ctx context.Context) (bool, error)
+
 	// Expand expands the volume to a new size at least as big as requestBytes.
 	// It returns the new size and whether the volume need expand operation on the node.
 	Expand(ctx context.Context, volumeID string, requestBytes int64, secrets map[string]string) (int64, bool, error)
@@ -60,12 +64,14 @@ func New(address string, timeout time.Duration) (Client, error) {
 
 	return &client{
 		conn:       conn,
+		nodeClient: csi.NewNodeClient(conn),
 		ctrlClient: csi.NewControllerClient(conn),
 	}, nil
 }
 
 type client struct {
 	conn       *grpc.ClientConn
+	nodeClient csi.NodeClient
 	ctrlClient csi.ControllerClient
 }
 
@@ -87,6 +93,26 @@ func (c *client) SupportsControllerResize(ctx context.Context) (bool, error) {
 		return false, fmt.Errorf("error getting controller capabilities: %v", err)
 	}
 	return caps[csi.ControllerServiceCapability_RPC_EXPAND_VOLUME], nil
+}
+
+func (c *client) SupportsNodeResize(ctx context.Context) (bool, error) {
+	rsp, err := c.nodeClient.NodeGetCapabilities(ctx, &csi.NodeGetCapabilitiesRequest{})
+	if err != nil {
+		return false, fmt.Errorf("error getting node capabilities: %v", err)
+	}
+	for _, capacity := range rsp.GetCapabilities() {
+		if capacity == nil {
+			continue
+		}
+		rpc := capacity.GetRpc()
+		if rpc == nil {
+			continue
+		}
+		if rpc.GetType() == csi.NodeServiceCapability_RPC_EXPAND_VOLUME {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (c *client) Expand(

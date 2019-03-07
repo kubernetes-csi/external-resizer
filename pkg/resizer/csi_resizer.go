@@ -41,36 +41,58 @@ const (
 	resizerSecretNamespaceKey = "csi.storage.k8s.io/resizer-secret-namespace"
 )
 
-// NewCSIResizer creates a new resizer responsible for resizing CSI volumes.
-func NewCSIResizer(
-	address string, timeout time.Duration,
-	k8sClient kubernetes.Interface, informerFactory informers.SharedInformerFactory) (Resizer, error) {
+var (
+	controllerServiceNotSupportErr = errors.New("CSI driver does not support controller service")
+	resizeNotSupportErr            = errors.New("CSI driver neither supports controller resize nor node resize")
+)
+
+// NewResizer creates a new resizer responsible for resizing CSI volumes.
+func NewResizer(
+	address string,
+	timeout time.Duration,
+	k8sClient kubernetes.Interface,
+	informerFactory informers.SharedInformerFactory) (Resizer, error) {
 	csiClient, err := csi.New(address, timeout)
 	if err != nil {
 		return nil, err
 	}
+	return newResizer(csiClient, timeout, k8sClient, informerFactory)
+}
 
+func newResizer(
+	csiClient csi.Client,
+	timeout time.Duration,
+	k8sClient kubernetes.Interface,
+	informerFactory informers.SharedInformerFactory) (Resizer, error) {
 	driverName, err := getDriverName(csiClient, timeout)
 	if err != nil {
 		return nil, fmt.Errorf("get driver name failed: %v", err)
 	}
 
-	supports, err := supportsPluginControllerService(csiClient, timeout)
+	supportControllerService, err := supportsPluginControllerService(csiClient, timeout)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check if plugin supports controller service: %v", err)
 	}
 
-	if !supports {
-		return nil, errors.New("CSI driver does not support controller service")
+	if !supportControllerService {
+		return nil, controllerServiceNotSupportErr
 	}
 
-	supports, err = supportsControllerResize(csiClient, timeout)
+	supportControllerResize, err := supportsControllerResize(csiClient, timeout)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check if plugin supports controller resize: %v", err)
 	}
 
-	if !supports {
-		return nil, fmt.Errorf("CSI driver does not support controller resize")
+	if !supportControllerResize {
+		supportsNodeResize, err := supportsNodeResize(csiClient, timeout)
+		if err != nil {
+			return nil, fmt.Errorf("failed to check if plugin supports node resize: %v", err)
+		}
+		if supportsNodeResize {
+			klog.Info("The CSI driver supports node resize only, using trivial resizer to handle resize requests")
+			return newTrivialResizer(driverName), nil
+		}
+		return nil, resizeNotSupportErr
 	}
 
 	return &csiResizer{
@@ -164,6 +186,12 @@ func supportsControllerResize(client csi.Client, timeout time.Duration) (bool, e
 	ctx, cancel := timeoutCtx(timeout)
 	defer cancel()
 	return client.SupportsControllerResize(ctx)
+}
+
+func supportsNodeResize(client csi.Client, timeout time.Duration) (bool, error) {
+	ctx, cancel := timeoutCtx(timeout)
+	defer cancel()
+	return client.SupportsNodeResize(ctx)
 }
 
 func timeoutCtx(timeout time.Duration) (context.Context, context.CancelFunc) {

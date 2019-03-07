@@ -19,25 +19,35 @@ package resizer
 import (
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/klog"
 )
 
-const exampleResizerName = "csi/example-resizer"
-
 // newTrivialResizer returns a trivial resizer which will mark all pvs' resize process as finished.
-func newTrivialResizer() Resizer {
-	return &trivialResizer{}
+func newTrivialResizer(name string) Resizer {
+	return &trivialResizer{name: name}
 }
 
-type trivialResizer struct{}
+type trivialResizer struct {
+	name string
+}
 
 func (r *trivialResizer) Name() string {
-	return exampleResizerName
+	return r.name
 }
 
 func (r *trivialResizer) CanSupport(pv *v1.PersistentVolume) bool {
+	source := pv.Spec.CSI
+	if source == nil {
+		klog.V(4).Infof("PV %s is not a CSI volume, skip it", pv.Name)
+		return false
+	}
+	if source.Driver != r.name {
+		klog.V(4).Infof("Skip resize PV %s for resizer %s", pv.Name, source.Driver)
+		return false
+	}
 	return true
 }
 
 func (r *trivialResizer) Resize(pv *v1.PersistentVolume, requestSize resource.Quantity) (newSize resource.Quantity, fsResizeRequired bool, err error) {
-	return requestSize, false, nil
+	return requestSize, true, nil
 }
