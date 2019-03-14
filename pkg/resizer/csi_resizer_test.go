@@ -2,49 +2,50 @@ package resizer
 
 import (
 	"testing"
+
 	"github.com/kubernetes-csi/external-resizer/pkg/csi"
-	"k8s.io/client-go/kubernetes/fake"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/informers"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/kubernetes/fake"
 )
 
 func TestNewResizer(t *testing.T) {
-	for i, c := range []struct{
+	for i, c := range []struct {
 		SupportsNodeResize              bool
 		SupportsControllerResize        bool
 		SupportsPluginControllerService bool
 
-		Error error
+		Error   error
 		Trivial bool
 	}{
 		// Create succeeded.
 		{
-			SupportsNodeResize: true,
-			SupportsControllerResize: true,
+			SupportsNodeResize:              true,
+			SupportsControllerResize:        true,
 			SupportsPluginControllerService: true,
 
 			Trivial: false,
 		},
 		// Controller service not supported.
 		{
-			SupportsNodeResize: true,
-			SupportsControllerResize: true,
+			SupportsNodeResize:              true,
+			SupportsControllerResize:        true,
 			SupportsPluginControllerService: false,
 
 			Error: controllerServiceNotSupportErr,
 		},
 		// Only node resize supported.
 		{
-			SupportsNodeResize: true,
-			SupportsControllerResize: false,
+			SupportsNodeResize:              true,
+			SupportsControllerResize:        false,
 			SupportsPluginControllerService: true,
 
 			Trivial: true,
 		},
 		// Both controller and node resize not supported.
 		{
-			SupportsNodeResize: false,
-			SupportsControllerResize: false,
+			SupportsNodeResize:              false,
+			SupportsControllerResize:        false,
 			SupportsPluginControllerService: true,
 
 			Error: resizeNotSupportErr,
