@@ -94,7 +94,7 @@ func main() {
 		}
 		leaderElectionConfig = &util.LeaderElectionConfig{
 			Identity:      *leaderElectionIdentity,
-			LockName:      util.SanitizeName(resizerName),
+			LockName:      "external-resizer-" + util.SanitizeName(resizerName),
 			Namespace:     *leaderElectionNamespace,
 			RetryPeriod:   *leaderElectionRetryPeriod,
 			LeaseDuration: *leaderElectionLeaseDuration,
