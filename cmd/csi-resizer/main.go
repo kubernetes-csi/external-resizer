@@ -80,7 +80,7 @@ func main() {
 
 	informerFactory := informers.NewSharedInformerFactory(kubeClient, *resyncPeriod)
 
-	csiResizer, err := resizer.NewCSIResizer(*csiAddress, *csiTimeout, kubeClient, informerFactory)
+	csiResizer, err := resizer.NewResizer(*csiAddress, *csiTimeout, kubeClient, informerFactory)
 	if err != nil {
 		klog.Fatal(err.Error())
 	}
