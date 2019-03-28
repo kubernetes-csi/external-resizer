@@ -19,7 +19,7 @@ spec:
       serviceAccount: csi-resizer
       containers:
         - name: csi-resizer
-          image: quay.io/k8scsi/csi-resizer
+          image: quay.io/k8scsi/csi-resizer:canary
           args:
             - "--v=5"
             - "--csi-address=$(ADDRESS)"
@@ -43,7 +43,7 @@ spec:
               mountPath: /var/lib/csi/sockets/pluginproxy/
 
         - name: mock-driver
-          image: quay.io/k8scsi/mock-plugin
+          image: quay.io/k8scsi/mock-driver:canary
           imagePullPolicy: "IfNotPresent"
           env:
             - name: CSI_ENDPOINT
