@@ -44,7 +44,7 @@ import (
 // If requested, it will resize according PVs and update PVCs' status to reflect the new size.
 type ResizeController interface {
 	// Run starts the controller.
-	Run(workers int, leaderElectionConfig *util.LeaderElectionConfig)
+	Run(workers int, ctx context.Context)
 }
 
 type resizeController struct {
@@ -154,38 +154,24 @@ func getPVCKey(obj interface{}) (string, error) {
 
 // Run starts the controller.
 func (ctrl *resizeController) Run(
-	workers int,
-	leaderElectionConfig *util.LeaderElectionConfig) {
-	run := func(ctx context.Context) {
-		defer ctrl.claimQueue.ShutDown()
+	workers int, ctx context.Context) {
+	defer ctrl.claimQueue.ShutDown()
 
-		klog.Infof("Starting external resizer %s", ctrl.name)
-		defer klog.Infof("Shutting down external resizer %s", ctrl.name)
+	klog.Infof("Starting external resizer %s", ctrl.name)
+	defer klog.Infof("Shutting down external resizer %s", ctrl.name)
 
-		stopCh := ctx.Done()
+	stopCh := ctx.Done()
 
-		if !cache.WaitForCacheSync(stopCh, ctrl.pvSynced, ctrl.pvcSynced) {
-			klog.Errorf("Cannot sync pv/pvc caches")
-			return
-		}
-
-		for i := 0; i < workers; i++ {
-			go wait.Until(ctrl.syncPVCs, 0, stopCh)
-		}
-
-		<-stopCh
+	if !cache.WaitForCacheSync(stopCh, ctrl.pvSynced, ctrl.pvcSynced) {
+		klog.Errorf("Cannot sync pv/pvc caches")
+		return
 	}
 
-	if leaderElectionConfig == nil {
-		// Leader election disabled.
-		run(context.TODO())
-	} else {
-		lock, err := util.NewLeaderLock(ctrl.kubeClient, ctrl.eventRecorder, leaderElectionConfig)
-		if err != nil {
-			klog.Fatalf("Error creating leader election lock: %v", err)
-		}
-		util.RunAsLeader(lock, leaderElectionConfig, run)
+	for i := 0; i < workers; i++ {
+		go wait.Until(ctrl.syncPVCs, 0, stopCh)
 	}
+
+	<-stopCh
 }
 
 // syncPVCs is the main worker.
