@@ -17,11 +17,13 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
 	"time"
 
+	"github.com/kubernetes-csi/csi-lib-utils/leaderelection"
 	"github.com/kubernetes-csi/external-resizer/pkg/controller"
 	"github.com/kubernetes-csi/external-resizer/pkg/resizer"
 	"github.com/kubernetes-csi/external-resizer/pkg/util"
@@ -41,24 +43,9 @@ var (
 	csiTimeout  = flag.Duration("csiTimeout", 15*time.Second, "Timeout for waiting for CSI driver socket.")
 	showVersion = flag.Bool("version", false, "Show version")
 
-	enableLeaderElection      = flag.Bool("leader-election", false, "Enable leader election.")
-	leaderElectionIdentity    = flag.String("leader-election-identity", "", "Unique identity of this resizer. Typically name of the pod where the resizer runs.")
-	leaderElectionNamespace   = flag.String("leader-election-namespace", "kube-system", "Namespace where this resizer runs.")
-	leaderElectionRetryPeriod = flag.Duration("leader-election-retry-period", time.Second*5,
-		"The duration the clients should wait between attempting acquisition and renewal "+
-			"of a leadership. This is only applicable if leader election is enabled.")
-	leaderElectionLeaseDuration = flag.Duration("leader-election-lease-duration", time.Second*15,
-		"The duration that non-leader candidates will wait after observing a leadership "+
-			"renewal until attempting to acquire leadership of a led but unrenewed leader "+
-			"slot. This is effectively the maximum duration that a leader can be stopped "+
-			"before it is replaced by another candidate. This is only applicable if leader "+
-			"election is enabled.")
-	leaderElectionRenewDeadLine = flag.Duration("leader-election-renew-deadline", time.Second*10,
-		"The duration that non-leader candidates will wait after observing a leadership "+
-			"renewal until attempting to acquire leadership of a led but unrenewed leader "+
-			"slot. This is effectively the maximum duration that a leader can be stopped "+
-			"before it is replaced by another candidate. This is only applicable if leader "+
-			"election is enabled.")
+	enableLeaderElection    = flag.Bool("leader-election", false, "Enable leader election.")
+	leaderElectionNamespace = flag.String("leader-election-namespace", "", "Namespace where the leader election resource lives. Defaults to the pod namespace if not set.")
+
 	version = "unknown"
 )
 
@@ -86,24 +73,25 @@ func main() {
 	}
 
 	resizerName := csiResizer.Name()
+	rc := controller.NewResizeController(resizerName, csiResizer, kubeClient, *resyncPeriod, informerFactory)
+	run := func(ctx context.Context) {
+		informerFactory.Start(wait.NeverStop)
+		rc.Run(*workers, ctx)
 
-	var leaderElectionConfig *util.LeaderElectionConfig
-	if *enableLeaderElection {
-		if leaderElectionIdentity == nil || *leaderElectionIdentity == "" {
-			klog.Fatal("--leader-election-identity must not be empty")
-		}
-		leaderElectionConfig = &util.LeaderElectionConfig{
-			Identity:      *leaderElectionIdentity,
-			LockName:      "external-resizer-" + util.SanitizeName(resizerName),
-			Namespace:     *leaderElectionNamespace,
-			RetryPeriod:   *leaderElectionRetryPeriod,
-			LeaseDuration: *leaderElectionLeaseDuration,
-			RenewDeadLine: *leaderElectionRenewDeadLine,
-		}
 	}
 
-	rc := controller.NewResizeController(resizerName, csiResizer, kubeClient, *resyncPeriod, informerFactory)
+	if !*enableLeaderElection {
+		run(context.TODO())
+	} else {
+		lockName := "external-resizer-" + util.SanitizeName(resizerName)
+		le := leaderelection.NewLeaderElection(kubeClient, lockName, run)
 
-	informerFactory.Start(wait.NeverStop)
-	rc.Run(*workers, leaderElectionConfig)
+		if *leaderElectionNamespace != "" {
+			le.WithNamespace(*leaderElectionNamespace)
+		}
+
+		if err := le.Run(); err != nil {
+			klog.Fatalf("error initializing leader election: %v", err)
+		}
+	}
 }
