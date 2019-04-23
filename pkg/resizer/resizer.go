@@ -25,8 +25,9 @@ import (
 type Resizer interface {
 	// Name returns the resizer's name.
 	Name() string
-	// CanSupport returns true if resizer supports resize operation of this PV.
-	CanSupport(pv *v1.PersistentVolume) bool
+	// CanSupport returns true if resizer supports resize operation of this PV
+	// with its corresponding PVC.
+	CanSupport(pv *v1.PersistentVolume, pvc *v1.PersistentVolumeClaim) bool
 	// Resize executes the resize operation of this PV.
 	Resize(pv *v1.PersistentVolume, requestSize resource.Quantity) (newSize resource.Quantity, fsResizeRequired bool, err error)
 }

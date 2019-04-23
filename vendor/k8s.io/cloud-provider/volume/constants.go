@@ -1,5 +1,5 @@
 /*
-Copyright 2018 The Kubernetes Authors.
+Copyright 2019 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,18 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package util
-
-// These constants are PVC condition types related to resize operation.
-const (
-	VolumeResizing           = "Resizing"
-	VolumeResizeFailed       = "VolumeResizeFailed"
-	VolumeResizeSuccess      = "VolumeResizeSuccessful"
-	FileSystemResizeRequired = "FileSystemResizeRequired"
-)
+package volume
 
 const (
-	// If CSI migration is enabled, the value will be CSI driver name
-	// Otherwise, it will be in-tree storage plugin name
-	VolumeResizerKey = "volume.kubernetes.io/storage-resizer"
+	// ProvisionedVolumeName is the name of a volume in an external cloud
+	// that is being provisioned and thus should be ignored by rest of Kubernetes.
+	ProvisionedVolumeName = "placeholder-for-provisioning"
+
+	// LabelMultiZoneDelimiter separates zones for volumes
+	LabelMultiZoneDelimiter = "__"
 )

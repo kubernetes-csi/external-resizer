@@ -123,11 +123,27 @@ func (ctrl *resizeController) updatePVC(oldObj, newObj interface{}) {
 	newSize := newPVC.Spec.Resources.Requests[v1.ResourceStorage]
 	oldSize := oldPVC.Spec.Resources.Requests[v1.ResourceStorage]
 
+	newResizerName := newPVC.Annotations[util.VolumeResizerKey]
+	oldResizerName := oldPVC.Annotations[util.VolumeResizerKey]
+
 	// We perform additional checks to avoid double processing of PVCs, as we will also receive Update event when:
 	// 1. Administrator or users may introduce other changes(such as add labels, modify annotations, etc.)
 	//    unrelated to volume resize.
 	// 2. Informer will resync and send Update event periodically without any changes.
-	if newSize.Cmp(oldSize) > 0 {
+	//
+	// We add the PVC into work queue when the new size is larger then the old size
+	// or when the resizer name changes. This is needed for CSI migration for the follow two cases:
+	//
+	// 1. First time a migrated PVC is expanded:
+	// It does not yet have the annotation because annotation is only added by in-tree resizer when it receives a volume
+	// expansion request. So first update event that will be received by external-resizer will be ignored because it won't
+	// know how to support resizing of a "un-annotated" in-tree PVC. When in-tree resizer does add the annotation, a second
+	// update even will be received and we add the pvc to workqueue. If annotation matches the registered driver name in
+	// csi_resizer object, we proceeds with expansion internally or we discard the PVC.
+	// 2. An already expanded in-tree PVC:
+	// An in-tree PVC is resized with in-tree resizer. And later, CSI migration is turned on and resizer name is updated from
+	// in-tree resizer name to CSI driver name.
+	if newSize.Cmp(oldSize) > 0 || newResizerName != oldResizerName {
 		ctrl.addPVC(newObj)
 	}
 }
@@ -249,7 +265,7 @@ func (ctrl *resizeController) pvcNeedResize(pvc *v1.PersistentVolumeClaim) bool 
 
 // pvNeedResize returns true if a pv supports and also requests resize.
 func (ctrl *resizeController) pvNeedResize(pvc *v1.PersistentVolumeClaim, pv *v1.PersistentVolume) bool {
-	if !ctrl.resizer.CanSupport(pv) {
+	if !ctrl.resizer.CanSupport(pv, pvc) {
 		klog.V(4).Infof("Resizer %q doesn't support PV %q", ctrl.name, pv.Name)
 		return false
 	}

@@ -17,8 +17,10 @@ limitations under the License.
 package resizer
 
 import (
+	"github.com/kubernetes-csi/external-resizer/pkg/util"
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	csitranslationlib "k8s.io/csi-translation-lib"
 	"k8s.io/klog"
 )
 
@@ -35,7 +37,12 @@ func (r *trivialResizer) Name() string {
 	return r.name
 }
 
-func (r *trivialResizer) CanSupport(pv *v1.PersistentVolume) bool {
+func (r *trivialResizer) CanSupport(pv *v1.PersistentVolume, pvc *v1.PersistentVolumeClaim) bool {
+	resizerName := pvc.Annotations[util.VolumeResizerKey]
+	if csitranslationlib.IsMigratedCSIDriverByName(r.name) && resizerName == r.name {
+		return true
+	}
+
 	source := pv.Spec.CSI
 	if source == nil {
 		klog.V(4).Infof("PV %s is not a CSI volume, skip it", pv.Name)
