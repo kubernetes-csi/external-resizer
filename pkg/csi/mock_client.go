@@ -19,6 +19,7 @@ type MockClient struct {
 	supportsNodeResize              bool
 	supportsControllerResize        bool
 	supportsPluginControllerService bool
+	usedSecrets                     map[string]string
 }
 
 func (c *MockClient) GetDriverName(context.Context) (string, error) {
@@ -43,5 +44,11 @@ func (c *MockClient) Expand(
 	requestBytes int64,
 	secrets map[string]string) (int64, bool, error) {
 	// TODO: Determine whether the operation succeeds or fails by parameters.
+	c.usedSecrets = secrets
 	return requestBytes, c.supportsNodeResize, nil
+}
+
+// GetSecrets returns secrets used for volume expansion
+func (c *MockClient) GetSecrets() map[string]string {
+	return c.usedSecrets
 }

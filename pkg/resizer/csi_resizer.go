@@ -20,7 +20,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/kubernetes-csi/external-resizer/pkg/csi"
@@ -28,17 +27,9 @@ import (
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/sets"
-	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
-	storagev1listers "k8s.io/client-go/listers/storage/v1"
 	"k8s.io/klog"
-)
-
-const (
-	resizerSecretNameKey      = "csi.storage.k8s.io/resizer-secret-name"
-	resizerSecretNamespaceKey = "csi.storage.k8s.io/resizer-secret-namespace"
 )
 
 var (
@@ -101,7 +92,6 @@ func NewResizerFromClient(
 		timeout: timeout,
 
 		k8sClient: k8sClient,
-		scLister:  informerFactory.Storage().V1().StorageClasses().Lister(),
 	}, nil
 }
 
@@ -111,7 +101,6 @@ type csiResizer struct {
 	timeout time.Duration
 
 	k8sClient kubernetes.Interface
-	scLister  storagev1listers.StorageClassLister
 }
 
 func (r *csiResizer) Name() string {
@@ -144,18 +133,10 @@ func (r *csiResizer) Resize(pv *v1.PersistentVolume, requestSize resource.Quanti
 	}
 
 	var secrets map[string]string
-	// Get expand secrets from StorageClass parameters.
-	scName := pv.Spec.StorageClassName
-	if len(scName) > 0 {
-		storageClass, err := r.scLister.Get(scName)
-		if err != nil {
-			return oldSize, false, fmt.Errorf("get StorageClass %s failed: %v", scName, err)
-		}
-		expandSecretRef, err := getSecretReference(storageClass.Parameters, pv.Name)
-		if err != nil {
-			return oldSize, false, err
-		}
-		secrets, err = getCredentials(r.k8sClient, expandSecretRef)
+	secreRef := source.ControllerExpandSecretRef
+	if secreRef != nil {
+		var err error
+		secrets, err = getCredentials(r.k8sClient, secreRef)
 		if err != nil {
 			return oldSize, false, err
 		}
@@ -196,89 +177,6 @@ func supportsNodeResize(client csi.Client, timeout time.Duration) (bool, error) 
 
 func timeoutCtx(timeout time.Duration) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), timeout)
-}
-
-// verifyAndGetSecretNameAndNamespaceTemplate gets the values (templates) associated
-// with the parameters specified in "secret" and verifies that they are specified correctly.
-func verifyAndGetSecretNameAndNamespaceTemplate(storageClassParams map[string]string) (string, string, error) {
-	nameTemplate := storageClassParams[resizerSecretNameKey]
-	namespaceTemplate := storageClassParams[resizerSecretNamespaceKey]
-
-	// Name and namespaces are both specified.
-	if nameTemplate != "" && namespaceTemplate != "" {
-		return nameTemplate, namespaceTemplate, nil
-	}
-
-	// No secrets specified
-	if nameTemplate == "" && namespaceTemplate == "" {
-		return "", "", nil
-	}
-
-	// Only one of the names and namespaces is set.
-	return "", "", errors.New("resizer secrets specified in parameters but value of either namespace or name is empty")
-}
-
-// getSecretReference returns a reference to the secret specified in the given nameTemplate
-//  and namespaceTemplate, or an error if the templates are not specified correctly.
-// no lookup of the referenced secret is performed, and the secret may or may not exist.
-//
-// supported tokens for name resolution:
-// - ${pv.name}
-// - ${pvc.namespace}
-// - ${pvc.name}
-// - ${pvc.annotations['ANNOTATION_KEY']} (e.g. ${pvc.annotations['example.com/node-publish-secret-name']})
-//
-// supported tokens for namespace resolution:
-// - ${pv.name}
-// - ${pvc.namespace}
-//
-// an error is returned in the following situations:
-// - the nameTemplate or namespaceTemplate contains a token that cannot be resolved
-// - the resolved name is not a valid secret name
-// - the resolved namespace is not a valid namespace name
-func getSecretReference(storageClassParams map[string]string, pvName string) (*v1.SecretReference, error) {
-	nameTemplate, namespaceTemplate, err := verifyAndGetSecretNameAndNamespaceTemplate(storageClassParams)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get name and namespace template from params: %v", err)
-	}
-	if nameTemplate == "" && namespaceTemplate == "" {
-		return nil, nil
-	}
-
-	// Secret name and namespace template can make use of the PV name.
-	// Note that neither of those things are under the control of the user.
-	params := map[string]string{"pv.name": pvName}
-	resolvedNamespace, err := resolveTemplate("namespace", namespaceTemplate, params)
-	if err != nil {
-		return nil, fmt.Errorf("error resolving secret namespace %q: %v", namespaceTemplate, err)
-	}
-	resolvedName, err := resolveTemplate("name", nameTemplate, params)
-	if err != nil {
-		return nil, fmt.Errorf("error resolving value %q: %v", nameTemplate, err)
-	}
-
-	return &v1.SecretReference{Name: resolvedName, Namespace: resolvedNamespace}, nil
-}
-
-func resolveTemplate(field, template string, params map[string]string) (string, error) {
-	missingParams := sets.NewString()
-	resolved := os.Expand(template, func(k string) string {
-		v, ok := params[k]
-		if !ok {
-			missingParams.Insert(k)
-		}
-		return v
-	})
-	if missingParams.Len() > 0 {
-		return "", fmt.Errorf("invalid tokens: %q", missingParams.List())
-	}
-	if len(validation.IsDNS1123Label(resolved)) > 0 {
-		if template != resolved {
-			return "", fmt.Errorf("%q resolved to %q which is not a valid %s name", template, resolved, field)
-		}
-		return "", fmt.Errorf("%q is not a valid %s name", template, field)
-	}
-	return resolved, nil
 }
 
 func getCredentials(k8sClient kubernetes.Interface, ref *v1.SecretReference) (map[string]string, error) {
