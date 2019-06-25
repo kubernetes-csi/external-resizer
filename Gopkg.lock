@@ -598,6 +598,25 @@
   version = "kubernetes-1.14.0"
 
 [[projects]]
+  branch = "master"
+  digest = "1:c3dbea23f3fdb796c9464cec72ec3d4609178f6974026b344992f5b6b7566ef5"
+  name = "k8s.io/cloud-provider"
+  packages = ["volume"]
+  pruneopts = "NUT"
+  revision = "029ecc113e6d819f75bde3705b0ff3fafb52d397"
+
+[[projects]]
+  branch = "master"
+  digest = "1:4f625748474cd525730ed105e6f0d344a555881207bc7aed241a4356b63804f0"
+  name = "k8s.io/csi-translation-lib"
+  packages = [
+    ".",
+    "plugins",
+  ]
+  pruneopts = "NUT"
+  revision = "2a8de10f2ef801771beeea04ba3e0b5e35db8fac"
+
+[[projects]]
   digest = "1:9cc257b3c9ff6a0158c9c661ab6eebda1fe8a4a4453cd5c4044dc9a2ebfb992b"
   name = "k8s.io/klog"
   packages = ["."]
@@ -664,6 +683,7 @@
     "k8s.io/client-go/tools/clientcmd",
     "k8s.io/client-go/tools/record",
     "k8s.io/client-go/util/workqueue",
+    "k8s.io/csi-translation-lib",
     "k8s.io/klog",
   ]
   solver-name = "gps-cdcl"

@@ -23,12 +23,15 @@ import (
 	"time"
 
 	"github.com/kubernetes-csi/external-resizer/pkg/csi"
+	"github.com/kubernetes-csi/external-resizer/pkg/util"
 
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
+
+	csitranslationlib "k8s.io/csi-translation-lib"
 	"k8s.io/klog"
 )
 
@@ -107,7 +110,18 @@ func (r *csiResizer) Name() string {
 	return r.name
 }
 
-func (r *csiResizer) CanSupport(pv *v1.PersistentVolume) bool {
+// CanSupport returns whether the PV is supported by resizer
+// Resizer will resize the volume if it is CSI volume or is migration enabled in-tree volume
+func (r *csiResizer) CanSupport(pv *v1.PersistentVolume, pvc *v1.PersistentVolumeClaim) bool {
+	resizerName := pvc.Annotations[util.VolumeResizerKey]
+	// resizerName will be CSI driver name when CSI migration is enabled
+	// otherwise, it will be in-tree plugin name
+	// r.name is the CSI driver name, return true only when they match
+	// and the CSI driver is migrated
+	if csitranslationlib.IsMigratedCSIDriverByName(r.name) && resizerName == r.name {
+		return true
+	}
+
 	source := pv.Spec.CSI
 	if source == nil {
 		klog.V(4).Infof("PV %s is not a CSI volume, skip it", pv.Name)
@@ -120,14 +134,32 @@ func (r *csiResizer) CanSupport(pv *v1.PersistentVolume) bool {
 	return true
 }
 
+// Resize resizes the persistence volume given request size
+// It supports both CSI volume and migrated in-tree volume
 func (r *csiResizer) Resize(pv *v1.PersistentVolume, requestSize resource.Quantity) (resource.Quantity, bool, error) {
 	oldSize := pv.Spec.Capacity[v1.ResourceStorage]
 
-	source := pv.Spec.CSI
-	if source == nil {
-		return oldSize, false, errors.New("not a CSI volume")
+	var volumeID string
+	var source *v1.CSIPersistentVolumeSource
+	if pv.Spec.CSI != nil {
+		// handle CSI volume
+		source = pv.Spec.CSI
+		volumeID = source.VolumeHandle
+	} else {
+		if csitranslationlib.IsMigratedCSIDriverByName(r.name) {
+			// handle migrated in-tree volume
+			csiPV, err := csitranslationlib.TranslateInTreePVToCSI(pv)
+			if err != nil {
+				return oldSize, false, fmt.Errorf("failed to translate persistent volume: %v", err)
+			}
+			source = csiPV.Spec.CSI
+			volumeID = source.VolumeHandle
+		} else {
+			// non-migrated in-tree volume
+			return oldSize, false, fmt.Errorf("volume %v is not migrated to CSI", pv.Name)
+		}
 	}
-	volumeID := source.VolumeHandle
+
 	if len(volumeID) == 0 {
 		return oldSize, false, errors.New("empty volume handle")
 	}
@@ -148,6 +180,7 @@ func (r *csiResizer) Resize(pv *v1.PersistentVolume, requestSize resource.Quanti
 	if err != nil {
 		return oldSize, nodeResizeRequired, err
 	}
+
 	return *resource.NewQuantity(newSizeBytes, resource.BinarySI), nodeResizeRequired, err
 }
 

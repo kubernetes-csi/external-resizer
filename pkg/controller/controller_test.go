@@ -65,7 +65,7 @@ func TestController(t *testing.T) {
 			NodeResize:    true,
 		},
 	} {
-		client := csi.NewMockClient(test.NodeResize, true, true)
+		client := csi.NewMockClient("mock", test.NodeResize, true, true)
 		driverName, _ := client.GetDriverName(context.TODO())
 
 		initialObjects := []runtime.Object{}

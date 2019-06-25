@@ -3,11 +3,12 @@ package csi
 import "context"
 
 func NewMockClient(
+	name string,
 	supportsNodeResize bool,
 	supportsControllerResize bool,
 	supportsPluginControllerService bool) *MockClient {
 	return &MockClient{
-		name:                            "mock",
+		name:                            name,
 		supportsNodeResize:              supportsNodeResize,
 		supportsControllerResize:        supportsControllerResize,
 		supportsPluginControllerService: supportsPluginControllerService,
