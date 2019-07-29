@@ -22,7 +22,9 @@ import (
 	"regexp"
 
 	"k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/strategicpatch"
 	"k8s.io/client-go/kubernetes"
@@ -96,7 +98,7 @@ func PatchPVCStatus(
 	oldPVC *v1.PersistentVolumeClaim,
 	newPVC *v1.PersistentVolumeClaim,
 	kubeClient kubernetes.Interface) (*v1.PersistentVolumeClaim, error) {
-	patchBytes, err := getPatchData(oldPVC, newPVC)
+	patchBytes, err := getPVCPatchData(oldPVC, newPVC)
 	if err != nil {
 		return nil, fmt.Errorf("can't patch status of PVC %s as generate path data failed: %v", PVCKey(oldPVC), err)
 	}
@@ -106,6 +108,38 @@ func PatchPVCStatus(
 		return nil, fmt.Errorf("can't patch status of  PVC %s with %v", PVCKey(oldPVC), updateErr)
 	}
 	return updatedClaim, nil
+}
+
+func getPVCPatchData(oldPVC, newPVC *v1.PersistentVolumeClaim) ([]byte, error) {
+	patchBytes, err := getPatchData(oldPVC, newPVC)
+	if err != nil {
+		return patchBytes, err
+	}
+
+	patchBytes, err = addResourceVersion(patchBytes, oldPVC.ResourceVersion)
+	if err != nil {
+		return nil, fmt.Errorf("apply ResourceVersion to patch data failed: %v", err)
+	}
+	return patchBytes, nil
+}
+
+func addResourceVersion(patchBytes []byte, resourceVersion string) ([]byte, error) {
+	var patchMap map[string]interface{}
+	err := json.Unmarshal(patchBytes, &patchMap)
+	if err != nil {
+		return nil, fmt.Errorf("error unmarshalling patch with %v", err)
+	}
+	u := unstructured.Unstructured{Object: patchMap}
+	a, err := meta.Accessor(&u)
+	if err != nil {
+		return nil, fmt.Errorf("error creating accessor with  %v", err)
+	}
+	a.SetResourceVersion(resourceVersion)
+	versionBytes, err := json.Marshal(patchMap)
+	if err != nil {
+		return nil, fmt.Errorf("error marshalling json patch with %v", err)
+	}
+	return versionBytes, nil
 }
 
 // UpdatePVCapacity updates PVC capacity with requested size.
@@ -130,7 +164,7 @@ func getPatchData(oldObj, newObj interface{}) ([]byte, error) {
 	}
 	newData, err := json.Marshal(newObj)
 	if err != nil {
-		return nil, fmt.Errorf("mashal new object failed: %v", err)
+		return nil, fmt.Errorf("marshal new object failed: %v", err)
 	}
 	patchBytes, err := strategicpatch.CreateTwoWayMergePatch(oldData, newData, oldObj)
 	if err != nil {

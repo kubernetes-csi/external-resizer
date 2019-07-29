@@ -24,7 +24,7 @@ import (
 	"github.com/kubernetes-csi/external-resizer/pkg/resizer"
 	"github.com/kubernetes-csi/external-resizer/pkg/util"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -145,6 +145,19 @@ func (ctrl *resizeController) updatePVC(oldObj, newObj interface{}) {
 	// in-tree resizer name to CSI driver name.
 	if newSize.Cmp(oldSize) > 0 || newResizerName != oldResizerName {
 		ctrl.addPVC(newObj)
+	} else {
+		// PVC's size not changed, so this Update event maybe caused by:
+		//
+		// 1. Administrators or users introduce other changes(such as add labels, modify annotations, etc.)
+		//    unrelated to volume resize.
+		// 2. Informer resynced the PVC and send this Update event without any changes.
+		//
+		// If it is case 1, we can just discard this event. If case 2, we need to put it into the queue to
+		// perform a resync operation.
+		if newPVC.ResourceVersion == oldPVC.ResourceVersion {
+			// This is case 2.
+			ctrl.addPVC(newObj)
+		}
 	}
 }
 
@@ -366,12 +379,13 @@ func (ctrl *resizeController) markPVCResizeInProgress(pvc *v1.PersistentVolumeCl
 	return util.PatchPVCStatus(pvc, newPVC, ctrl.kubeClient)
 }
 
-func (ctrl *resizeController) markPVCResizeFinished(pvc *v1.PersistentVolumeClaim, newSize resource.Quantity) error {
+func (ctrl *resizeController) markPVCResizeFinished(
+	pvc *v1.PersistentVolumeClaim,
+	newSize resource.Quantity) error {
 	newPVC := pvc.DeepCopy()
 	newPVC.Status.Capacity[v1.ResourceStorage] = newSize
 	newPVC.Status.Conditions = util.MergeResizeConditionsOfPVC(pvc.Status.Conditions, []v1.PersistentVolumeClaimCondition{})
-	_, err := util.PatchPVCStatus(pvc, newPVC, ctrl.kubeClient)
-	if err != nil {
+	if _, err := util.PatchPVCStatus(pvc, newPVC, ctrl.kubeClient); err != nil {
 		klog.Errorf("Mark PVC %q as resize finished failed: %v", util.PVCKey(pvc), err)
 		return err
 	}
@@ -392,15 +406,14 @@ func (ctrl *resizeController) markPVCAsFSResizeRequired(pvc *v1.PersistentVolume
 	newPVC := pvc.DeepCopy()
 	newPVC.Status.Conditions = util.MergeResizeConditionsOfPVC(newPVC.Status.Conditions,
 		[]v1.PersistentVolumeClaimCondition{pvcCondition})
-	_, err := util.PatchPVCStatus(pvc, newPVC, ctrl.kubeClient)
-	if err != nil {
+
+	if _, err := util.PatchPVCStatus(pvc, newPVC, ctrl.kubeClient); err != nil {
 		klog.Errorf("Mark PVC %q as file system resize required failed: %v", util.PVCKey(pvc), err)
 		return err
 	}
-
 	klog.V(4).Infof("Mark PVC %q as file system resize required", util.PVCKey(pvc))
 	ctrl.eventRecorder.Eventf(pvc, v1.EventTypeNormal,
 		util.FileSystemResizeRequired, "Require file system resize of volume on node")
 
-	return err
+	return nil
 }
