@@ -327,7 +327,7 @@ func (ctrl *resizeController) resizePVC(pvc *v1.PersistentVolumeClaim, pv *v1.Pe
 			return err
 		}
 
-		if fsResizeRequired {
+		if fsResizeRequired && !(pvc.Spec.VolumeMode != nil && *pvc.Spec.VolumeMode == v1.PersistentVolumeBlock) {
 			// Resize volume succeeded and need to resize file system by kubelet, mark it as file system resizing required.
 			return ctrl.markPVCAsFSResizeRequired(pvc)
 		}
