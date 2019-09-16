@@ -52,7 +52,7 @@ type Client interface {
 
 // New creates a new CSI client.
 func New(address string, timeout time.Duration) (Client, error) {
-	conn, err := connection.Connect(address)
+	conn, err := connection.Connect(address, connection.OnConnectionLoss(connection.ExitOnConnectionLoss()))
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to CSI driver: %v", err)
 	}
