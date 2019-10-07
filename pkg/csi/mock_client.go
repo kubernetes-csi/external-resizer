@@ -11,6 +11,7 @@ func NewMockClient(
 		name:                            name,
 		supportsNodeResize:              supportsNodeResize,
 		supportsControllerResize:        supportsControllerResize,
+		expandCalled:                    0,
 		supportsPluginControllerService: supportsPluginControllerService,
 	}
 }
@@ -20,6 +21,7 @@ type MockClient struct {
 	supportsNodeResize              bool
 	supportsControllerResize        bool
 	supportsPluginControllerService bool
+	expandCalled                    int
 	usedSecrets                     map[string]string
 }
 
@@ -45,8 +47,13 @@ func (c *MockClient) Expand(
 	requestBytes int64,
 	secrets map[string]string) (int64, bool, error) {
 	// TODO: Determine whether the operation succeeds or fails by parameters.
+	c.expandCalled++
 	c.usedSecrets = secrets
 	return requestBytes, c.supportsNodeResize, nil
+}
+
+func (c *MockClient) GetExpandCount() int {
+	return c.expandCalled
 }
 
 // GetSecrets returns secrets used for volume expansion
