@@ -53,7 +53,7 @@ func TestNewResizer(t *testing.T) {
 	} {
 		client := csi.NewMockClient(c.SupportsNodeResize, c.SupportsControllerResize, c.SupportsPluginControllerService)
 		k8sClient, informerFactory := fakeK8s()
-		resizer, err := newResizer(client, 0, k8sClient, informerFactory)
+		resizer, err := NewResizerFromClient(client, 0, k8sClient, informerFactory)
 		if err != c.Error {
 			t.Errorf("Case %d: Unexpected error: wanted %v, got %v", i, c.Error, err)
 		}

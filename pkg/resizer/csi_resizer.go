@@ -56,10 +56,10 @@ func NewResizer(
 	if err != nil {
 		return nil, err
 	}
-	return newResizer(csiClient, timeout, k8sClient, informerFactory)
+	return NewResizerFromClient(csiClient, timeout, k8sClient, informerFactory)
 }
 
-func newResizer(
+func NewResizerFromClient(
 	csiClient csi.Client,
 	timeout time.Duration,
 	k8sClient kubernetes.Interface,
@@ -101,7 +101,6 @@ func newResizer(
 		timeout: timeout,
 
 		k8sClient: k8sClient,
-		scLister:  informerFactory.Storage().V1().StorageClasses().Lister(),
 	}, nil
 }
 
