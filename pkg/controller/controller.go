@@ -283,6 +283,11 @@ func (ctrl *resizeController) pvNeedResize(pvc *v1.PersistentVolumeClaim, pv *v1
 		return false
 	}
 
+	if (pv.Spec.ClaimRef == nil) || (pvc.Namespace != pv.Spec.ClaimRef.Namespace) || (pvc.UID != pv.Spec.ClaimRef.UID) {
+		klog.V(4).Infof("persistent volume is not bound to PVC being updated: %s", util.PVCKey(pvc))
+		return false
+	}
+
 	pvSize := pv.Spec.Capacity[v1.ResourceStorage]
 	requestSize := pvc.Spec.Resources.Requests[v1.ResourceStorage]
 	if pvSize.Cmp(requestSize) >= 0 {

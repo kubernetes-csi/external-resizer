@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
@@ -26,43 +27,62 @@ func TestController(t *testing.T) {
 
 		CreateObjects bool
 		NodeResize    bool
+		CallCSIExpand bool
 	}{
 		{
-			Name: "Invalid key",
-			PVC:  invalidPVC(),
+			Name:          "Invalid key",
+			PVC:           invalidPVC(),
+			CallCSIExpand: false,
 		},
 		{
-			Name: "PVC not found",
-			PVC:  createPVC(1, 1),
+			Name:          "PVC not found",
+			PVC:           createPVC(1, 1),
+			CallCSIExpand: false,
 		},
 		{
 			Name:          "PVC doesn't need resize",
 			PVC:           createPVC(1, 1),
 			CreateObjects: true,
+			CallCSIExpand: false,
 		},
 		{
 			Name:          "PV not found",
 			PVC:           createPVC(2, 1),
 			CreateObjects: true,
+			CallCSIExpand: false,
 		},
 		{
-			Name:          "PV doesn't need resize",
+			Name:          "pv claimref does not have pvc UID",
 			PVC:           createPVC(2, 1),
-			PV:            createPV(2),
-			CreateObjects: true,
+			PV:            createPV(1, "testPVC" /*pvcName*/, "test" /*pvcNamespace*/, "foobaz" /*pvcUID*/),
+			CallCSIExpand: false,
+		},
+		{
+			Name:          "pv claimref does not have PVC namespace",
+			PVC:           createPVC(2, 1),
+			PV:            createPV(1, "testPVC" /*pvcName*/, "test1" /*pvcNamespace*/, "foobar" /*pvcUID*/),
+			CallCSIExpand: false,
+		},
+		{
+			Name:          "pv claimref is nil",
+			PVC:           createPVC(2, 1),
+			PV:            createPV(1, "" /*pvcName*/, "test1" /*pvcNamespace*/, "foobar" /*pvcUID*/),
+			CallCSIExpand: false,
 		},
 		{
 			Name:          "Resize PVC, no FS resize",
 			PVC:           createPVC(2, 1),
-			PV:            createPV(1),
+			PV:            createPV(1, "testPVC", "test", "foobar"),
 			CreateObjects: true,
+			CallCSIExpand: true,
 		},
 		{
 			Name:          "Resize PVC with FS resize",
 			PVC:           createPVC(2, 1),
-			PV:            createPV(1),
+			PV:            createPV(1, "testPVC", "test", "foobar"),
 			CreateObjects: true,
 			NodeResize:    true,
+			CallCSIExpand: true,
 		},
 	} {
 		client := csi.NewMockClient("mock", test.NodeResize, true, true)
@@ -104,6 +124,15 @@ func TestController(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Test %s: Unexpected error: %v", test.Name, err)
 		}
+
+		expandCallCount := client.GetExpandCount()
+		if test.CallCSIExpand && expandCallCount == 0 {
+			t.Fatalf("for %s: expected csi expand call, no csi expand call was made", test.Name)
+		}
+
+		if !test.CallCSIExpand && expandCallCount > 0 {
+			t.Fatalf("for %s: expected no csi expand call, received csi expansion request", test.Name)
+		}
 	}
 }
 
@@ -128,6 +157,7 @@ func createPVC(requestGB, capacityGB int) *v1.PersistentVolumeClaim {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "testPVC",
 			Namespace: "test",
+			UID:       "foobar",
 		},
 		Spec: v1.PersistentVolumeClaimSpec{
 			Resources: v1.ResourceRequirements{
@@ -146,10 +176,10 @@ func createPVC(requestGB, capacityGB int) *v1.PersistentVolumeClaim {
 	}
 }
 
-func createPV(capacityGB int) *v1.PersistentVolume {
+func createPV(capacityGB int, pvcName, pvcNamespace string, pvcUID types.UID) *v1.PersistentVolume {
 	capacity := quantityGB(capacityGB)
 
-	return &v1.PersistentVolume{
+	pv := &v1.PersistentVolume{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "testPV",
 		},
@@ -165,6 +195,14 @@ func createPV(capacityGB int) *v1.PersistentVolume {
 			},
 		},
 	}
+	if len(pvcName) > 0 {
+		pv.Spec.ClaimRef = &v1.ObjectReference{
+			Namespace: pvcNamespace,
+			Name:      pvcName,
+			UID:       pvcUID,
+		}
+	}
+	return pv
 }
 
 func fakeK8s(objs []runtime.Object) (kubernetes.Interface, informers.SharedInformerFactory) {
