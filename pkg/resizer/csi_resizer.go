@@ -22,10 +22,11 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/kubernetes-csi/csi-lib-utils/metrics"
 	"github.com/kubernetes-csi/external-resizer/pkg/csi"
 	"github.com/kubernetes-csi/external-resizer/pkg/util"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
@@ -45,23 +46,38 @@ func NewResizer(
 	address string,
 	timeout time.Duration,
 	k8sClient kubernetes.Interface,
-	informerFactory informers.SharedInformerFactory) (Resizer, error) {
-	csiClient, err := csi.New(address, timeout)
+	informerFactory informers.SharedInformerFactory,
+	metricsAddress, metricsPath string) (Resizer, error) {
+	metricsManager := metrics.NewCSIMetricsManager("" /* driverName */)
+	csiClient, err := csi.New(address, timeout, metricsManager)
 	if err != nil {
 		return nil, err
 	}
-	return NewResizerFromClient(csiClient, timeout, k8sClient, informerFactory)
+	return NewResizerFromClient(
+		csiClient,
+		timeout,
+		k8sClient,
+		informerFactory,
+		metricsManager,
+		metricsAddress,
+		metricsPath)
 }
 
 func NewResizerFromClient(
 	csiClient csi.Client,
 	timeout time.Duration,
 	k8sClient kubernetes.Interface,
-	informerFactory informers.SharedInformerFactory) (Resizer, error) {
+	informerFactory informers.SharedInformerFactory,
+	metricsManager metrics.CSIMetricsManager,
+	metricsAddress, metricsPath string) (Resizer, error) {
 	driverName, err := getDriverName(csiClient, timeout)
 	if err != nil {
 		return nil, fmt.Errorf("get driver name failed: %v", err)
 	}
+
+	klog.V(2).Infof("CSI driver name: %q", driverName)
+	metricsManager.SetDriverName(driverName)
+	metricsManager.StartMetricsEndpoint(metricsAddress, metricsPath)
 
 	supportControllerService, err := supportsPluginControllerService(csiClient, timeout)
 	if err != nil {

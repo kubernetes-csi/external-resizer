@@ -49,6 +49,10 @@ Note that the external-resizer does not scale with more replicas. Only one exter
 
 * `--workers <num>`: Number of simultaneously running `ControllerExpandVolume` operations. Default value is `10`.
 
+* `--metrics-address`: The TCP network address where the prometheus metrics endpoint will run (example: `:8080` which corresponds to port 8080 on local host). The default is empty string, which means metrics endpoint is disabled.
+
+* `--metrics-path`: The HTTP path where prometheus metrics will be exposed. Default is `/metrics`.
+
 #### Other recognized arguments
 
 * `--kubeconfig <path>`: Path to Kubernetes client configuration that the external-resizer uses to connect to Kubernetes API server. When omitted, default token provided by Kubernetes will be used. This option is useful only when the external-resizer does not run as a Kubernetes pod, e.g. for debugging. Either this or `--master` needs to be set if the external-resizer is being run out of cluster.
