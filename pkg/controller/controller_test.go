@@ -6,10 +6,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kubernetes-csi/csi-lib-utils/metrics"
 	"github.com/kubernetes-csi/external-resizer/pkg/csi"
 	"github.com/kubernetes-csi/external-resizer/pkg/resizer"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -114,7 +115,10 @@ func TestController(t *testing.T) {
 			}
 		}
 
-		csiResizer, err := resizer.NewResizerFromClient(client, 15*time.Second, kubeClient, informerFactory)
+		metricsManager := metrics.NewCSIMetricsManager("" /* driverName */)
+		metricsAddress := ""
+		metricsPath := ""
+		csiResizer, err := resizer.NewResizerFromClient(client, 15*time.Second, kubeClient, informerFactory, metricsManager, metricsAddress, metricsPath)
 		if err != nil {
 			t.Fatalf("Test %s: Unable to create resizer: %v", test.Name, err)
 		}

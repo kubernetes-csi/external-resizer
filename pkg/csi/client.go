@@ -23,6 +23,7 @@ import (
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/kubernetes-csi/csi-lib-utils/connection"
+	"github.com/kubernetes-csi/csi-lib-utils/metrics"
 	csirpc "github.com/kubernetes-csi/csi-lib-utils/rpc"
 	"google.golang.org/grpc"
 )
@@ -51,8 +52,8 @@ type Client interface {
 }
 
 // New creates a new CSI client.
-func New(address string, timeout time.Duration) (Client, error) {
-	conn, err := connection.Connect(address, connection.OnConnectionLoss(connection.ExitOnConnectionLoss()))
+func New(address string, timeout time.Duration, metricsManager metrics.CSIMetricsManager) (Client, error) {
+	conn, err := connection.Connect(address, metricsManager, connection.OnConnectionLoss(connection.ExitOnConnectionLoss()))
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to CSI driver: %v", err)
 	}

@@ -46,6 +46,9 @@ var (
 	enableLeaderElection    = flag.Bool("leader-election", false, "Enable leader election.")
 	leaderElectionNamespace = flag.String("leader-election-namespace", "", "Namespace where the leader election resource lives. Defaults to the pod namespace if not set.")
 
+	metricsAddress = flag.String("metrics-address", "", "The TCP network address where the prometheus metrics endpoint will listen (example: `:8080`). The default is empty string, which means metrics endpoint is disabled.")
+	metricsPath    = flag.String("metrics-path", "/metrics", "The HTTP path where prometheus metrics will be exposed. Default is `/metrics`.")
+
 	version = "unknown"
 )
 
@@ -67,7 +70,13 @@ func main() {
 
 	informerFactory := informers.NewSharedInformerFactory(kubeClient, *resyncPeriod)
 
-	csiResizer, err := resizer.NewResizer(*csiAddress, *csiTimeout, kubeClient, informerFactory)
+	csiResizer, err := resizer.NewResizer(
+		*csiAddress,
+		*csiTimeout,
+		kubeClient,
+		informerFactory,
+		*metricsAddress,
+		*metricsPath)
 	if err != nil {
 		klog.Fatal(err.Error())
 	}
