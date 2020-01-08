@@ -63,6 +63,10 @@ func (c *MockClient) GetExpandCount() int {
 	return c.expandCalled
 }
 
+func (c *MockClient) GetCapability() *csi.VolumeCapability {
+	return c.usedCapability
+}
+
 // GetSecrets returns secrets used for volume expansion
 func (c *MockClient) GetSecrets() map[string]string {
 	return c.usedSecrets
