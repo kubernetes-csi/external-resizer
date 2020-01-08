@@ -121,21 +121,6 @@ func TestResizeWithSecret(t *testing.T) {
 
 }
 
-func makeSecret(name string, namespace string) *v1.Secret {
-	return &v1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            name,
-			Namespace:       namespace,
-			UID:             "23456",
-			ResourceVersion: "1",
-		},
-		Type: "Opaque",
-		Data: map[string][]byte{
-			"mykey": []byte("mydata"),
-		},
-	}
-}
-
 func TestResizeMigratedPV(t *testing.T) {
 	testCases := []struct {
 		name               string
@@ -341,6 +326,9 @@ func createInTreeEBSPV(capacityGB int) *v1.PersistentVolume {
 			Capacity: map[v1.ResourceName]resource.Quantity{
 				v1.ResourceStorage: capacity,
 			},
+			AccessModes: []v1.PersistentVolumeAccessMode{
+				v1.ReadWriteOnce,
+			},
 			PersistentVolumeSource: v1.PersistentVolumeSource{
 				AWSElasticBlockStore: &v1.AWSElasticBlockStoreVolumeSource{
 					VolumeID: "testVolumeId",
@@ -361,9 +349,26 @@ func createInTreeGCEPDPV(capacityGB int) *v1.PersistentVolume {
 			Capacity: map[v1.ResourceName]resource.Quantity{
 				v1.ResourceStorage: capacity,
 			},
+			AccessModes: []v1.PersistentVolumeAccessMode{
+				v1.ReadWriteOnce,
+			},
 			PersistentVolumeSource: v1.PersistentVolumeSource{
 				GCEPersistentDisk: &v1.GCEPersistentDiskVolumeSource{},
 			},
+		},
+	}
+}
+func makeSecret(name string, namespace string) *v1.Secret {
+	return &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            name,
+			Namespace:       namespace,
+			UID:             "23456",
+			ResourceVersion: "1",
+		},
+		Type: "Opaque",
+		Data: map[string][]byte{
+			"mykey": []byte("mydata"),
 		},
 	}
 }

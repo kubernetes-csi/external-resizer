@@ -1,6 +1,10 @@
 package csi
 
-import "context"
+import (
+	"context"
+
+	"github.com/container-storage-interface/spec/lib/go/csi"
+)
 
 func NewMockClient(
 	name string,
@@ -23,6 +27,7 @@ type MockClient struct {
 	supportsPluginControllerService bool
 	expandCalled                    int
 	usedSecrets                     map[string]string
+	usedCapability                  *csi.VolumeCapability
 }
 
 func (c *MockClient) GetDriverName(context.Context) (string, error) {
@@ -45,10 +50,12 @@ func (c *MockClient) Expand(
 	ctx context.Context,
 	volumeID string,
 	requestBytes int64,
-	secrets map[string]string) (int64, bool, error) {
+	secrets map[string]string,
+	capability *csi.VolumeCapability) (int64, bool, error) {
 	// TODO: Determine whether the operation succeeds or fails by parameters.
 	c.expandCalled++
 	c.usedSecrets = secrets
+	c.usedCapability = capability
 	return requestBytes, c.supportsNodeResize, nil
 }
 

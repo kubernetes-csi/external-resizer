@@ -188,6 +188,7 @@ func createPV(capacityGB int, pvcName, pvcNamespace string, pvcUID types.UID) *v
 			Name: "testPV",
 		},
 		Spec: v1.PersistentVolumeSpec{
+			AccessModes: []v1.PersistentVolumeAccessMode{v1.ReadWriteOnce},
 			Capacity: map[v1.ResourceName]resource.Quantity{
 				v1.ResourceStorage: capacity,
 			},
