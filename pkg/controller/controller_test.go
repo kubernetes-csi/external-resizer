@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"k8s.io/client-go/util/workqueue"
 	"testing"
 	"time"
 
@@ -123,7 +124,7 @@ func TestController(t *testing.T) {
 			t.Fatalf("Test %s: Unable to create resizer: %v", test.Name, err)
 		}
 
-		controller := NewResizeController(driverName, csiResizer, kubeClient, time.Second, informerFactory)
+		controller := NewResizeController(driverName, csiResizer, kubeClient, time.Second, informerFactory, workqueue.DefaultControllerRateLimiter())
 		err = controller.(*resizeController).syncPVC(fmt.Sprintf("%s/%s", test.PVC.Namespace, test.PVC.Name))
 		if err != nil {
 			t.Fatalf("Test %s: Unexpected error: %v", test.Name, err)

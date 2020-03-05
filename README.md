@@ -47,6 +47,10 @@ Note that the external-resizer does not scale with more replicas. Only one exter
 
 * `--csiTimeout <duration>`: Timeout of all calls to CSI driver. It should be set to value that accommodates majority of `ControllerExpandVolume` calls. 15 seconds is used by default.
 
+* `--retry-interval-start`: The starting value of the exponential backoff for failures. 1 second is used by default.
+
+* `--retry-interval-max`: The exponential backoff maximum value. 5 minutes is used by default.
+
 * `--workers <num>`: Number of simultaneously running `ControllerExpandVolume` operations. Default value is `10`.
 
 * `--metrics-address`: The TCP network address where the prometheus metrics endpoint will run (example: `:8080` which corresponds to port 8080 on local host). The default is empty string, which means metrics endpoint is disabled.
