@@ -65,7 +65,8 @@ func NewResizeController(
 	resizer resizer.Resizer,
 	kubeClient kubernetes.Interface,
 	resyncPeriod time.Duration,
-	informerFactory informers.SharedInformerFactory) ResizeController {
+	informerFactory informers.SharedInformerFactory,
+	pvcRateLimiter workqueue.RateLimiter) ResizeController {
 	pvInformer := informerFactory.Core().V1().PersistentVolumes()
 	pvcInformer := informerFactory.Core().V1().PersistentVolumeClaims()
 
@@ -76,7 +77,7 @@ func NewResizeController(
 		v1.EventSource{Component: fmt.Sprintf("external-resizer %s", name)})
 
 	claimQueue := workqueue.NewNamedRateLimitingQueue(
-		workqueue.DefaultControllerRateLimiter(), fmt.Sprintf("%s-pvc", name))
+		pvcRateLimiter, fmt.Sprintf("%s-pvc", name))
 
 	ctrl := &resizeController{
 		name:          name,

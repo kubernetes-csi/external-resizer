@@ -20,6 +20,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"k8s.io/client-go/util/workqueue"
 	"os"
 	"time"
 
@@ -42,6 +43,9 @@ var (
 	csiAddress  = flag.String("csi-address", "/run/csi/socket", "Address of the CSI driver socket.")
 	csiTimeout  = flag.Duration("csiTimeout", 15*time.Second, "Timeout for waiting for CSI driver socket.")
 	showVersion = flag.Bool("version", false, "Show version")
+
+	retryIntervalStart = flag.Duration("retry-interval-start", time.Second, "Initial retry interval of failed volume resize. It exponentially increases with each failure, up to retry-interval-max.")
+	retryIntervalMax   = flag.Duration("retry-interval-max", 5*time.Minute, "Maximum retry interval of failed volume resize.")
 
 	enableLeaderElection    = flag.Bool("leader-election", false, "Enable leader election.")
 	leaderElectionNamespace = flag.String("leader-election-namespace", "", "Namespace where the leader election resource lives. Defaults to the pod namespace if not set.")
@@ -82,7 +86,9 @@ func main() {
 	}
 
 	resizerName := csiResizer.Name()
-	rc := controller.NewResizeController(resizerName, csiResizer, kubeClient, *resyncPeriod, informerFactory)
+	rc := controller.NewResizeController(resizerName, csiResizer, kubeClient, *resyncPeriod, informerFactory,
+		workqueue.NewItemExponentialFailureRateLimiter(*retryIntervalStart, *retryIntervalMax),
+	)
 	run := func(ctx context.Context) {
 		informerFactory.Start(wait.NeverStop)
 		rc.Run(*workers, ctx)
