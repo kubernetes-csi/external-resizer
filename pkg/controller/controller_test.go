@@ -28,10 +28,10 @@ func TestController(t *testing.T) {
 		PVC  *v1.PersistentVolumeClaim
 		PV   *v1.PersistentVolume
 
-		CreateObjects bool
-		NodeResize    bool
-		CallCSIExpand bool
-		blockVolume   bool
+		CreateObjects     bool
+		NodeResize        bool
+		CallCSIExpand     bool
+		expectBlockVolume bool
 	}{
 		{
 			Name:          "Invalid key",
@@ -89,13 +89,13 @@ func TestController(t *testing.T) {
 			CallCSIExpand: true,
 		},
 		{
-			Name:          "Block Resize PVC with FS resize",
-			PVC:           createPVC(2, 1),
-			PV:            createPV(1, "testPVC", "test", "foobar", &blockVolumeMode),
-			CreateObjects: true,
-			NodeResize:    true,
-			CallCSIExpand: true,
-			blockVolume:   true,
+			Name:              "Block Resize PVC with FS resize",
+			PVC:               createPVC(2, 1),
+			PV:                createPV(1, "testPVC", "test", "foobar", &blockVolumeMode),
+			CreateObjects:     true,
+			NodeResize:        true,
+			CallCSIExpand:     true,
+			expectBlockVolume: true,
 		},
 	} {
 		client := csi.NewMockClient("mock", test.NodeResize, true, true)
@@ -150,17 +150,14 @@ func TestController(t *testing.T) {
 			t.Fatalf("for %s: expected no csi expand call, received csi expansion request", test.Name)
 		}
 
-		if test.CallCSIExpand {
-			usedCapability := client.GetCapability()
-			if test.blockVolume {
-				if usedCapability.GetBlock() == nil {
-					t.Errorf("For %s: expected block accesstype got: %v", test.Name, usedCapability)
-				}
-			} else {
-				if usedCapability.GetMount() == nil {
-					t.Errorf("For %s: expected mount accesstype got: %v", test.Name, usedCapability)
-				}
-			}
+		usedCapability := client.GetCapability()
+
+		if test.CallCSIExpand && test.expectBlockVolume && usedCapability.GetBlock() == nil {
+			t.Errorf("For %s: expected block accesstype got: %v", test.Name, usedCapability)
+		}
+
+		if test.CallCSIExpand && !test.expectBlockVolume && usedCapability.GetMount() == nil {
+			t.Errorf("For %s: expected mount accesstype got: %v", test.Name, usedCapability)
 		}
 	}
 }
