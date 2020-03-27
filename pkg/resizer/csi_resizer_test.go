@@ -192,6 +192,7 @@ func TestResizeMigratedPV(t *testing.T) {
 func TestGetVolumeCapabilities(t *testing.T) {
 	blockVolumeMode := v1.PersistentVolumeMode(v1.PersistentVolumeBlock)
 	filesystemVolumeMode := v1.PersistentVolumeMode(v1.PersistentVolumeFilesystem)
+	defaultFSType := ""
 
 	tests := []struct {
 		name               string

@@ -37,10 +37,6 @@ import (
 	"k8s.io/klog"
 )
 
-const (
-	defaultFSType = "ext4"
-)
-
 var (
 	controllerServiceNotSupportErr = errors.New("CSI driver does not support controller service")
 	resizeNotSupportErr            = errors.New("CSI driver neither supports controller resize nor node resize")
@@ -235,9 +231,6 @@ func GetVolumeCapabilities(pvSpec v1.PersistentVolumeSpec) (*csilib.VolumeCapabi
 
 	} else {
 		fsType := pvSpec.CSI.FSType
-		if len(fsType) == 0 {
-			fsType = defaultFSType
-		}
 
 		cap = &csilib.VolumeCapability{
 			AccessType: &csilib.VolumeCapability_Mount{
