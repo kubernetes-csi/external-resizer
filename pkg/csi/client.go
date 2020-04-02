@@ -48,7 +48,7 @@ type Client interface {
 
 	// Expand expands the volume to a new size at least as big as requestBytes.
 	// It returns the new size and whether the volume need expand operation on the node.
-	Expand(ctx context.Context, volumeID string, requestBytes int64, secrets map[string]string) (int64, bool, error)
+	Expand(ctx context.Context, volumeID string, requestBytes int64, secrets map[string]string, capability *csi.VolumeCapability) (int64, bool, error)
 }
 
 // New creates a new CSI client.
@@ -120,11 +120,13 @@ func (c *client) Expand(
 	ctx context.Context,
 	volumeID string,
 	requestBytes int64,
-	secrets map[string]string) (int64, bool, error) {
+	secrets map[string]string,
+	capability *csi.VolumeCapability) (int64, bool, error) {
 	req := &csi.ControllerExpandVolumeRequest{
-		Secrets:       secrets,
-		VolumeId:      volumeID,
-		CapacityRange: &csi.CapacityRange{RequiredBytes: requestBytes},
+		Secrets:          secrets,
+		VolumeId:         volumeID,
+		CapacityRange:    &csi.CapacityRange{RequiredBytes: requestBytes},
+		VolumeCapability: capability,
 	}
 	resp, err := c.ctrlClient.ControllerExpandVolume(ctx, req)
 	if err != nil {

@@ -3,9 +3,11 @@ package resizer
 import (
 	"errors"
 	"fmt"
+	"reflect"
 	"testing"
 	"time"
 
+	csilib "github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/kubernetes-csi/csi-lib-utils/metrics"
 	"github.com/kubernetes-csi/external-resizer/pkg/csi"
 	"github.com/kubernetes-csi/external-resizer/pkg/util"
@@ -121,21 +123,6 @@ func TestResizeWithSecret(t *testing.T) {
 
 }
 
-func makeSecret(name string, namespace string) *v1.Secret {
-	return &v1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            name,
-			Namespace:       namespace,
-			UID:             "23456",
-			ResourceVersion: "1",
-		},
-		Type: "Opaque",
-		Data: map[string][]byte{
-			"mykey": []byte("mydata"),
-		},
-	}
-}
-
 func TestResizeMigratedPV(t *testing.T) {
 	testCases := []struct {
 		name               string
@@ -199,6 +186,139 @@ func TestResizeMigratedPV(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestGetVolumeCapabilities(t *testing.T) {
+	blockVolumeMode := v1.PersistentVolumeMode(v1.PersistentVolumeBlock)
+	filesystemVolumeMode := v1.PersistentVolumeMode(v1.PersistentVolumeFilesystem)
+	defaultFSType := ""
+
+	tests := []struct {
+		name               string
+		volumeMode         *v1.PersistentVolumeMode
+		fsType             string
+		modes              []v1.PersistentVolumeAccessMode
+		mountOptions       []string
+		expectedCapability *csilib.VolumeCapability
+		expectError        bool
+	}{
+		{
+			name:               "RWX",
+			volumeMode:         &filesystemVolumeMode,
+			modes:              []v1.PersistentVolumeAccessMode{v1.ReadWriteMany},
+			expectedCapability: createMountCapability(defaultFSType, csilib.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER, nil),
+			expectError:        false,
+		},
+		{
+			name:               "Block RWX",
+			volumeMode:         &blockVolumeMode,
+			modes:              []v1.PersistentVolumeAccessMode{v1.ReadWriteMany},
+			expectedCapability: createBlockCapability(csilib.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER),
+			expectError:        false,
+		},
+		{
+			name:               "RWX + specified fsType",
+			fsType:             "ext3",
+			modes:              []v1.PersistentVolumeAccessMode{v1.ReadWriteMany},
+			expectedCapability: createMountCapability("ext3", csilib.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER, nil),
+			expectError:        false,
+		},
+		{
+			name:               "RWO",
+			modes:              []v1.PersistentVolumeAccessMode{v1.ReadWriteOnce},
+			expectedCapability: createMountCapability(defaultFSType, csilib.VolumeCapability_AccessMode_SINGLE_NODE_WRITER, nil),
+			expectError:        false,
+		},
+		{
+			name:               "Block RWO",
+			volumeMode:         &blockVolumeMode,
+			modes:              []v1.PersistentVolumeAccessMode{v1.ReadWriteOnce},
+			expectedCapability: createBlockCapability(csilib.VolumeCapability_AccessMode_SINGLE_NODE_WRITER),
+			expectError:        false,
+		},
+		{
+			name:               "ROX",
+			modes:              []v1.PersistentVolumeAccessMode{v1.ReadOnlyMany},
+			expectedCapability: createMountCapability(defaultFSType, csilib.VolumeCapability_AccessMode_MULTI_NODE_READER_ONLY, nil),
+			expectError:        false,
+		},
+		{
+			name:               "RWX + anytyhing",
+			modes:              []v1.PersistentVolumeAccessMode{v1.ReadWriteMany, v1.ReadOnlyMany, v1.ReadWriteOnce},
+			expectedCapability: createMountCapability(defaultFSType, csilib.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER, nil),
+			expectError:        false,
+		},
+		{
+			name:               "mount options",
+			modes:              []v1.PersistentVolumeAccessMode{v1.ReadWriteMany},
+			expectedCapability: createMountCapability(defaultFSType, csilib.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER, []string{"first", "second"}),
+			mountOptions:       []string{"first", "second"},
+			expectError:        false,
+		},
+		{
+			name:               "ROX+RWO",
+			modes:              []v1.PersistentVolumeAccessMode{v1.ReadWriteOnce, v1.ReadOnlyMany},
+			expectedCapability: nil,
+			expectError:        true, // not possible in CSI
+		},
+		{
+			name:               "nothing",
+			modes:              []v1.PersistentVolumeAccessMode{},
+			expectedCapability: nil,
+			expectError:        true,
+		},
+	}
+
+	for _, test := range tests {
+		pv := &v1.PersistentVolume{
+			Spec: v1.PersistentVolumeSpec{
+				VolumeMode:   test.volumeMode,
+				AccessModes:  test.modes,
+				MountOptions: test.mountOptions,
+				PersistentVolumeSource: v1.PersistentVolumeSource{
+					CSI: &v1.CSIPersistentVolumeSource{
+						FSType: test.fsType,
+					},
+				},
+			},
+		}
+		cap, err := GetVolumeCapabilities(pv.Spec)
+
+		if err == nil && test.expectError {
+			t.Errorf("test %s: expected error, got none", test.name)
+		}
+		if err != nil && !test.expectError {
+			t.Errorf("test %s: got error: %s", test.name, err)
+		}
+		if !test.expectError && !reflect.DeepEqual(cap, test.expectedCapability) {
+			t.Errorf("test %s: unexpected VolumeCapability: %+v", test.name, cap)
+		}
+	}
+}
+
+func createBlockCapability(mode csilib.VolumeCapability_AccessMode_Mode) *csilib.VolumeCapability {
+	return &csilib.VolumeCapability{
+		AccessType: &csilib.VolumeCapability_Block{
+			Block: &csilib.VolumeCapability_BlockVolume{},
+		},
+		AccessMode: &csilib.VolumeCapability_AccessMode{
+			Mode: mode,
+		},
+	}
+}
+
+func createMountCapability(fsType string, mode csilib.VolumeCapability_AccessMode_Mode, mountOptions []string) *csilib.VolumeCapability {
+	return &csilib.VolumeCapability{
+		AccessType: &csilib.VolumeCapability_Mount{
+			Mount: &csilib.VolumeCapability_MountVolume{
+				FsType:     fsType,
+				MountFlags: mountOptions,
+			},
+		},
+		AccessMode: &csilib.VolumeCapability_AccessMode{
+			Mode: mode,
+		},
 	}
 }
 
@@ -341,6 +461,9 @@ func createInTreeEBSPV(capacityGB int) *v1.PersistentVolume {
 			Capacity: map[v1.ResourceName]resource.Quantity{
 				v1.ResourceStorage: capacity,
 			},
+			AccessModes: []v1.PersistentVolumeAccessMode{
+				v1.ReadWriteOnce,
+			},
 			PersistentVolumeSource: v1.PersistentVolumeSource{
 				AWSElasticBlockStore: &v1.AWSElasticBlockStoreVolumeSource{
 					VolumeID: "testVolumeId",
@@ -361,9 +484,26 @@ func createInTreeGCEPDPV(capacityGB int) *v1.PersistentVolume {
 			Capacity: map[v1.ResourceName]resource.Quantity{
 				v1.ResourceStorage: capacity,
 			},
+			AccessModes: []v1.PersistentVolumeAccessMode{
+				v1.ReadWriteOnce,
+			},
 			PersistentVolumeSource: v1.PersistentVolumeSource{
 				GCEPersistentDisk: &v1.GCEPersistentDiskVolumeSource{},
 			},
+		},
+	}
+}
+func makeSecret(name string, namespace string) *v1.Secret {
+	return &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            name,
+			Namespace:       namespace,
+			UID:             "23456",
+			ResourceVersion: "1",
+		},
+		Type: "Opaque",
+		Data: map[string][]byte{
+			"mykey": []byte("mydata"),
 		},
 	}
 }

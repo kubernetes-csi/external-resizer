@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"time"
 
+	csilib "github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/kubernetes-csi/csi-lib-utils/metrics"
 	"github.com/kubernetes-csi/external-resizer/pkg/csi"
 	"github.com/kubernetes-csi/external-resizer/pkg/util"
@@ -157,10 +158,12 @@ func (r *csiResizer) Resize(pv *v1.PersistentVolume, requestSize resource.Quanti
 
 	var volumeID string
 	var source *v1.CSIPersistentVolumeSource
+	var pvSpec v1.PersistentVolumeSpec
 	if pv.Spec.CSI != nil {
 		// handle CSI volume
 		source = pv.Spec.CSI
 		volumeID = source.VolumeHandle
+		pvSpec = pv.Spec
 	} else {
 		if csitranslationlib.IsMigratedCSIDriverByName(r.name) {
 			// handle migrated in-tree volume
@@ -169,6 +172,7 @@ func (r *csiResizer) Resize(pv *v1.PersistentVolume, requestSize resource.Quanti
 				return oldSize, false, fmt.Errorf("failed to translate persistent volume: %v", err)
 			}
 			source = csiPV.Spec.CSI
+			pvSpec = csiPV.Spec
 			volumeID = source.VolumeHandle
 		} else {
 			// non-migrated in-tree volume
@@ -190,14 +194,77 @@ func (r *csiResizer) Resize(pv *v1.PersistentVolume, requestSize resource.Quanti
 		}
 	}
 
+	capability, err := GetVolumeCapabilities(pvSpec)
+	if err != nil {
+		return oldSize, false, fmt.Errorf("failed to get capabilities of volume %s with %v", pv.Name, err)
+	}
+
 	ctx, cancel := timeoutCtx(r.timeout)
 	defer cancel()
-	newSizeBytes, nodeResizeRequired, err := r.client.Expand(ctx, volumeID, requestSize.Value(), secrets)
+	newSizeBytes, nodeResizeRequired, err := r.client.Expand(ctx, volumeID, requestSize.Value(), secrets, capability)
 	if err != nil {
 		return oldSize, nodeResizeRequired, err
 	}
 
 	return *resource.NewQuantity(newSizeBytes, resource.BinarySI), nodeResizeRequired, err
+}
+
+// GetVolumeCapabilities returns volumecapability from PV spec
+func GetVolumeCapabilities(pvSpec v1.PersistentVolumeSpec) (*csilib.VolumeCapability, error) {
+	m := map[v1.PersistentVolumeAccessMode]bool{}
+	for _, mode := range pvSpec.AccessModes {
+		m[mode] = true
+	}
+
+	if pvSpec.CSI == nil {
+		return nil, errors.New("CSI volume source was nil")
+	}
+
+	var cap *csilib.VolumeCapability
+	if pvSpec.VolumeMode != nil && *pvSpec.VolumeMode == v1.PersistentVolumeBlock {
+		cap = &csilib.VolumeCapability{
+			AccessType: &csilib.VolumeCapability_Block{
+				Block: &csilib.VolumeCapability_BlockVolume{},
+			},
+			AccessMode: &csilib.VolumeCapability_AccessMode{},
+		}
+
+	} else {
+		fsType := pvSpec.CSI.FSType
+
+		cap = &csilib.VolumeCapability{
+			AccessType: &csilib.VolumeCapability_Mount{
+				Mount: &csilib.VolumeCapability_MountVolume{
+					FsType:     fsType,
+					MountFlags: pvSpec.MountOptions,
+				},
+			},
+			AccessMode: &csilib.VolumeCapability_AccessMode{},
+		}
+	}
+
+	// Translate array of modes into single VolumeCapability
+	switch {
+	case m[v1.ReadWriteMany]:
+		// ReadWriteMany trumps everything, regardless what other modes are set
+		cap.AccessMode.Mode = csilib.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER
+
+	case m[v1.ReadOnlyMany] && m[v1.ReadWriteOnce]:
+		// This is no way how to translate this to CSI...
+		return nil, fmt.Errorf("CSI does not support ReadOnlyMany and ReadWriteOnce on the same PersistentVolume")
+
+	case m[v1.ReadOnlyMany]:
+		// There is only ReadOnlyMany set
+		cap.AccessMode.Mode = csilib.VolumeCapability_AccessMode_MULTI_NODE_READER_ONLY
+
+	case m[v1.ReadWriteOnce]:
+		// There is only ReadWriteOnce set
+		cap.AccessMode.Mode = csilib.VolumeCapability_AccessMode_SINGLE_NODE_WRITER
+
+	default:
+		return nil, fmt.Errorf("unsupported AccessMode combination: %+v", pvSpec.AccessModes)
+	}
+	return cap, nil
 }
 
 func getDriverName(client csi.Client, timeout time.Duration) (string, error) {
