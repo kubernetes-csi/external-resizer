@@ -26,13 +26,11 @@ import (
 	"github.com/kubernetes-csi/csi-lib-utils/metrics"
 	"github.com/kubernetes-csi/external-resizer/pkg/csi"
 	"github.com/kubernetes-csi/external-resizer/pkg/util"
-
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
-
 	csitranslationlib "k8s.io/csi-translation-lib"
 	"k8s.io/klog"
 )
@@ -296,11 +294,12 @@ func timeoutCtx(timeout time.Duration) (context.Context, context.CancelFunc) {
 }
 
 func getCredentials(k8sClient kubernetes.Interface, ref *v1.SecretReference) (map[string]string, error) {
+	var ctx context.Context = context.Background()
 	if ref == nil {
 		return nil, nil
 	}
 
-	secret, err := k8sClient.CoreV1().Secrets(ref.Namespace).Get(ref.Name, metav1.GetOptions{})
+	secret, err := k8sClient.CoreV1().Secrets(ref.Namespace).Get(ctx, ref.Name, metav1.GetOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("error getting secret %s in namespace %s: %v", ref.Name, ref.Namespace, err)
 	}
