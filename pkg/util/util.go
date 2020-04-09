@@ -39,8 +39,6 @@ var knownResizeConditions = map[v1.PersistentVolumeClaimConditionType]bool{
 	v1.PersistentVolumeClaimFileSystemResizePending: true,
 }
 
-var ctx context.Context = context.Background()
-
 // NewK8sClient is an utility function used to create a kubernetes sdk client.
 func NewK8sClient(master, kubeConfig string) (kubernetes.Interface, error) {
 	var config *rest.Config
@@ -107,7 +105,7 @@ func PatchPVCStatus(
 		return nil, fmt.Errorf("can't patch status of PVC %s as generate path data failed: %v", PVCKey(oldPVC), err)
 	}
 	updatedClaim, updateErr := kubeClient.CoreV1().PersistentVolumeClaims(oldPVC.Namespace).
-		Patch(ctx, oldPVC.Name, types.StrategicMergePatchType, patchBytes, metav1.PatchOptions{}, "status")
+		Patch(context.TODO(), oldPVC.Name, types.StrategicMergePatchType, patchBytes, metav1.PatchOptions{}, "status")
 	if updateErr != nil {
 		return nil, fmt.Errorf("can't patch status of  PVC %s with %v", PVCKey(oldPVC), updateErr)
 	}
@@ -154,7 +152,7 @@ func UpdatePVCapacity(pv *v1.PersistentVolume, newCapacity resource.Quantity, ku
 	if err != nil {
 		return fmt.Errorf("can't update capacity of PV %s as generate path data failed: %v", pv.Name, err)
 	}
-	_, updateErr := kubeClient.CoreV1().PersistentVolumes().Patch(ctx, pv.Name, types.StrategicMergePatchType, patchBytes, metav1.PatchOptions{})
+	_, updateErr := kubeClient.CoreV1().PersistentVolumes().Patch(context.TODO(), pv.Name, types.StrategicMergePatchType, patchBytes, metav1.PatchOptions{})
 	if updateErr != nil {
 		return fmt.Errorf("update capacity of PV %s failed: %v", pv.Name, updateErr)
 	}
