@@ -14,7 +14,7 @@ control-plane CSI RPC call or via node CSI RPC call or both as a two step proces
 
 This information reflects the head of this branch.
 
-| Compatible with CSI Version                                                                | Container Image                | Recommended K8s Version |
+| Compatible with CSI Version                                                                | Container Image                | [Recommended K8s Version](https://kubernetes-csi.github.io/docs/kubernetes-compatibility.html#recommended-version) |
 | ------------------------------------------------------------------------------------------ | -------------------------------| --------------- |
 | [CSI Spec v1.2.0](https://github.com/container-storage-interface/spec/releases/tag/v1.2.0) | quay.io/k8scsi/csi-resizer | 1.16            |
 
