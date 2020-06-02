@@ -23,10 +23,13 @@ import (
 
 	"github.com/kubernetes-csi/external-resizer/pkg/resizer"
 	"github.com/kubernetes-csi/external-resizer/pkg/util"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	v1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
@@ -56,6 +59,11 @@ type resizeController struct {
 	pvSynced      cache.InformerSynced
 	pvcLister     corelisters.PersistentVolumeClaimLister
 	pvcSynced     cache.InformerSynced
+
+	usedPVCs *inUsePVCStore
+
+	podLister       corelisters.PodLister
+	podListerSynced cache.InformerSynced
 }
 
 // NewResizeController returns a ResizeController.
@@ -69,6 +77,9 @@ func NewResizeController(
 	pvInformer := informerFactory.Core().V1().PersistentVolumes()
 	pvcInformer := informerFactory.Core().V1().PersistentVolumeClaims()
 
+	// list pods so as we can identify PVC that are in-use
+	podInformer := informerFactory.Core().V1().Pods()
+
 	eventBroadcaster := record.NewBroadcaster()
 	eventBroadcaster.StartLogging(klog.Infof)
 	eventBroadcaster.StartRecordingToSink(&corev1.EventSinkImpl{Interface: kubeClient.CoreV1().Events(v1.NamespaceAll)})
@@ -79,15 +90,18 @@ func NewResizeController(
 		pvcRateLimiter, fmt.Sprintf("%s-pvc", name))
 
 	ctrl := &resizeController{
-		name:          name,
-		resizer:       resizer,
-		kubeClient:    kubeClient,
-		pvLister:      pvInformer.Lister(),
-		pvSynced:      pvInformer.Informer().HasSynced,
-		pvcLister:     pvcInformer.Lister(),
-		pvcSynced:     pvcInformer.Informer().HasSynced,
-		claimQueue:    claimQueue,
-		eventRecorder: eventRecorder,
+		name:            name,
+		resizer:         resizer,
+		kubeClient:      kubeClient,
+		pvLister:        pvInformer.Lister(),
+		pvSynced:        pvInformer.Informer().HasSynced,
+		pvcLister:       pvcInformer.Lister(),
+		pvcSynced:       pvcInformer.Informer().HasSynced,
+		podLister:       podInformer.Lister(),
+		podListerSynced: podInformer.Informer().HasSynced,
+		claimQueue:      claimQueue,
+		eventRecorder:   eventRecorder,
+		usedPVCs:        newUsedPVCStore(),
 	}
 
 	// Add a resync period as the PVC's request size can be resized again when we handling
@@ -98,15 +112,36 @@ func NewResizeController(
 		DeleteFunc: ctrl.deletePVC,
 	}, resyncPeriod)
 
+	podInformer.Informer().AddEventHandlerWithResyncPeriod(cache.ResourceEventHandlerFuncs{
+		AddFunc:    ctrl.addPod,
+		DeleteFunc: ctrl.deletePod,
+	}, resyncPeriod)
+
 	return ctrl
 }
 
 func (ctrl *resizeController) addPVC(obj interface{}) {
-	objKey, err := getPVCKey(obj)
+	objKey, err := getObjectKey(obj)
 	if err != nil {
 		return
 	}
 	ctrl.claimQueue.Add(objKey)
+}
+
+func (ctrl *resizeController) addPod(obj interface{}) {
+	pod := parsePod(obj)
+	if pod != nil {
+		return
+	}
+	ctrl.usedPVCs.addPod(pod)
+}
+
+func (ctrl *resizeController) deletePod(obj interface{}) {
+	pod := parsePod(obj)
+	if pod != nil {
+		return
+	}
+	ctrl.usedPVCs.removePod(pod)
 }
 
 func (ctrl *resizeController) updatePVC(oldObj, newObj interface{}) {
@@ -162,14 +197,14 @@ func (ctrl *resizeController) updatePVC(oldObj, newObj interface{}) {
 }
 
 func (ctrl *resizeController) deletePVC(obj interface{}) {
-	objKey, err := getPVCKey(obj)
+	objKey, err := getObjectKey(obj)
 	if err != nil {
 		return
 	}
 	ctrl.claimQueue.Forget(objKey)
 }
 
-func getPVCKey(obj interface{}) (string, error) {
+func getObjectKey(obj interface{}) (string, error) {
 	if unknown, ok := obj.(cache.DeletedFinalStateUnknown); ok && unknown.Obj != nil {
 		obj = unknown.Obj
 	}
@@ -191,8 +226,8 @@ func (ctrl *resizeController) Run(
 
 	stopCh := ctx.Done()
 
-	if !cache.WaitForCacheSync(stopCh, ctrl.pvSynced, ctrl.pvcSynced) {
-		klog.Errorf("Cannot sync pv/pvc caches")
+	if !cache.WaitForCacheSync(stopCh, ctrl.pvSynced, ctrl.pvcSynced, ctrl.podListerSynced) {
+		klog.Errorf("Cannot sync pod, pv or pvc caches")
 		return
 	}
 
@@ -322,6 +357,15 @@ func (ctrl *resizeController) resizePVC(pvc *v1.PersistentVolumeClaim, pv *v1.Pe
 		pvc = updatedPVC
 	}
 
+	// if pvc previously failed to expand because it can't be expanded when in-use
+	// we must not try expansion here
+	if ctrl.usedPVCs.hasInUseErrors(pvc) && ctrl.usedPVCs.checkForUse(pvc) {
+		// Record an event to indicate that resizer is not expanding the pvc
+		ctrl.eventRecorder.Event(pvc, v1.EventTypeWarning, util.VolumeResizeFailed,
+			fmt.Sprintf("CSI resizer is not expanding %s because it is in-use", pv.Name))
+		return fmt.Errorf("csi resizer is not expanding %s because it is in-use", pv.Name)
+	}
+
 	// Record an event to indicate that external resizer is resizing this volume.
 	ctrl.eventRecorder.Event(pvc, v1.EventTypeNormal, util.VolumeResizing,
 		fmt.Sprintf("External resizer is resizing volume %s", pv.Name))
@@ -352,12 +396,24 @@ func (ctrl *resizeController) resizePVC(pvc *v1.PersistentVolumeClaim, pv *v1.Pe
 func (ctrl *resizeController) resizeVolume(
 	pvc *v1.PersistentVolumeClaim,
 	pv *v1.PersistentVolume) (resource.Quantity, bool, error) {
+
+	// before trying expansion we will remove the PVC from map
+	// that tracks PVCs which can't be expanded when in-use. If
+	// pvc indeed can not be expanded when in-use then it will be added
+	// back when expansion fails with in-use error.
+	ctrl.usedPVCs.removePVCWithInUseError(pvc)
+
 	requestSize := pvc.Spec.Resources.Requests[v1.ResourceStorage]
 
 	newSize, fsResizeRequired, err := ctrl.resizer.Resize(pv, requestSize)
 
 	if err != nil {
 		klog.Errorf("Resize volume %q by resizer %q failed: %v", pv.Name, ctrl.name, err)
+		// if this error was a in-use error then it must be tracked so as we don't retry without
+		// first verifying if volume is in-use
+		if inUseError(err) {
+			ctrl.usedPVCs.addPVCWithInUseError(pvc)
+		}
 		return newSize, fsResizeRequired, fmt.Errorf("resize volume %s failed: %v", pv.Name, err)
 	}
 	klog.V(4).Infof("Resize volume succeeded for volume %q, start to update PV's capacity", pv.Name)
@@ -421,4 +477,38 @@ func (ctrl *resizeController) markPVCAsFSResizeRequired(pvc *v1.PersistentVolume
 		util.FileSystemResizeRequired, "Require file system resize of volume on node")
 
 	return nil
+}
+
+func parsePod(obj interface{}) *v1.Pod {
+	if obj == nil {
+		return nil
+	}
+	pod, ok := obj.(*v1.Pod)
+	if !ok {
+		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
+		if !ok {
+			utilruntime.HandleError(fmt.Errorf("couldn't get object from tombstone %#v", obj))
+			return nil
+		}
+		pod, ok = tombstone.Obj.(*v1.Pod)
+		if !ok {
+			utilruntime.HandleError(fmt.Errorf("tombstone contained object that is not a Pod %#v", obj))
+			return nil
+		}
+	}
+	return pod
+}
+
+func inUseError(err error) bool {
+	st, ok := status.FromError(err)
+	if !ok {
+		// not a grpc error
+		return false
+	}
+	// if this is a failed precondition error then that means driver does not support expansion
+	// of in-use volumes
+	if st.Code() == codes.FailedPrecondition {
+		return true
+	}
+	return false
 }
