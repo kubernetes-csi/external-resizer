@@ -115,6 +115,7 @@ func NewResizeController(
 	podInformer.Informer().AddEventHandlerWithResyncPeriod(cache.ResourceEventHandlerFuncs{
 		AddFunc:    ctrl.addPod,
 		DeleteFunc: ctrl.deletePod,
+		UpdateFunc: ctrl.updatePod,
 	}, resyncPeriod)
 
 	return ctrl
@@ -130,7 +131,7 @@ func (ctrl *resizeController) addPVC(obj interface{}) {
 
 func (ctrl *resizeController) addPod(obj interface{}) {
 	pod := parsePod(obj)
-	if pod != nil {
+	if pod == nil {
 		return
 	}
 	ctrl.usedPVCs.addPod(pod)
@@ -138,10 +139,19 @@ func (ctrl *resizeController) addPod(obj interface{}) {
 
 func (ctrl *resizeController) deletePod(obj interface{}) {
 	pod := parsePod(obj)
-	if pod != nil {
+	if pod == nil {
 		return
 	}
 	ctrl.usedPVCs.removePod(pod)
+}
+
+func (ctrl *resizeController) updatePod(oldObj, newObj interface{}) {
+	pod := parsePod(newObj)
+	if pod == nil {
+		return
+	}
+
+	ctrl.usedPVCs.addPod(pod)
 }
 
 func (ctrl *resizeController) updatePVC(oldObj, newObj interface{}) {
@@ -361,9 +371,9 @@ func (ctrl *resizeController) resizePVC(pvc *v1.PersistentVolumeClaim, pv *v1.Pe
 	// we must not try expansion here
 	if ctrl.usedPVCs.hasInUseErrors(pvc) && ctrl.usedPVCs.checkForUse(pvc) {
 		// Record an event to indicate that resizer is not expanding the pvc
-		ctrl.eventRecorder.Event(pvc, v1.EventTypeWarning, util.VolumeResizeFailed,
-			fmt.Sprintf("CSI resizer is not expanding %s because it is in-use", pv.Name))
-		return fmt.Errorf("csi resizer is not expanding %s because it is in-use", pv.Name)
+		msg := fmt.Sprintf("Unable to expand %s because CSI driver %s only supports offline expansion and volume is currently in-use", util.PVCKey(pvc), ctrl.resizer.Name())
+		ctrl.eventRecorder.Event(pvc, v1.EventTypeWarning, util.VolumeResizeFailed, msg)
+		return fmt.Errorf(msg)
 	}
 
 	// Record an event to indicate that external resizer is resizing this volume.
@@ -485,14 +495,14 @@ func parsePod(obj interface{}) *v1.Pod {
 	}
 	pod, ok := obj.(*v1.Pod)
 	if !ok {
-		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
+		staleObj, ok := obj.(cache.DeletedFinalStateUnknown)
 		if !ok {
-			utilruntime.HandleError(fmt.Errorf("couldn't get object from tombstone %#v", obj))
+			utilruntime.HandleError(fmt.Errorf("couldn't get stale object %#v", obj))
 			return nil
 		}
-		pod, ok = tombstone.Obj.(*v1.Pod)
+		pod, ok = staleObj.Obj.(*v1.Pod)
 		if !ok {
-			utilruntime.HandleError(fmt.Errorf("tombstone contained object that is not a Pod %#v", obj))
+			utilruntime.HandleError(fmt.Errorf("stale object is not a Pod %#v", obj))
 			return nil
 		}
 	}
@@ -507,6 +517,7 @@ func inUseError(err error) bool {
 	}
 	// if this is a failed precondition error then that means driver does not support expansion
 	// of in-use volumes
+	// More info - https://github.com/container-storage-interface/spec/blob/master/spec.md#controllerexpandvolume-errors
 	if st.Code() == codes.FailedPrecondition {
 		return true
 	}

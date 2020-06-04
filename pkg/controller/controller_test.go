@@ -2,7 +2,6 @@ package controller
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
@@ -34,7 +33,6 @@ func TestController(t *testing.T) {
 		NodeResize        bool
 		CallCSIExpand     bool
 		expectBlockVolume bool
-		expectError       bool
 
 		// is PVC being expanded in-use
 		pvcInUse bool
@@ -113,7 +111,6 @@ func TestController(t *testing.T) {
 			CallCSIExpand:     false,
 			pvcHasInUseErrors: true,
 			pvcInUse:          true,
-			expectError:       true,
 		},
 		{
 			Name:              "Resize PVC, no FS resize, pvc-inuse but no failedprecondition error",
@@ -148,20 +145,15 @@ func TestController(t *testing.T) {
 			}
 		}
 
+		if test.pvcInUse {
+			pod := withPVC(test.PVC.Name, pod())
+			initialObjects = append(initialObjects, pod)
+		}
+
 		kubeClient, informerFactory := fakeK8s(initialObjects)
 		pvInformer := informerFactory.Core().V1().PersistentVolumes()
 		pvcInformer := informerFactory.Core().V1().PersistentVolumeClaims()
-
-		for _, obj := range initialObjects {
-			switch obj.(type) {
-			case *v1.PersistentVolume:
-				pvInformer.Informer().GetStore().Add(obj)
-			case *v1.PersistentVolumeClaim:
-				pvcInformer.Informer().GetStore().Add(obj)
-			default:
-				t.Fatalf("Test %s: Unknown initalObject type: %+v", test.Name, obj)
-			}
-		}
+		podInformer := informerFactory.Core().V1().Pods()
 
 		metricsManager := metrics.NewCSIMetricsManager("" /* driverName */)
 		metricsAddress := ""
@@ -182,22 +174,27 @@ func TestController(t *testing.T) {
 			}
 		}
 
-		if test.pvcInUse {
-			pod := withPVC(test.PVC.Name, pod())
-			ctrlInstance.usedPVCs.addPod(pod)
-			if !ctrlInstance.usedPVCs.checkForUse(test.PVC) {
-				t.Fatalf("pvc %s is not in use", test.PVC.Name)
+		stopCh := make(chan struct{})
+		informerFactory.Start(stopCh)
+
+		ctx := context.TODO()
+		defer ctx.Done()
+		go controller.Run(1, ctx)
+
+		for _, obj := range initialObjects {
+			switch obj.(type) {
+			case *v1.PersistentVolume:
+				pvInformer.Informer().GetStore().Add(obj)
+			case *v1.PersistentVolumeClaim:
+				pvcInformer.Informer().GetStore().Add(obj)
+			case *v1.Pod:
+				podInformer.Informer().GetStore().Add(obj)
+			default:
+				t.Fatalf("Test %s: Unknown initalObject type: %+v", test.Name, obj)
 			}
 		}
 
-		err = ctrlInstance.syncPVC(fmt.Sprintf("%s/%s", test.PVC.Namespace, test.PVC.Name))
-		if err != nil && !test.expectError {
-			t.Fatalf("Test %s: Unexpected error: %v", test.Name, err)
-		}
-
-		if test.expectError && err == nil {
-			t.Fatalf("Test %s: expected error got no none", test.Name)
-		}
+		time.Sleep(time.Second * 2)
 
 		expandCallCount := client.GetExpandCount()
 		if test.CallCSIExpand && expandCallCount == 0 {
