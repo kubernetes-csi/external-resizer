@@ -2,10 +2,10 @@ package controller
 
 import (
 	"context"
-	"fmt"
-	"k8s.io/client-go/util/workqueue"
 	"testing"
 	"time"
+
+	"k8s.io/client-go/util/workqueue"
 
 	"github.com/kubernetes-csi/csi-lib-utils/metrics"
 	"github.com/kubernetes-csi/external-resizer/pkg/csi"
@@ -33,6 +33,11 @@ func TestController(t *testing.T) {
 		NodeResize        bool
 		CallCSIExpand     bool
 		expectBlockVolume bool
+
+		// is PVC being expanded in-use
+		pvcInUse bool
+		// does PVC being expanded has Failed Precondition errors
+		pvcHasInUseErrors bool
 	}{
 		{
 			Name:          "Invalid key",
@@ -59,7 +64,7 @@ func TestController(t *testing.T) {
 		{
 			Name:          "pv claimref does not have pvc UID",
 			PVC:           createPVC(2, 1),
-			PV:            createPV(1, "testPVC" /*pvcName*/, "test" /*pvcNamespace*/, "foobaz" /*pvcUID*/, &fsVolumeMode),
+			PV:            createPV(1, "testPVC" /*pvcName*/, defaultNS, "foobaz" /*pvcUID*/, &fsVolumeMode),
 			CallCSIExpand: false,
 		},
 		{
@@ -77,14 +82,14 @@ func TestController(t *testing.T) {
 		{
 			Name:          "Resize PVC, no FS resize",
 			PVC:           createPVC(2, 1),
-			PV:            createPV(1, "testPVC", "test", "foobar", &fsVolumeMode),
+			PV:            createPV(1, "testPVC", defaultNS, "foobar", &fsVolumeMode),
 			CreateObjects: true,
 			CallCSIExpand: true,
 		},
 		{
 			Name:          "Resize PVC with FS resize",
 			PVC:           createPVC(2, 1),
-			PV:            createPV(1, "testPVC", "test", "foobar", &fsVolumeMode),
+			PV:            createPV(1, "testPVC", defaultNS, "foobar", &fsVolumeMode),
 			CreateObjects: true,
 			NodeResize:    true,
 			CallCSIExpand: true,
@@ -92,11 +97,38 @@ func TestController(t *testing.T) {
 		{
 			Name:              "Block Resize PVC with FS resize",
 			PVC:               createPVC(2, 1),
-			PV:                createPV(1, "testPVC", "test", "foobar", &blockVolumeMode),
+			PV:                createPV(1, "testPVC", defaultNS, "foobar", &blockVolumeMode),
 			CreateObjects:     true,
 			NodeResize:        true,
 			CallCSIExpand:     true,
 			expectBlockVolume: true,
+		},
+		{
+			Name:              "Resize PVC, no FS resize, pvc-inuse with failedprecondition",
+			PVC:               createPVC(2, 1),
+			PV:                createPV(1, "testPVC", defaultNS, "foobar", &fsVolumeMode),
+			CreateObjects:     true,
+			CallCSIExpand:     false,
+			pvcHasInUseErrors: true,
+			pvcInUse:          true,
+		},
+		{
+			Name:              "Resize PVC, no FS resize, pvc-inuse but no failedprecondition error",
+			PVC:               createPVC(2, 1),
+			PV:                createPV(1, "testPVC", defaultNS, "foobar", &fsVolumeMode),
+			CreateObjects:     true,
+			CallCSIExpand:     true,
+			pvcHasInUseErrors: false,
+			pvcInUse:          true,
+		},
+		{
+			Name:              "Resize PVC, no FS resize, pvc not in-use but has failedprecondition error",
+			PVC:               createPVC(2, 1),
+			PV:                createPV(1, "testPVC", defaultNS, "foobar", &fsVolumeMode),
+			CreateObjects:     true,
+			CallCSIExpand:     true,
+			pvcHasInUseErrors: true,
+			pvcInUse:          false,
 		},
 	} {
 		client := csi.NewMockClient("mock", test.NodeResize, true, true)
@@ -113,20 +145,15 @@ func TestController(t *testing.T) {
 			}
 		}
 
+		if test.pvcInUse {
+			pod := withPVC(test.PVC.Name, pod())
+			initialObjects = append(initialObjects, pod)
+		}
+
 		kubeClient, informerFactory := fakeK8s(initialObjects)
 		pvInformer := informerFactory.Core().V1().PersistentVolumes()
 		pvcInformer := informerFactory.Core().V1().PersistentVolumeClaims()
-
-		for _, obj := range initialObjects {
-			switch obj.(type) {
-			case *v1.PersistentVolume:
-				pvInformer.Informer().GetStore().Add(obj)
-			case *v1.PersistentVolumeClaim:
-				pvcInformer.Informer().GetStore().Add(obj)
-			default:
-				t.Fatalf("Test %s: Unknown initalObject type: %+v", test.Name, obj)
-			}
-		}
+		podInformer := informerFactory.Core().V1().Pods()
 
 		metricsManager := metrics.NewCSIMetricsManager("" /* driverName */)
 		metricsAddress := ""
@@ -137,10 +164,37 @@ func TestController(t *testing.T) {
 		}
 
 		controller := NewResizeController(driverName, csiResizer, kubeClient, time.Second, informerFactory, workqueue.DefaultControllerRateLimiter())
-		err = controller.(*resizeController).syncPVC(fmt.Sprintf("%s/%s", test.PVC.Namespace, test.PVC.Name))
-		if err != nil {
-			t.Fatalf("Test %s: Unexpected error: %v", test.Name, err)
+
+		ctrlInstance, _ := controller.(*resizeController)
+
+		if test.pvcHasInUseErrors {
+			ctrlInstance.usedPVCs.addPVCWithInUseError(test.PVC)
+			if !ctrlInstance.usedPVCs.hasInUseErrors(test.PVC) {
+				t.Fatalf("pvc %s does not have in-use errors", test.PVC.Name)
+			}
 		}
+
+		stopCh := make(chan struct{})
+		informerFactory.Start(stopCh)
+
+		ctx := context.TODO()
+		defer ctx.Done()
+		go controller.Run(1, ctx)
+
+		for _, obj := range initialObjects {
+			switch obj.(type) {
+			case *v1.PersistentVolume:
+				pvInformer.Informer().GetStore().Add(obj)
+			case *v1.PersistentVolumeClaim:
+				pvcInformer.Informer().GetStore().Add(obj)
+			case *v1.Pod:
+				podInformer.Informer().GetStore().Add(obj)
+			default:
+				t.Fatalf("Test %s: Unknown initalObject type: %+v", test.Name, obj)
+			}
+		}
+
+		time.Sleep(time.Second * 2)
 
 		expandCallCount := client.GetExpandCount()
 		if test.CallCSIExpand && expandCallCount == 0 {
@@ -183,7 +237,7 @@ func createPVC(requestGB, capacityGB int) *v1.PersistentVolumeClaim {
 	return &v1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "testPVC",
-			Namespace: "test",
+			Namespace: defaultNS,
 			UID:       "foobar",
 		},
 		Spec: v1.PersistentVolumeClaimSpec{
