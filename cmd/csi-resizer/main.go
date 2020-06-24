@@ -20,9 +20,10 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"k8s.io/client-go/util/workqueue"
 	"os"
 	"time"
+
+	"k8s.io/client-go/util/workqueue"
 
 	"github.com/kubernetes-csi/csi-lib-utils/leaderelection"
 	"github.com/kubernetes-csi/external-resizer/pkg/controller"
@@ -52,6 +53,8 @@ var (
 
 	metricsAddress = flag.String("metrics-address", "", "The TCP network address where the prometheus metrics endpoint will listen (example: `:8080`). The default is empty string, which means metrics endpoint is disabled.")
 	metricsPath    = flag.String("metrics-path", "/metrics", "The HTTP path where prometheus metrics will be exposed. Default is `/metrics`.")
+
+	handleVolumeInUseError = flag.Bool("handle-volume-inuse-error", true, "Flag to turn on/off capability to handle volume in use error in resizer controller. Defaults to true if not set.")
 
 	version = "unknown"
 )
@@ -88,7 +91,7 @@ func main() {
 	resizerName := csiResizer.Name()
 	rc := controller.NewResizeController(resizerName, csiResizer, kubeClient, *resyncPeriod, informerFactory,
 		workqueue.NewItemExponentialFailureRateLimiter(*retryIntervalStart, *retryIntervalMax),
-	)
+		*handleVolumeInUseError)
 	run := func(ctx context.Context) {
 		informerFactory.Start(wait.NeverStop)
 		rc.Run(*workers, ctx)

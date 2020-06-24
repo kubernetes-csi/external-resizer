@@ -24,6 +24,7 @@ import (
 func TestController(t *testing.T) {
 	blockVolumeMode := v1.PersistentVolumeBlock
 	fsVolumeMode := v1.PersistentVolumeFilesystem
+
 	for _, test := range []struct {
 		Name string
 		PVC  *v1.PersistentVolumeClaim
@@ -37,7 +38,8 @@ func TestController(t *testing.T) {
 		// is PVC being expanded in-use
 		pvcInUse bool
 		// does PVC being expanded has Failed Precondition errors
-		pvcHasInUseErrors bool
+		pvcHasInUseErrors              bool
+		disableVolumeInUseErrorHandler bool
 	}{
 		{
 			Name:          "Invalid key",
@@ -130,6 +132,64 @@ func TestController(t *testing.T) {
 			pvcHasInUseErrors: true,
 			pvcInUse:          false,
 		},
+		// test cases with volume in use error handling disabled.
+		{
+			Name:                           "With volume-in-use error handler disabled, Resize PVC, no FS resize, pvc-inuse with failedprecondition",
+			PVC:                            createPVC(2, 1),
+			PV:                             createPV(1, "testPVC", defaultNS, "foobar", &fsVolumeMode),
+			CreateObjects:                  true,
+			CallCSIExpand:                  true,
+			pvcHasInUseErrors:              true,
+			pvcInUse:                       true,
+			disableVolumeInUseErrorHandler: true,
+		},
+		{
+			Name:                           "With volume-in-use error handler disabled, Resize PVC, no FS resize, pvc-inuse but no failedprecondition error",
+			PVC:                            createPVC(2, 1),
+			PV:                             createPV(1, "testPVC", defaultNS, "foobar", &fsVolumeMode),
+			CreateObjects:                  true,
+			CallCSIExpand:                  true,
+			pvcHasInUseErrors:              false,
+			pvcInUse:                       true,
+			disableVolumeInUseErrorHandler: true,
+		},
+		{
+			Name:                           "With volume-in-use error handler disabled, Resize PVC, no FS resize, pvc not in-use but has failedprecondition error",
+			PVC:                            createPVC(2, 1),
+			PV:                             createPV(1, "testPVC", defaultNS, "foobar", &fsVolumeMode),
+			CreateObjects:                  true,
+			CallCSIExpand:                  true,
+			pvcHasInUseErrors:              true,
+			pvcInUse:                       false,
+			disableVolumeInUseErrorHandler: true,
+		},
+		{
+			Name:                           "With volume-in-use error handler disabled, Block Resize PVC with FS resize",
+			PVC:                            createPVC(2, 1),
+			PV:                             createPV(1, "testPVC", defaultNS, "foobar", &blockVolumeMode),
+			CreateObjects:                  true,
+			NodeResize:                     true,
+			CallCSIExpand:                  true,
+			expectBlockVolume:              true,
+			disableVolumeInUseErrorHandler: true,
+		},
+		{
+			Name:                           "With volume-in-use error handler disabled, Resize PVC with FS resize",
+			PVC:                            createPVC(2, 1),
+			PV:                             createPV(1, "testPVC", defaultNS, "foobar", &fsVolumeMode),
+			CreateObjects:                  true,
+			NodeResize:                     true,
+			CallCSIExpand:                  true,
+			disableVolumeInUseErrorHandler: true,
+		},
+		{
+			Name:                           "With volume-in-use error handler disabled, Resize PVC, no FS resize",
+			PVC:                            createPVC(2, 1),
+			PV:                             createPV(1, "testPVC", defaultNS, "foobar", &fsVolumeMode),
+			CreateObjects:                  true,
+			CallCSIExpand:                  true,
+			disableVolumeInUseErrorHandler: true,
+		},
 	} {
 		client := csi.NewMockClient("mock", test.NodeResize, true, true)
 		driverName, _ := client.GetDriverName(context.TODO())
@@ -163,7 +223,7 @@ func TestController(t *testing.T) {
 			t.Fatalf("Test %s: Unable to create resizer: %v", test.Name, err)
 		}
 
-		controller := NewResizeController(driverName, csiResizer, kubeClient, time.Second, informerFactory, workqueue.DefaultControllerRateLimiter())
+		controller := NewResizeController(driverName, csiResizer, kubeClient, time.Second, informerFactory, workqueue.DefaultControllerRateLimiter(), !test.disableVolumeInUseErrorHandler)
 
 		ctrlInstance, _ := controller.(*resizeController)
 
