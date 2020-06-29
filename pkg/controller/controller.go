@@ -62,8 +62,9 @@ type resizeController struct {
 
 	usedPVCs *inUsePVCStore
 
-	podLister       corelisters.PodLister
-	podListerSynced cache.InformerSynced
+	podLister              corelisters.PodLister
+	podListerSynced        cache.InformerSynced
+	handleVolumeInUseError bool
 }
 
 // NewResizeController returns a ResizeController.
@@ -73,13 +74,10 @@ func NewResizeController(
 	kubeClient kubernetes.Interface,
 	resyncPeriod time.Duration,
 	informerFactory informers.SharedInformerFactory,
-	pvcRateLimiter workqueue.RateLimiter) ResizeController {
+	pvcRateLimiter workqueue.RateLimiter,
+	handleVolumeInUseError bool) ResizeController {
 	pvInformer := informerFactory.Core().V1().PersistentVolumes()
 	pvcInformer := informerFactory.Core().V1().PersistentVolumeClaims()
-
-	// list pods so as we can identify PVC that are in-use
-	podInformer := informerFactory.Core().V1().Pods()
-
 	eventBroadcaster := record.NewBroadcaster()
 	eventBroadcaster.StartLogging(klog.Infof)
 	eventBroadcaster.StartRecordingToSink(&corev1.EventSinkImpl{Interface: kubeClient.CoreV1().Events(v1.NamespaceAll)})
@@ -90,18 +88,17 @@ func NewResizeController(
 		pvcRateLimiter, fmt.Sprintf("%s-pvc", name))
 
 	ctrl := &resizeController{
-		name:            name,
-		resizer:         resizer,
-		kubeClient:      kubeClient,
-		pvLister:        pvInformer.Lister(),
-		pvSynced:        pvInformer.Informer().HasSynced,
-		pvcLister:       pvcInformer.Lister(),
-		pvcSynced:       pvcInformer.Informer().HasSynced,
-		podLister:       podInformer.Lister(),
-		podListerSynced: podInformer.Informer().HasSynced,
-		claimQueue:      claimQueue,
-		eventRecorder:   eventRecorder,
-		usedPVCs:        newUsedPVCStore(),
+		name:                   name,
+		resizer:                resizer,
+		kubeClient:             kubeClient,
+		pvLister:               pvInformer.Lister(),
+		pvSynced:               pvInformer.Informer().HasSynced,
+		pvcLister:              pvcInformer.Lister(),
+		pvcSynced:              pvcInformer.Informer().HasSynced,
+		claimQueue:             claimQueue,
+		eventRecorder:          eventRecorder,
+		usedPVCs:               newUsedPVCStore(),
+		handleVolumeInUseError: handleVolumeInUseError,
 	}
 
 	// Add a resync period as the PVC's request size can be resized again when we handling
@@ -112,11 +109,18 @@ func NewResizeController(
 		DeleteFunc: ctrl.deletePVC,
 	}, resyncPeriod)
 
-	podInformer.Informer().AddEventHandlerWithResyncPeriod(cache.ResourceEventHandlerFuncs{
-		AddFunc:    ctrl.addPod,
-		DeleteFunc: ctrl.deletePod,
-		UpdateFunc: ctrl.updatePod,
-	}, resyncPeriod)
+	if handleVolumeInUseError {
+		// list pods so as we can identify PVC that are in-use
+		klog.Infof("Register Pod informer for resizer %s", ctrl.name)
+		podInformer := informerFactory.Core().V1().Pods()
+		ctrl.podLister = podInformer.Lister()
+		ctrl.podListerSynced = podInformer.Informer().HasSynced
+		podInformer.Informer().AddEventHandlerWithResyncPeriod(cache.ResourceEventHandlerFuncs{
+			AddFunc:    ctrl.addPod,
+			DeleteFunc: ctrl.deletePod,
+			UpdateFunc: ctrl.updatePod,
+		}, resyncPeriod)
+	}
 
 	return ctrl
 }
@@ -235,8 +239,12 @@ func (ctrl *resizeController) Run(
 	defer klog.Infof("Shutting down external resizer %s", ctrl.name)
 
 	stopCh := ctx.Done()
+	informersSyncd := []cache.InformerSynced{ctrl.pvSynced, ctrl.pvcSynced}
+	if ctrl.handleVolumeInUseError {
+		informersSyncd = append(informersSyncd, ctrl.podListerSynced)
+	}
 
-	if !cache.WaitForCacheSync(stopCh, ctrl.pvSynced, ctrl.pvcSynced, ctrl.podListerSynced) {
+	if !cache.WaitForCacheSync(stopCh, informersSyncd...) {
 		klog.Errorf("Cannot sync pod, pv or pvc caches")
 		return
 	}
