@@ -176,7 +176,7 @@ func getPatchData(oldObj, newObj interface{}) ([]byte, error) {
 }
 
 // HasFileSystemResizePendingCondition returns true if a pvc has a FileSystemResizePending condition.
-// This means the controller side resize operation is finished, and kublete side operation is in progress.
+// This means the controller side resize operation is finished, and kubelet side operation is in progress.
 func HasFileSystemResizePendingCondition(pvc *v1.PersistentVolumeClaim) bool {
 	for _, condition := range pvc.Status.Conditions {
 		if condition.Type == v1.PersistentVolumeClaimFileSystemResizePending && condition.Status == v1.ConditionTrue {
