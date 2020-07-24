@@ -20,6 +20,9 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 	"os"
 	"time"
 
@@ -54,6 +57,9 @@ var (
 	metricsAddress = flag.String("metrics-address", "", "The TCP network address where the prometheus metrics endpoint will listen (example: `:8080`). The default is empty string, which means metrics endpoint is disabled.")
 	metricsPath    = flag.String("metrics-path", "/metrics", "The HTTP path where prometheus metrics will be exposed. Default is `/metrics`.")
 
+	kubeAPIQPS   = flag.Float64("kube-api-qps", 5, "QPS to use while communicating with the kubernetes apiserver. Defaults to 5.0.")
+	kubeAPIBurst = flag.Int("kube-api-burst", 10, "Burst to use while communicating with the kubernetes apiserver. Defaults to 10.")
+
 	handleVolumeInUseError = flag.Bool("handle-volume-inuse-error", true, "Flag to turn on/off capability to handle volume in use error in resizer controller. Defaults to true if not set.")
 
 	version = "unknown"
@@ -70,7 +76,21 @@ func main() {
 	}
 	klog.Infof("Version : %s", version)
 
-	kubeClient, err := util.NewK8sClient(*master, *kubeConfig)
+	var config *rest.Config
+	var err error
+	if *master != "" || *kubeConfig != "" {
+		config, err = clientcmd.BuildConfigFromFlags(*master, *kubeConfig)
+	} else {
+		config, err = rest.InClusterConfig()
+	}
+	if err != nil {
+		klog.Fatal(err.Error())
+	}
+
+	config.QPS = float32(*kubeAPIQPS)
+	config.Burst = *kubeAPIBurst
+
+	kubeClient, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		klog.Fatal(err.Error())
 	}
@@ -102,7 +122,11 @@ func main() {
 		run(context.TODO())
 	} else {
 		lockName := "external-resizer-" + util.SanitizeName(resizerName)
-		le := leaderelection.NewLeaderElection(kubeClient, lockName, run)
+		leKubeClient, err := kubernetes.NewForConfig(config)
+		if err != nil {
+			klog.Fatal(err.Error())
+		}
+		le := leaderelection.NewLeaderElection(leKubeClient, lockName, run)
 
 		if *leaderElectionNamespace != "" {
 			le.WithNamespace(*leaderElectionNamespace)

@@ -22,7 +22,7 @@ import (
 	"fmt"
 	"regexp"
 
-	v1 "k8s.io/api/core/v1"
+	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -30,32 +30,11 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/strategicpatch"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 )
 
 var knownResizeConditions = map[v1.PersistentVolumeClaimConditionType]bool{
 	v1.PersistentVolumeClaimResizing:                true,
 	v1.PersistentVolumeClaimFileSystemResizePending: true,
-}
-
-// NewK8sClient is an utility function used to create a kubernetes sdk client.
-func NewK8sClient(master, kubeConfig string) (kubernetes.Interface, error) {
-	var config *rest.Config
-	var err error
-	if master != "" || kubeConfig != "" {
-		config, err = clientcmd.BuildConfigFromFlags(master, kubeConfig)
-	} else {
-		config, err = rest.InClusterConfig()
-	}
-	if err != nil {
-		return nil, fmt.Errorf("failed to create config: %v", err)
-	}
-	kubeClient, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create client: %v", err)
-	}
-	return kubeClient, nil
 }
 
 // PVCKey returns an unique key of a PVC object,
