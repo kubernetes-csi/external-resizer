@@ -56,6 +56,8 @@ Note that the external-resizer does not scale with more replicas. Only one exter
 
 * `--metrics-path`: The HTTP path where prometheus metrics will be exposed. Default is `/metrics`.
 
+* `--handle-volume-inuse-error <true/false>`: Enable or disable volume-in-use error handling in external-resizer. Defaults to `true` and resize-controller will watch for all pods in all namespaces to check if PVC being expanded is in-use by a pod or not before retrying volume expansion if CSI driver throws volume-in-use error. Setting this to `false` will cause external-resizer to ignore volume-in-use error and resize-controller will retry volume expansion even if volume is already in use by a pod and CSI driver does not support expansion of in-use volumes.
+
 #### Other recognized arguments
 
 * `--kubeconfig <path>`: Path to Kubernetes client configuration that the external-resizer uses to connect to Kubernetes API server. When omitted, default token provided by Kubernetes will be used. This option is useful only when the external-resizer does not run as a Kubernetes pod, e.g. for debugging. Either this or `--master` needs to be set if the external-resizer is being run out of cluster.
