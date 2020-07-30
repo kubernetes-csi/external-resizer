@@ -1,6 +1,6 @@
-# Release notes for master
+# Release notes for 1.0.0
 
-[Documentation](https://docs.k8s.io/docs/home)
+[Documentation](https://kubernetes-csi.github.io)
 
 # Changelog since 0.5.0
 
@@ -9,11 +9,10 @@
 ### Feature
 
 - Adding configurable QPS and Burst to k8s client and use a separate client for leader election. ([#91](https://github.com/kubernetes-csi/external-resizer/pull/91), [@RaunakShah](https://github.com/RaunakShah))
-- Pods watch is an expensive operation. Hence make the feature of handling volume in use errors optional, by registering pod informer based on a feature gate ([#89](https://github.com/kubernetes-csi/external-resizer/pull/89), [@saikat-royc](https://github.com/saikat-royc))
+- Do not call controller-expand if volume is in-use and can not be expanded while in-use ([#86](https://github.com/kubernetes-csi/external-resizer/pull/86), [@gnufied](https://github.com/gnufied)) . This feature requires watching for all pods in the cluster and hence can be expensive operation. It can be turned off by using `--handle-volume-inuse-error` flag([#89](https://github.com/kubernetes-csi/external-resizer/pull/89), [@saikat-royc](https://github.com/saikat-royc)).
 
 ### Uncategorized
 
-- Do not call controller-expand if volume is in-use and can not be expanded while in-use ([#86](https://github.com/kubernetes-csi/external-resizer/pull/86), [@gnufied](https://github.com/gnufied))
 - Publishing of images on k8s.gcr.io ([#84](https://github.com/kubernetes-csi/external-resizer/pull/84), [@pohly](https://github.com/pohly))
 
 ## Dependencies
