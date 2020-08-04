@@ -20,7 +20,7 @@ import (
 	"github.com/kubernetes-csi/external-resizer/pkg/util"
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	csitranslationlib "k8s.io/csi-translation-lib"
+	csitrans "k8s.io/csi-translation-lib"
 	"k8s.io/klog"
 )
 
@@ -39,7 +39,8 @@ func (r *trivialResizer) Name() string {
 
 func (r *trivialResizer) CanSupport(pv *v1.PersistentVolume, pvc *v1.PersistentVolumeClaim) bool {
 	resizerName := pvc.Annotations[util.VolumeResizerKey]
-	if csitranslationlib.IsMigratedCSIDriverByName(r.name) && resizerName == r.name {
+	translator := csitrans.New()
+	if translator.IsMigratedCSIDriverByName(r.name) && resizerName == r.name {
 		return true
 	}
 
