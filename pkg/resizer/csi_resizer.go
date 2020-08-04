@@ -31,7 +31,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
-	csitranslationlib "k8s.io/csi-translation-lib"
+	csitrans "k8s.io/csi-translation-lib"
 	"k8s.io/klog"
 )
 
@@ -133,10 +133,10 @@ func (r *csiResizer) CanSupport(pv *v1.PersistentVolume, pvc *v1.PersistentVolum
 	// otherwise, it will be in-tree plugin name
 	// r.name is the CSI driver name, return true only when they match
 	// and the CSI driver is migrated
-	if csitranslationlib.IsMigratedCSIDriverByName(r.name) && resizerName == r.name {
+	translator := csitrans.New()
+	if translator.IsMigratedCSIDriverByName(r.name) && resizerName == r.name {
 		return true
 	}
-
 	source := pv.Spec.CSI
 	if source == nil {
 		klog.V(4).Infof("PV %s is not a CSI volume, skip it", pv.Name)
@@ -163,9 +163,10 @@ func (r *csiResizer) Resize(pv *v1.PersistentVolume, requestSize resource.Quanti
 		volumeID = source.VolumeHandle
 		pvSpec = pv.Spec
 	} else {
-		if csitranslationlib.IsMigratedCSIDriverByName(r.name) {
+		translator := csitrans.New()
+		if translator.IsMigratedCSIDriverByName(r.name) {
 			// handle migrated in-tree volume
-			csiPV, err := csitranslationlib.TranslateInTreePVToCSI(pv)
+			csiPV, err := translator.TranslateInTreePVToCSI(pv)
 			if err != nil {
 				return oldSize, false, fmt.Errorf("failed to translate persistent volume: %v", err)
 			}

@@ -483,12 +483,12 @@ k8s.io/client-go/util/flowcontrol
 k8s.io/client-go/util/homedir
 k8s.io/client-go/util/keyutil
 k8s.io/client-go/util/workqueue
-# k8s.io/cloud-provider v0.0.0-20190918203125-ae665f80358a => k8s.io/cloud-provider v0.19.0-rc.2
+# k8s.io/cloud-provider v0.19.0-rc.2 => k8s.io/cloud-provider v0.19.0-rc.2
 k8s.io/cloud-provider/volume
 # k8s.io/component-base v0.19.0-rc.2 => k8s.io/component-base v0.19.0-rc.2
 k8s.io/component-base/metrics
 k8s.io/component-base/version
-# k8s.io/csi-translation-lib v0.19.0-rc.2 => k8s.io/csi-translation-lib v0.0.0-20190918203248-97c07dcbb623
+# k8s.io/csi-translation-lib v0.19.0-rc.2
 k8s.io/csi-translation-lib
 k8s.io/csi-translation-lib/plugins
 # k8s.io/klog v1.0.0
