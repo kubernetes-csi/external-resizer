@@ -20,11 +20,12 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"os"
+	"time"
+
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
-	"os"
-	"time"
 
 	"k8s.io/client-go/util/workqueue"
 
@@ -44,8 +45,9 @@ var (
 	resyncPeriod = flag.Duration("resync-period", time.Minute*10, "Resync period for cache")
 	workers      = flag.Int("workers", 10, "Concurrency to process multiple resize requests")
 
-	csiAddress  = flag.String("csi-address", "/run/csi/socket", "Address of the CSI driver socket.")
-	csiTimeout  = flag.Duration("csiTimeout", 15*time.Second, "Timeout for waiting for CSI driver socket.")
+	csiAddress = flag.String("csi-address", "/run/csi/socket", "Address of the CSI driver socket.")
+	timeout    = flag.Duration("timeout", 10*time.Second, "Timeout for waiting for CSI driver socket.")
+
 	showVersion = flag.Bool("version", false, "Show version")
 
 	retryIntervalStart = flag.Duration("retry-interval-start", time.Second, "Initial retry interval of failed volume resize. It exponentially increases with each failure, up to retry-interval-max.")
@@ -99,7 +101,7 @@ func main() {
 
 	csiResizer, err := resizer.NewResizer(
 		*csiAddress,
-		*csiTimeout,
+		*timeout,
 		kubeClient,
 		informerFactory,
 		*metricsAddress,
