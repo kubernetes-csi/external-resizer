@@ -44,7 +44,7 @@ Note that the external-resizer does not scale with more replicas. Only one exter
 
 * `--leader-election-namespace`: Namespace where the leader election resource lives. Defaults to the pod namespace if not set.
 
-* `--csiTimeout <duration>`: Timeout of all calls to CSI driver. It should be set to value that accommodates majority of `ControllerExpandVolume` calls. 15 seconds is used by default.
+* `--timeout <duration>`: Timeout of all calls to CSI driver. It should be set to value that accommodates majority of `ControllerExpandVolume` calls. 10 seconds is used by default.
 
 * `--retry-interval-start`: The starting value of the exponential backoff for failures. 1 second is used by default.
 
