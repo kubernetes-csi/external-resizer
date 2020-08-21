@@ -2,6 +2,7 @@ package csi
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
 )
@@ -26,6 +27,7 @@ type MockClient struct {
 	supportsControllerResize        bool
 	supportsPluginControllerService bool
 	expandCalled                    int
+	expansionFailed                 bool
 	usedSecrets                     map[string]string
 	usedCapability                  *csi.VolumeCapability
 }
@@ -46,6 +48,10 @@ func (c *MockClient) SupportsNodeResize(context.Context) (bool, error) {
 	return c.supportsNodeResize, nil
 }
 
+func (c *MockClient) SetExpansionFailed() {
+	c.expansionFailed = true
+}
+
 func (c *MockClient) Expand(
 	ctx context.Context,
 	volumeID string,
@@ -53,6 +59,10 @@ func (c *MockClient) Expand(
 	secrets map[string]string,
 	capability *csi.VolumeCapability) (int64, bool, error) {
 	// TODO: Determine whether the operation succeeds or fails by parameters.
+	if c.expansionFailed {
+		c.expandCalled++
+		return requestBytes, c.supportsNodeResize, fmt.Errorf("expansion failed")
+	}
 	c.expandCalled++
 	c.usedSecrets = secrets
 	c.usedCapability = capability
