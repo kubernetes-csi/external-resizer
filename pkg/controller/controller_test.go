@@ -277,6 +277,93 @@ func TestController(t *testing.T) {
 	}
 }
 
+func TestResizePVC(t *testing.T) {
+	fsVolumeMode := v1.PersistentVolumeFilesystem
+
+	for _, test := range []struct {
+		Name string
+		PVC  *v1.PersistentVolumeClaim
+		PV   *v1.PersistentVolume
+
+		NodeResize       bool
+		expansionFailure bool
+		expectFailure    bool
+	}{
+		{
+			Name:       "Resize PVC with FS resize",
+			PVC:        createPVC(2, 1),
+			PV:         createPV(1, "testPVC", defaultNS, "foobar", &fsVolumeMode),
+			NodeResize: true,
+		},
+		{
+			Name:             "Resize PVC with FS resize failure",
+			PVC:              createPVC(2, 1),
+			PV:               createPV(1, "testPVC", defaultNS, "foobar", &fsVolumeMode),
+			NodeResize:       true,
+			expansionFailure: true,
+			expectFailure:    true,
+		},
+	} {
+		client := csi.NewMockClient("mock", test.NodeResize, true, true)
+		if test.expansionFailure {
+			client.SetExpansionFailed()
+		}
+		driverName, _ := client.GetDriverName(context.TODO())
+
+		initialObjects := []runtime.Object{}
+		if test.PVC != nil {
+			initialObjects = append(initialObjects, test.PVC)
+		}
+		if test.PV != nil {
+			test.PV.Spec.PersistentVolumeSource.CSI.Driver = driverName
+			initialObjects = append(initialObjects, test.PV)
+		}
+
+		kubeClient, informerFactory := fakeK8s(initialObjects)
+		pvInformer := informerFactory.Core().V1().PersistentVolumes()
+		pvcInformer := informerFactory.Core().V1().PersistentVolumeClaims()
+		podInformer := informerFactory.Core().V1().Pods()
+
+		metricsManager := metrics.NewCSIMetricsManager("" /* driverName */)
+		metricsAddress := ""
+		metricsPath := ""
+		csiResizer, err := resizer.NewResizerFromClient(client, 15*time.Second, kubeClient, informerFactory, metricsManager, metricsAddress, metricsPath)
+		if err != nil {
+			t.Fatalf("Test %s: Unable to create resizer: %v", test.Name, err)
+		}
+
+		controller := NewResizeController(driverName, csiResizer, kubeClient, time.Second, informerFactory, workqueue.DefaultControllerRateLimiter(), true /* disableVolumeInUseErrorHandler*/)
+
+		ctrlInstance, _ := controller.(*resizeController)
+
+		stopCh := make(chan struct{})
+		informerFactory.Start(stopCh)
+
+		for _, obj := range initialObjects {
+			switch obj.(type) {
+			case *v1.PersistentVolume:
+				pvInformer.Informer().GetStore().Add(obj)
+			case *v1.PersistentVolumeClaim:
+				pvcInformer.Informer().GetStore().Add(obj)
+			case *v1.Pod:
+				podInformer.Informer().GetStore().Add(obj)
+			default:
+				t.Fatalf("Test %s: Unknown initalObject type: %+v", test.Name, obj)
+			}
+		}
+
+		err = ctrlInstance.resizePVC(test.PVC, test.PV)
+		if test.expectFailure && err == nil {
+			t.Errorf("for %s expected error got nothing", test.Name)
+			continue
+		}
+		if !test.expectFailure && err != nil {
+			t.Errorf("for %s, unexpected error: %v", test.Name, err)
+		}
+
+	}
+}
+
 func invalidPVC() *v1.PersistentVolumeClaim {
 	pvc := createPVC(1, 1)
 	pvc.ObjectMeta.Name = ""
