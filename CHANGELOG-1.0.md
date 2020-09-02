@@ -2,17 +2,30 @@
 
 [Documentation](https://kubernetes-csi.github.io)
 
-# Changelog since 0.5.0
+# Changelog since v0.5.0
+
+
+## Urgent Upgrade Notes 
+
+### (No, really, you MUST read this before you upgrade)
+
+- external-resizer will not call controller-expand if volume is in-use and can not be expanded while in-use. New RBAC rules for listing pods are required. ([#86](https://github.com/kubernetes-csi/external-resizer/pull/86), [@gnufied](https://github.com/gnufied)) . This behaviour is enabled by default but can be disabled by setting `handle-volume-inuse-error` to `false`, which would allow external-resizer to perform volume expansion without checking if volume being expanded is in-use or not([#89](https://github.com/kubernetes-csi/external-resizer/pull/89), [@saikat-royc](https://github.com/saikat-royc)). If CSI driver being used supports online expansion, it might be desirable to set `handle-volume-inuse-error` to `false` - to save costs associated with watching all pods in the cluster.
+- The `--csiTimeout` flag of external-resizer is obsoleted with this release. Instead `--timeout` flag has been introduced for the same purpose. This timeout is used by external-resizer to decide how long it should wait for a response from CSI driver. `timeout` value defaults to 10 seconds. From now on, the deployment  templates or  artifacts has to make use of `--timeout` flag instead of obsoleted `--csiTimeout`  flag. ([#82](https://github.com/kubernetes-csi/external-resizer/pull/82), [@humblec](https://github.com/humblec))
+
 
 ## Changes by Kind
 
 ### Feature
 
 - Adding configurable QPS and Burst to k8s client and use a separate client for leader election. ([#91](https://github.com/kubernetes-csi/external-resizer/pull/91), [@RaunakShah](https://github.com/RaunakShah))
-- Do not call controller-expand if volume is in-use and can not be expanded while in-use ([#86](https://github.com/kubernetes-csi/external-resizer/pull/86), [@gnufied](https://github.com/gnufied)) . This feature requires watching for all pods in the cluster and hence can be expensive operation. It can be turned off by using `--handle-volume-inuse-error` flag([#89](https://github.com/kubernetes-csi/external-resizer/pull/89), [@saikat-royc](https://github.com/saikat-royc)).
+
+### Bug or Regression
+
+- Ensure that we do not resize recently resized volumes ([#96](https://github.com/kubernetes-csi/external-resizer/pull/96), [@gnufied](https://github.com/gnufied))
 
 ### Uncategorized
 
+- Build with Go 1.15 ([#98](https://github.com/kubernetes-csi/external-resizer/pull/98), [@pohly](https://github.com/pohly))
 - Publishing of images on k8s.gcr.io ([#84](https://github.com/kubernetes-csi/external-resizer/pull/84), [@pohly](https://github.com/pohly))
 
 ## Dependencies
@@ -49,7 +62,7 @@
 - gotest.tools: v2.2.0+incompatible
 - k8s.io/klog/v2: v2.2.0
 - rsc.io/binaryregexp: v0.2.0
-- sigs.k8s.io/structured-merge-diff/v3: 43c19bb
+- sigs.k8s.io/structured-merge-diff/v4: v4.0.1
 
 ### Changed
 - cloud.google.com/go: v0.38.0 → v0.51.0
@@ -62,6 +75,7 @@
 - github.com/beorn7/perks: [v1.0.0 → v1.0.1](https://github.com/beorn7/perks/compare/v1.0.0...v1.0.1)
 - github.com/elazarl/goproxy: [c4fc265 → 947c36d](https://github.com/elazarl/goproxy/compare/c4fc265...947c36d)
 - github.com/envoyproxy/go-control-plane: [5f8ba28 → v0.9.4](https://github.com/envoyproxy/go-control-plane/compare/5f8ba28...v0.9.4)
+- github.com/evanphx/json-patch: [v4.5.0+incompatible → v4.9.0+incompatible](https://github.com/evanphx/json-patch/compare/v4.5.0...v4.9.0)
 - github.com/fsnotify/fsnotify: [v1.4.7 → v1.4.9](https://github.com/fsnotify/fsnotify/compare/v1.4.7...v1.4.9)
 - github.com/go-kit/kit: [v0.8.0 → v0.9.0](https://github.com/go-kit/kit/compare/v0.8.0...v0.9.0)
 - github.com/go-logfmt/logfmt: [v0.3.0 → v0.4.0](https://github.com/go-logfmt/logfmt/compare/v0.3.0...v0.4.0)
@@ -89,10 +103,10 @@
 - github.com/prometheus/procfs: [v0.0.2 → v0.1.3](https://github.com/prometheus/procfs/compare/v0.0.2...v0.1.3)
 - github.com/sirupsen/logrus: [v1.2.0 → v1.6.0](https://github.com/sirupsen/logrus/compare/v1.2.0...v1.6.0)
 - go.opencensus.io: v0.21.0 → v0.22.2
-- golang.org/x/crypto: 60c769a → bac4c82
+- golang.org/x/crypto: 60c769a → 75b2880
 - golang.org/x/exp: 509febe → da58074
 - golang.org/x/lint: d0100b6 → fdd1cda
-- golang.org/x/net: c0dbc17 → d3edc99
+- golang.org/x/net: c0dbc17 → ab34263
 - golang.org/x/oauth2: 0f29369 → 858c2ad
 - golang.org/x/sync: 1122301 → cd5d95a
 - golang.org/x/sys: 0732a99 → ed371f2
@@ -106,14 +120,15 @@
 - gopkg.in/check.v1: 788fd78 → 41f04d3
 - gopkg.in/yaml.v2: v2.2.4 → v2.2.8
 - honnef.co/go/tools: ea95bdf → v0.0.1-2019.2.3
-- k8s.io/api: v0.17.0 → v0.19.0-rc.2
-- k8s.io/apimachinery: v0.17.1-beta.0 → v0.19.0-rc.2
-- k8s.io/client-go: v0.17.0 → v0.19.0-rc.2
-- k8s.io/cloud-provider: v0.17.0 → v0.19.0-rc.2
-- k8s.io/component-base: v0.17.0 → v0.19.0-rc.2
+- k8s.io/api: v0.17.0 → v0.19.0
+- k8s.io/apimachinery: v0.17.1-beta.0 → v0.19.0
+- k8s.io/client-go: v0.17.0 → v0.19.0
+- k8s.io/cloud-provider: v0.17.0 → v0.19.0
+- k8s.io/component-base: v0.17.0 → v0.19.0
+- k8s.io/csi-translation-lib: 97c07dc → v0.19.0
 - k8s.io/gengo: 0689ccc → 3a45101
-- k8s.io/kube-openapi: 30be4d1 → 656914f
-- k8s.io/utils: e782cd3 → 0bdb4ca
+- k8s.io/kube-openapi: 30be4d1 → 6aeccd4
+- k8s.io/utils: e782cd3 → d5654de
 - sigs.k8s.io/yaml: v1.1.0 → v1.2.0
 
 ### Removed
