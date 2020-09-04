@@ -14,9 +14,10 @@ control-plane CSI RPC call or via node CSI RPC call or both as a two step proces
 
 This information reflects the head of this branch.
 
-| Compatible with CSI Version                                                                | Container Image            | [Recommended K8s Version](https://kubernetes-csi.github.io/docs/kubernetes-compatibility.html#recommended-version) |
-| ------------------------------------------------------------------------------------------ | -------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| [CSI Spec v1.2.0](https://github.com/container-storage-interface/spec/releases/tag/v1.2.0) | quay.io/k8scsi/csi-resizer | 1.16                                                                                                               |
+| Compatible with CSI Version | Container Image | [Min K8s Version](https://kubernetes-csi.github.io/docs/kubernetes-compatibility.html#minimum-version) | [Recommended K8s Version](https://kubernetes-csi.github.io/docs/kubernetes-compatibility.html#recommended-version) |
+| ------------------------------------------------------------------------------------------ | -------------------------------| --------------- | ------------- |
+| [CSI Spec v1.2.0](https://github.com/container-storage-interface/spec/releases/tag/v1.2.0) | k8s.gcr.io/sig-storage/csi-provisioner | 1.16 | 1.16 |
+
 
 ## Feature status
 
@@ -46,6 +47,10 @@ Note that the external-resizer does not scale with more replicas. Only one exter
 
 * `--timeout <duration>`: Timeout of all calls to CSI driver. It should be set to value that accommodates majority of `ControllerExpandVolume` calls. 10 seconds is used by default.
 
+* `-kube-api-burst <int>` : Burst to use while communicating with the kubernetes apiserver. Defaults to 10. (default 10).
+
+* `-kube-api-qps <float>` : QPS to use while communicating with the kubernetes apiserver. Defaults to 5.0. (default 5).
+
 * `--retry-interval-start`: The starting value of the exponential backoff for failures. 1 second is used by default.
 
 * `--retry-interval-max`: The exponential backoff maximum value. 5 minutes is used by default.
@@ -55,6 +60,8 @@ Note that the external-resizer does not scale with more replicas. Only one exter
 * `--metrics-address`: The TCP network address where the prometheus metrics endpoint will run (example: `:8080` which corresponds to port 8080 on local host). The default is empty string, which means metrics endpoint is disabled.
 
 * `--metrics-path`: The HTTP path where prometheus metrics will be exposed. Default is `/metrics`.
+
+* `--handle-volume-inuse-error <true/false>`: Enable or disable volume-in-use error handling in external-resizer. Defaults to `true` and resize-controller will watch for all pods in all namespaces to check if PVC being expanded is in-use by a pod or not before retrying volume expansion if CSI driver throws volume-in-use error. Setting this to `false` will cause external-resizer to ignore volume-in-use error and resize-controller will retry volume expansion even if volume is already in use by a pod and CSI driver does not support expansion of in-use volumes. If CSI driver being used supports online expansion, it might be desirable to set `handle-volume-inuse-error` to `false` - to save costs associated with watching all pods in the cluster.
 
 #### Other recognized arguments
 
