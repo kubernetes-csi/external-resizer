@@ -5,7 +5,7 @@ go 1.12
 require (
 	github.com/container-storage-interface/spec v1.2.0
 	github.com/imdario/mergo v0.3.7 // indirect
-	github.com/kubernetes-csi/csi-lib-utils v0.7.0
+	github.com/kubernetes-csi/csi-lib-utils v0.7.1
 	google.golang.org/grpc v1.26.0
 	k8s.io/api v0.17.0
 	k8s.io/apimachinery v0.17.1-beta.0
