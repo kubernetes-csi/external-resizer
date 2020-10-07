@@ -248,8 +248,7 @@ func (ctrl *resizeController) Run(
 	}
 
 	if !cache.WaitForCacheSync(stopCh, informersSyncd...) {
-		klog.Errorf("Cannot sync pod, pv or pvc caches")
-		return
+		klog.Fatalf("Cannot sync pod, pv or pvc caches")
 	}
 
 	for i := 0; i < workers; i++ {
