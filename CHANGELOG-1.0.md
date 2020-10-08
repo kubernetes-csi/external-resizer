@@ -1,3 +1,29 @@
+# Release notes for v1.0.1
+
+[Documentation](https://kubernetes-csi.github.io)
+# Changelog since v1.0.0
+
+## Changes by Kind
+
+### Bug or Regression
+
+- Add `process_start_time_seconds` metric. ([#107](https://github.com/kubernetes-csi/external-resizer/pull/107), [@Jiawei0227](https://github.com/Jiawei0227))
+
+## Dependencies
+
+### Added
+_Nothing has changed._
+
+### Changed
+- github.com/kubernetes-csi/csi-lib-utils: [v0.7.0 → v0.8.1](https://github.com/kubernetes-csi/csi-lib-utils/compare/v0.7.0...v0.8.1)
+- github.com/stretchr/testify: [v1.4.0 → v1.5.1](https://github.com/stretchr/testify/compare/v1.4.0...v1.5.1)
+- google.golang.org/grpc: v1.28.0 → v1.29.0
+
+### Removed
+- github.com/gophercloud/gophercloud: [v0.1.0](https://github.com/gophercloud/gophercloud/tree/v0.1.0)
+- sigs.k8s.io/structured-merge-diff: 15d366b
+
+
 # Release notes for 1.0.0
 
 [Documentation](https://kubernetes-csi.github.io)
