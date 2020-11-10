@@ -6,6 +6,8 @@ kind: Deployment
 apiVersion: apps/v1
 metadata:
   name: csi-resizer
+  labels:
+    app: csi-resizer
 spec:
   replicas: 1
   selector:
