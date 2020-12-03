@@ -21,7 +21,7 @@ import (
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	csitrans "k8s.io/csi-translation-lib"
-	"k8s.io/klog"
+	"k8s.io/klog/v2"
 )
 
 // newTrivialResizer returns a trivial resizer which will mark all pvs' resize process as finished.
