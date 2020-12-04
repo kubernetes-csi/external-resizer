@@ -66,7 +66,7 @@ func TestNewResizer(t *testing.T) {
 		metricsAddress := ""
 		metricsPath := ""
 		k8sClient, informerFactory := fakeK8s()
-		resizer, err := NewResizerFromClient(client, 0, k8sClient, informerFactory, metricsManager, metricsAddress, metricsPath)
+		resizer, err := NewResizerFromClient(client, 0, k8sClient, informerFactory, metricsManager, nil /* metricsServer */, metricsAddress, metricsPath)
 		if err != c.Error {
 			t.Errorf("Case %d: Unexpected error: wanted %v, got %v", i, c.Error, err)
 		}
@@ -160,7 +160,7 @@ func TestResizeMigratedPV(t *testing.T) {
 			metricsManager := metrics.NewCSIMetricsManager("" /* driverName */)
 			metricsAddress := ""
 			metricsPath := ""
-			resizer, err := NewResizerFromClient(client, 0, k8sClient, informerFactory, metricsManager, metricsAddress, metricsPath)
+			resizer, err := NewResizerFromClient(client, 0, k8sClient, informerFactory, metricsManager, nil /* metricsServer */, metricsAddress, metricsPath)
 			if err != nil {
 				t.Fatalf("Failed to create resizer: %v", err)
 			}
@@ -367,7 +367,7 @@ func TestCanSupport(t *testing.T) {
 			metricsManager := metrics.NewCSIMetricsManager("" /* driverName */)
 			metricsAddress := ""
 			metricsPath := ""
-			resizer, err := NewResizerFromClient(client, 0, k8sClient, informerFactory, metricsManager, metricsAddress, metricsPath)
+			resizer, err := NewResizerFromClient(client, 0, k8sClient, informerFactory, metricsManager, nil /* metricsServer */, metricsAddress, metricsPath)
 			if err != nil {
 				t.Fatalf("Failed to create resizer: %v", err)
 			}

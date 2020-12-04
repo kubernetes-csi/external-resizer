@@ -57,7 +57,7 @@ Note that the external-resizer does not scale with more replicas. Only one exter
 
 * `--workers <num>`: Number of simultaneously running `ControllerExpandVolume` operations. Default value is `10`.
 
-* `--metrics-address`: The TCP network address where the prometheus metrics endpoint will run (example: `:8080` which corresponds to port 8080 on local host). The default is empty string, which means metrics endpoint is disabled.
+* `--http-endpoint`: The TCP network address where the HTTP server for diagnostics, including metrics and leader election health check, will listen (example: `:8080` which corresponds to port 8080 on local host). The default is empty string, which means the server is disabled.
 
 * `--metrics-path`: The HTTP path where prometheus metrics will be exposed. Default is `/metrics`.
 
@@ -69,9 +69,19 @@ Note that the external-resizer does not scale with more replicas. Only one exter
 
 * `--master <url>`: Master URL to build a client config from. When omitted, default token provided by Kubernetes will be used. This option is useful only when the external-resizer does not run as a Kubernetes pod, e.g. for debugging. Either this or `--kubeconfig` needs to be set if the external-resizer is being run out of cluster.
 
+* `--metrics-address`: (deprecated) The TCP network address where the prometheus metrics endpoint will run (example: `:8080` which corresponds to port 8080 on local host). The default is empty string, which means metrics endpoint is disabled.
+
 * `--version`: Prints current external-resizer version and quits.
 
 * All glog / klog arguments are supported, such as `-v <log level>` or `-alsologtostderr`.
+
+### HTTP endpoint
+
+The external-resizer optionally exposes an HTTP endpoint at address:port specified by `--http-endpoint` argument. When set, these two paths are exposed:
+
+* Metrics path, as set by `--metrics-path` argument (default is `/metrics`).
+* Leader election health check at `/healthz/leader-election`. It is recommended to run a liveness probe against this endpoint when leader election is used to kill external-resizer leader that fails to connect to the API server to renew its leadership. See https://github.com/kubernetes-csi/csi-lib-utils/issues/66 for details.
+
 
 ## Community, discussion, contribution, and support
 

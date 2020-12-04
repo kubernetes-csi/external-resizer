@@ -19,15 +19,28 @@ spec:
       serviceAccount: csi-resizer
       containers:
         - name: csi-resizer
-          image: quay.io/k8scsi/csi-resizer:canary
+          image: gcr.io/k8s-staging-sig-storage/csi-resizer:canary
           args:
             - "--v=5"
             - "--csi-address=$(ADDRESS)"
             - "--leader-election"
+            - "--http-endpoint=:8080"
           env:
             - name: ADDRESS
               value: /var/lib/csi/sockets/pluginproxy/mock.socket
           imagePullPolicy: "IfNotPresent"
+          ports:
+            - containerPort: 8080
+              name: http-endpoint
+              protocol: TCP
+          livenessProbe:
+            failureThreshold: 1
+            httpGet:
+              path: /healthz/leader-election
+              port: http-endpoint
+            initialDelaySeconds: 10
+            timeoutSeconds: 10
+            periodSeconds: 20
           volumeMounts:
             - name: socket-dir
               mountPath: /var/lib/csi/sockets/pluginproxy/

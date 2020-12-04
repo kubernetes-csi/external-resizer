@@ -46,6 +46,7 @@ func NewResizer(
 	timeout time.Duration,
 	k8sClient kubernetes.Interface,
 	informerFactory informers.SharedInformerFactory,
+	metricsServer metrics.Server,
 	metricsAddress, metricsPath string) (Resizer, error) {
 	metricsManager := metrics.NewCSIMetricsManager("" /* driverName */)
 	csiClient, err := csi.New(address, timeout, metricsManager)
@@ -58,6 +59,7 @@ func NewResizer(
 		k8sClient,
 		informerFactory,
 		metricsManager,
+		metricsServer,
 		metricsAddress,
 		metricsPath)
 }
@@ -68,6 +70,7 @@ func NewResizerFromClient(
 	k8sClient kubernetes.Interface,
 	informerFactory informers.SharedInformerFactory,
 	metricsManager metrics.CSIMetricsManager,
+	metricsServer metrics.Server,
 	metricsAddress, metricsPath string) (Resizer, error) {
 	driverName, err := getDriverName(csiClient, timeout)
 	if err != nil {
@@ -75,8 +78,10 @@ func NewResizerFromClient(
 	}
 
 	klog.V(2).Infof("CSI driver name: %q", driverName)
-	metricsManager.SetDriverName(driverName)
-	metricsManager.StartMetricsEndpoint(metricsAddress, metricsPath)
+	if metricsAddress != "" {
+		metricsManager.RegisterToServer(metricsServer, metricsPath)
+		metricsManager.SetDriverName(driverName)
+	}
 
 	supportControllerService, err := supportsPluginControllerService(csiClient, timeout)
 	if err != nil {

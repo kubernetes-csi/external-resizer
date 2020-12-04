@@ -20,6 +20,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"time"
 
@@ -56,7 +57,8 @@ var (
 	enableLeaderElection    = flag.Bool("leader-election", false, "Enable leader election.")
 	leaderElectionNamespace = flag.String("leader-election-namespace", "", "Namespace where the leader election resource lives. Defaults to the pod namespace if not set.")
 
-	metricsAddress = flag.String("metrics-address", "", "The TCP network address where the prometheus metrics endpoint will listen (example: `:8080`). The default is empty string, which means metrics endpoint is disabled.")
+	metricsAddress = flag.String("metrics-address", "", "(deprecated) The TCP network address where the prometheus metrics endpoint will listen (example: `:8080`). The default is empty string, which means metrics endpoint is disabled. Only one of `--metrics-address` and `--http-endpoint` can be set.")
+	httpEndpoint   = flag.String("http-endpoint", "", "The TCP network address where the HTTP server for diagnostics, including metrics and leader election health check, will listen (example: `:8080`). The default is empty string, which means the server is disabled. Only one of `--metrics-address` and `--http-endpoint` can be set.")
 	metricsPath    = flag.String("metrics-path", "/metrics", "The HTTP path where prometheus metrics will be exposed. Default is `/metrics`.")
 
 	kubeAPIQPS   = flag.Float64("kube-api-qps", 5, "QPS to use while communicating with the kubernetes apiserver. Defaults to 5.0.")
@@ -77,6 +79,15 @@ func main() {
 		os.Exit(0)
 	}
 	klog.Infof("Version : %s", version)
+
+	if *metricsAddress != "" && *httpEndpoint != "" {
+		klog.Error("only one of `--metrics-address` and `--http-endpoint` can be set.")
+		os.Exit(1)
+	}
+	addr := *metricsAddress
+	if addr == "" {
+		addr = *httpEndpoint
+	}
 
 	var config *rest.Config
 	var err error
@@ -99,15 +110,29 @@ func main() {
 
 	informerFactory := informers.NewSharedInformerFactory(kubeClient, *resyncPeriod)
 
+	mux := http.NewServeMux()
+
 	csiResizer, err := resizer.NewResizer(
 		*csiAddress,
 		*timeout,
 		kubeClient,
 		informerFactory,
-		*metricsAddress,
+		mux,
+		addr,
 		*metricsPath)
 	if err != nil {
 		klog.Fatal(err.Error())
+	}
+
+	// Start HTTP server for metrics + leader election healthz
+	if addr != "" {
+		go func() {
+			klog.Infof("ServeMux listening at %q", addr)
+			err := http.ListenAndServe(addr, mux)
+			if err != nil {
+				klog.Fatalf("Failed to start HTTP server at specified address (%q) and metrics path (%q): %s", addr, *metricsPath, err)
+			}
+		}()
 	}
 
 	resizerName := csiResizer.Name()
@@ -129,6 +154,9 @@ func main() {
 			klog.Fatal(err.Error())
 		}
 		le := leaderelection.NewLeaderElection(leKubeClient, lockName, run)
+		if *httpEndpoint != "" {
+			le.PrepareHealthCheck(mux, leaderelection.DefaultHealthCheckTimeout)
+		}
 
 		if *leaderElectionNamespace != "" {
 			le.WithNamespace(*leaderElectionNamespace)
