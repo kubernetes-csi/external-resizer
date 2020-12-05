@@ -7,7 +7,6 @@ import (
 
 	"k8s.io/client-go/util/workqueue"
 
-	"github.com/kubernetes-csi/csi-lib-utils/metrics"
 	"github.com/kubernetes-csi/external-resizer/pkg/csi"
 	"github.com/kubernetes-csi/external-resizer/pkg/resizer"
 
@@ -215,10 +214,7 @@ func TestController(t *testing.T) {
 		pvcInformer := informerFactory.Core().V1().PersistentVolumeClaims()
 		podInformer := informerFactory.Core().V1().Pods()
 
-		metricsManager := metrics.NewCSIMetricsManager("" /* driverName */)
-		metricsAddress := ""
-		metricsPath := ""
-		csiResizer, err := resizer.NewResizerFromClient(client, 15*time.Second, kubeClient, informerFactory, metricsManager, metricsAddress, metricsPath)
+		csiResizer, err := resizer.NewResizerFromClient(client, 15*time.Second, kubeClient, informerFactory, driverName)
 		if err != nil {
 			t.Fatalf("Test %s: Unable to create resizer: %v", test.Name, err)
 		}
@@ -324,10 +320,7 @@ func TestResizePVC(t *testing.T) {
 		pvcInformer := informerFactory.Core().V1().PersistentVolumeClaims()
 		podInformer := informerFactory.Core().V1().Pods()
 
-		metricsManager := metrics.NewCSIMetricsManager("" /* driverName */)
-		metricsAddress := ""
-		metricsPath := ""
-		csiResizer, err := resizer.NewResizerFromClient(client, 15*time.Second, kubeClient, informerFactory, metricsManager, metricsAddress, metricsPath)
+		csiResizer, err := resizer.NewResizerFromClient(client, 15*time.Second, kubeClient, informerFactory, driverName)
 		if err != nil {
 			t.Fatalf("Test %s: Unable to create resizer: %v", test.Name, err)
 		}

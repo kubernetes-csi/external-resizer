@@ -24,6 +24,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/kubernetes-csi/csi-lib-utils/metrics"
+	"github.com/kubernetes-csi/external-resizer/pkg/csi"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -112,20 +114,33 @@ func main() {
 
 	mux := http.NewServeMux()
 
-	csiResizer, err := resizer.NewResizer(
-		*csiAddress,
+	metricsManager := metrics.NewCSIMetricsManager("" /* driverName */)
+
+	csiClient, err := csi.New(*csiAddress, *timeout, metricsManager)
+	if err != nil {
+		klog.Fatal(err.Error())
+	}
+
+	driverName, err := getDriverName(csiClient, *timeout)
+	if err != nil {
+		klog.Fatal(fmt.Errorf("get driver name failed: %v", err))
+	}
+	klog.V(2).Infof("CSI driver name: %q", driverName)
+
+	csiResizer, err := resizer.NewResizerFromClient(
+		csiClient,
 		*timeout,
 		kubeClient,
 		informerFactory,
-		mux,
-		addr,
-		*metricsPath)
+		driverName)
 	if err != nil {
 		klog.Fatal(err.Error())
 	}
 
 	// Start HTTP server for metrics + leader election healthz
 	if addr != "" {
+		metricsManager.RegisterToServer(mux, *metricsPath)
+		metricsManager.SetDriverName(driverName)
 		go func() {
 			klog.Infof("ServeMux listening at %q", addr)
 			err := http.ListenAndServe(addr, mux)
@@ -166,4 +181,10 @@ func main() {
 			klog.Fatalf("error initializing leader election: %v", err)
 		}
 	}
+}
+
+func getDriverName(client csi.Client, timeout time.Duration) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return client.GetDriverName(ctx)
 }
