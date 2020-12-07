@@ -8,7 +8,6 @@ import (
 	"time"
 
 	csilib "github.com/container-storage-interface/spec/lib/go/csi"
-	"github.com/kubernetes-csi/csi-lib-utils/metrics"
 	"github.com/kubernetes-csi/external-resizer/pkg/csi"
 	"github.com/kubernetes-csi/external-resizer/pkg/util"
 	v1 "k8s.io/api/core/v1"
@@ -62,11 +61,9 @@ func TestNewResizer(t *testing.T) {
 		},
 	} {
 		client := csi.NewMockClient("mock", c.SupportsNodeResize, c.SupportsControllerResize, c.SupportsPluginControllerService)
-		metricsManager := metrics.NewCSIMetricsManager("" /* driverName */)
-		metricsAddress := ""
-		metricsPath := ""
+		driverName := "mock-driver"
 		k8sClient, informerFactory := fakeK8s()
-		resizer, err := NewResizerFromClient(client, 0, k8sClient, informerFactory, metricsManager, metricsAddress, metricsPath)
+		resizer, err := NewResizerFromClient(client, 0, k8sClient, informerFactory, driverName)
 		if err != c.Error {
 			t.Errorf("Case %d: Unexpected error: wanted %v, got %v", i, c.Error, err)
 		}
@@ -157,10 +154,7 @@ func TestResizeMigratedPV(t *testing.T) {
 			driverName := tc.driverName
 			client := csi.NewMockClient(driverName, true, true, true)
 			k8sClient, informerFactory := fakeK8s()
-			metricsManager := metrics.NewCSIMetricsManager("" /* driverName */)
-			metricsAddress := ""
-			metricsPath := ""
-			resizer, err := NewResizerFromClient(client, 0, k8sClient, informerFactory, metricsManager, metricsAddress, metricsPath)
+			resizer, err := NewResizerFromClient(client, 0, k8sClient, informerFactory, driverName)
 			if err != nil {
 				t.Fatalf("Failed to create resizer: %v", err)
 			}
@@ -364,10 +358,7 @@ func TestCanSupport(t *testing.T) {
 			driverName := tc.driverName
 			client := csi.NewMockClient(driverName, true, true, true)
 			k8sClient, informerFactory := fakeK8s()
-			metricsManager := metrics.NewCSIMetricsManager("" /* driverName */)
-			metricsAddress := ""
-			metricsPath := ""
-			resizer, err := NewResizerFromClient(client, 0, k8sClient, informerFactory, metricsManager, metricsAddress, metricsPath)
+			resizer, err := NewResizerFromClient(client, 0, k8sClient, informerFactory, driverName)
 			if err != nil {
 				t.Fatalf("Failed to create resizer: %v", err)
 			}

@@ -23,7 +23,6 @@ import (
 	"time"
 
 	csilib "github.com/container-storage-interface/spec/lib/go/csi"
-	"github.com/kubernetes-csi/csi-lib-utils/metrics"
 	"github.com/kubernetes-csi/external-resizer/pkg/csi"
 	"github.com/kubernetes-csi/external-resizer/pkg/util"
 	v1 "k8s.io/api/core/v1"
@@ -40,43 +39,12 @@ var (
 	resizeNotSupportErr            = errors.New("CSI driver neither supports controller resize nor node resize")
 )
 
-// NewResizer creates a new resizer responsible for resizing CSI volumes.
-func NewResizer(
-	address string,
-	timeout time.Duration,
-	k8sClient kubernetes.Interface,
-	informerFactory informers.SharedInformerFactory,
-	metricsAddress, metricsPath string) (Resizer, error) {
-	metricsManager := metrics.NewCSIMetricsManager("" /* driverName */)
-	csiClient, err := csi.New(address, timeout, metricsManager)
-	if err != nil {
-		return nil, err
-	}
-	return NewResizerFromClient(
-		csiClient,
-		timeout,
-		k8sClient,
-		informerFactory,
-		metricsManager,
-		metricsAddress,
-		metricsPath)
-}
-
 func NewResizerFromClient(
 	csiClient csi.Client,
 	timeout time.Duration,
 	k8sClient kubernetes.Interface,
 	informerFactory informers.SharedInformerFactory,
-	metricsManager metrics.CSIMetricsManager,
-	metricsAddress, metricsPath string) (Resizer, error) {
-	driverName, err := getDriverName(csiClient, timeout)
-	if err != nil {
-		return nil, fmt.Errorf("get driver name failed: %v", err)
-	}
-
-	klog.V(2).Infof("CSI driver name: %q", driverName)
-	metricsManager.SetDriverName(driverName)
-	metricsManager.StartMetricsEndpoint(metricsAddress, metricsPath)
+	driverName string) (Resizer, error) {
 
 	supportControllerService, err := supportsPluginControllerService(csiClient, timeout)
 	if err != nil {
@@ -264,12 +232,6 @@ func GetVolumeCapabilities(pvSpec v1.PersistentVolumeSpec) (*csilib.VolumeCapabi
 		return nil, fmt.Errorf("unsupported AccessMode combination: %+v", pvSpec.AccessModes)
 	}
 	return cap, nil
-}
-
-func getDriverName(client csi.Client, timeout time.Duration) (string, error) {
-	ctx, cancel := timeoutCtx(timeout)
-	defer cancel()
-	return client.GetDriverName(ctx)
 }
 
 func supportsPluginControllerService(client csi.Client, timeout time.Duration) (bool, error) {
