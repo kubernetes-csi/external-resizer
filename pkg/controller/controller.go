@@ -172,8 +172,11 @@ func (ctrl *resizeController) updatePVC(oldObj, newObj interface{}) {
 		return
 	}
 
-	newSize := newPVC.Spec.Resources.Requests[v1.ResourceStorage]
-	oldSize := oldPVC.Spec.Resources.Requests[v1.ResourceStorage]
+	newReq := newPVC.Spec.Resources.Requests[v1.ResourceStorage]
+	oldReq := oldPVC.Spec.Resources.Requests[v1.ResourceStorage]
+
+	newCap := newPVC.Status.Capacity[v1.ResourceStorage]
+	oldCap := oldPVC.Status.Capacity[v1.ResourceStorage]
 
 	newResizerName := newPVC.Annotations[util.VolumeResizerKey]
 	oldResizerName := oldPVC.Annotations[util.VolumeResizerKey]
@@ -192,10 +195,10 @@ func (ctrl *resizeController) updatePVC(oldObj, newObj interface{}) {
 	// know how to support resizing of a "un-annotated" in-tree PVC. When in-tree resizer does add the annotation, a second
 	// update even will be received and we add the pvc to workqueue. If annotation matches the registered driver name in
 	// csi_resizer object, we proceeds with expansion internally or we discard the PVC.
-	// 2. An already expanded in-tree PVC:
+	// 3. An already expanded in-tree PVC:
 	// An in-tree PVC is resized with in-tree resizer. And later, CSI migration is turned on and resizer name is updated from
 	// in-tree resizer name to CSI driver name.
-	if newSize.Cmp(oldSize) > 0 || newResizerName != oldResizerName {
+	if newReq.Cmp(oldReq) > 0 || newResizerName != oldResizerName {
 		ctrl.addPVC(newObj)
 	} else {
 		// PVC's size not changed, so this Update event maybe caused by:
@@ -203,11 +206,15 @@ func (ctrl *resizeController) updatePVC(oldObj, newObj interface{}) {
 		// 1. Administrators or users introduce other changes(such as add labels, modify annotations, etc.)
 		//    unrelated to volume resize.
 		// 2. Informer resynced the PVC and send this Update event without any changes.
+		// 3. PV's filesystem has recently been resized and requires removal of its resize annotation
 		//
-		// If it is case 1, we can just discard this event. If case 2, we need to put it into the queue to
+		// If it is case 1, we can just discard this event. If case 2 or 3, we need to put it into the queue to
 		// perform a resync operation.
 		if newPVC.ResourceVersion == oldPVC.ResourceVersion {
 			// This is case 2.
+			ctrl.addPVC(newObj)
+		} else if newCap.Cmp(oldCap) > 0 {
+			// This is case 3
 			ctrl.addPVC(newObj)
 		}
 	}
@@ -300,16 +307,10 @@ func (ctrl *resizeController) syncPVC(key string) error {
 		return fmt.Errorf("expected PVC got: %v", pvcObject)
 	}
 
-	if !ctrl.pvcNeedResize(pvc) {
-		klog.V(4).Infof("No need to resize PVC %q", util.PVCKey(pvc))
-		return nil
-	}
-
 	volumeObj, exists, err := ctrl.volumes.GetByKey(pvc.Spec.VolumeName)
 	if err != nil {
 		return fmt.Errorf("Get PV %q of pvc %q failed: %v", pvc.Spec.VolumeName, util.PVCKey(pvc), err)
 	}
-
 	if !exists {
 		klog.Warningf("PV %q bound to PVC %s not found", pvc.Spec.VolumeName, util.PVCKey(pvc))
 		return nil
@@ -320,6 +321,16 @@ func (ctrl *resizeController) syncPVC(key string) error {
 		return fmt.Errorf("expected volume but got %+v", volumeObj)
 	}
 
+	if ctrl.isNodeExpandComplete(pvc, pv) && metav1.HasAnnotation(pv.ObjectMeta, util.AnnPreResizeCapacity) {
+		if err := ctrl.deletePreResizeCapAnnotation(pv); err != nil {
+			return fmt.Errorf("failed removing annotation %s from pv %q: %v", util.AnnPreResizeCapacity, pv.Name, err)
+		}
+	}
+
+	if !ctrl.pvcNeedResize(pvc) {
+		klog.V(4).Infof("No need to resize PVC %q", util.PVCKey(pvc))
+		return nil
+	}
 	if !ctrl.pvNeedResize(pvc, pv) {
 		klog.V(4).Infof("No need to resize PV %q", pv.Name)
 		return nil
@@ -374,6 +385,13 @@ func (ctrl *resizeController) pvNeedResize(pvc *v1.PersistentVolumeClaim, pv *v1
 
 	// PV size is smaller than request size, we need to resize the volume.
 	return true
+}
+
+// isNodeExpandComplete returns true if  pvc.Status.Capacity >= pv.Spec.Capacity
+func (ctrl *resizeController) isNodeExpandComplete(pvc *v1.PersistentVolumeClaim, pv *v1.PersistentVolume) bool {
+	klog.V(4).Infof("pv %q capacity = %v, pvc %s capacity = %v", pv.Name, pv.Spec.Capacity[v1.ResourceStorage], util.PVCKey(pvc), pvc.Status.Capacity[v1.ResourceStorage])
+	pvcCap, pvCap := pvc.Status.Capacity[v1.ResourceStorage], pv.Spec.Capacity[v1.ResourceStorage]
+	return pvcCap.Cmp(pvCap) >= 0
 }
 
 // resizePVC will:
@@ -446,7 +464,7 @@ func (ctrl *resizeController) resizeVolume(
 	}
 	klog.V(4).Infof("Resize volume succeeded for volume %q, start to update PV's capacity", pv.Name)
 
-	err = ctrl.updatePVCapacity(pv, newSize)
+	err = ctrl.updatePVCapacity(pv, pvc.Status.Capacity[v1.ResourceStorage], newSize, fsResizeRequired)
 	if err != nil {
 		return newSize, fsResizeRequired, err
 	}
@@ -533,10 +551,32 @@ func (ctrl *resizeController) patchClaim(oldPVC, newPVC *v1.PersistentVolumeClai
 	return updatedClaim, nil
 }
 
-func (ctrl *resizeController) updatePVCapacity(pv *v1.PersistentVolume, newCapacity resource.Quantity) error {
+func (ctrl *resizeController) deletePreResizeCapAnnotation(pv *v1.PersistentVolume) error {
+	// if the pv does not have a resize annotation skip the entire process
+	if !metav1.HasAnnotation(pv.ObjectMeta, util.AnnPreResizeCapacity) {
+		return nil
+	}
+	pvClone := pv.DeepCopy()
+	delete(pvClone.ObjectMeta.Annotations, util.AnnPreResizeCapacity)
+
+	_, err := ctrl.patchPersistentVolume(pv, pvClone)
+	return err
+}
+
+func (ctrl *resizeController) updatePVCapacity(pv *v1.PersistentVolume, oldCapacity, newCapacity resource.Quantity, fsResizeRequired bool) error {
 	klog.V(4).Infof("Resize volume succeeded for volume %q, start to update PV's capacity", pv.Name)
 	newPV := pv.DeepCopy()
 	newPV.Spec.Capacity[v1.ResourceStorage] = newCapacity
+
+	if fsResizeRequired {
+		// only update annotation if there already isn't one
+		if !metav1.HasAnnotation(pv.ObjectMeta, util.AnnPreResizeCapacity) {
+			if newPV.ObjectMeta.Annotations == nil {
+				newPV.ObjectMeta.Annotations = make(map[string]string)
+			}
+			newPV.ObjectMeta.Annotations[util.AnnPreResizeCapacity] = oldCapacity.String()
+		}
+	}
 
 	_, err := ctrl.patchPersistentVolume(pv, newPV)
 	if err != nil {

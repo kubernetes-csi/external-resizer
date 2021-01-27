@@ -27,10 +27,18 @@ import (
 	"k8s.io/apimachinery/pkg/util/strategicpatch"
 )
 
-var knownResizeConditions = map[v1.PersistentVolumeClaimConditionType]bool{
-	v1.PersistentVolumeClaimResizing:                true,
-	v1.PersistentVolumeClaimFileSystemResizePending: true,
-}
+var (
+	knownResizeConditions = map[v1.PersistentVolumeClaimConditionType]bool{
+		v1.PersistentVolumeClaimResizing:                true,
+		v1.PersistentVolumeClaimFileSystemResizePending: true,
+	}
+
+	// AnnPreResizeCapacity annotation is added to a PV when expanding volume.
+	// Its value is status capacity of the PVC prior to the volume expansion
+	// Its value will be set by the external-resizer when it deems that filesystem resize is required after resizing volume.
+	// Its value will be used by pv_controller to determine pvc's status capacity when binding pvc and pv.
+	AnnPreResizeCapacity = "volume.alpha.kubernetes.io/pre-resize-capacity"
+)
 
 // PVCKey returns an unique key of a PVC object,
 func PVCKey(pvc *v1.PersistentVolumeClaim) string {
