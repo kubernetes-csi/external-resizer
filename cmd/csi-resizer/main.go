@@ -36,6 +36,7 @@ import (
 	"github.com/kubernetes-csi/external-resizer/pkg/controller"
 	"github.com/kubernetes-csi/external-resizer/pkg/resizer"
 	"github.com/kubernetes-csi/external-resizer/pkg/util"
+	csitrans "k8s.io/csi-translation-lib"
 
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/informers"
@@ -126,6 +127,17 @@ func main() {
 		klog.Fatal(fmt.Errorf("get driver name failed: %v", err))
 	}
 	klog.V(2).Infof("CSI driver name: %q", driverName)
+
+	translator := csitrans.New()
+	if translator.IsMigratedCSIDriverByName(driverName) {
+		metricsManager = metrics.NewCSIMetricsManagerWithOptions(driverName, metrics.WithMigration())
+		migratedCsiClient, err := csi.New(*csiAddress, *timeout, metricsManager)
+		if err != nil {
+			klog.Fatal(err.Error())
+		}
+		csiClient.CloseConnection()
+		csiClient = migratedCsiClient
+	}
 
 	csiResizer, err := resizer.NewResizerFromClient(
 		csiClient,

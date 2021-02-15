@@ -153,6 +153,7 @@ func TestResizeMigratedPV(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			driverName := tc.driverName
 			client := csi.NewMockClient(driverName, true, true, true)
+			client.SetCheckMigratedLabel()
 			k8sClient, informerFactory := fakeK8s()
 			resizer, err := NewResizerFromClient(client, 0, k8sClient, informerFactory, driverName)
 			if err != nil {

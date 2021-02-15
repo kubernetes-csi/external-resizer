@@ -10,7 +10,7 @@ require (
 	github.com/googleapis/gnostic v0.5.3 // indirect
 	github.com/hashicorp/golang-lru v0.5.4 // indirect
 	github.com/imdario/mergo v0.3.11 // indirect
-	github.com/kubernetes-csi/csi-lib-utils v0.9.0
+	github.com/kubernetes-csi/csi-lib-utils v0.9.1
 	github.com/prometheus/client_golang v1.9.0 // indirect
 	golang.org/x/crypto v0.0.0-20201217014255-9d1352758620 // indirect
 	golang.org/x/net v0.0.0-20201216054612-986b41b23924 // indirect
