@@ -4,7 +4,6 @@ go 1.15
 
 require (
 	github.com/container-storage-interface/spec v1.3.0
-	github.com/go-logr/logr v0.3.0 // indirect
 	github.com/google/go-cmp v0.5.4 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/googleapis/gnostic v0.5.3 // indirect
@@ -21,12 +20,12 @@ require (
 	google.golang.org/genproto v0.0.0-20201214200347-8c77b98c765d // indirect
 	google.golang.org/grpc v1.34.0
 	gopkg.in/yaml.v2 v2.4.0 // indirect
-	k8s.io/api v0.20.0
-	k8s.io/apimachinery v0.21.0-alpha.0
+	k8s.io/api v0.21.0-alpha.3
+	k8s.io/apimachinery v0.21.0-alpha.3
 	k8s.io/client-go v0.20.0
 	k8s.io/component-base v0.20.0 // indirect
-	k8s.io/csi-translation-lib v0.20.0
-	k8s.io/klog/v2 v2.4.0
+	k8s.io/csi-translation-lib v0.21.0-alpha.3
+	k8s.io/klog/v2 v2.5.0
 )
 
 replace (
@@ -43,7 +42,7 @@ replace (
 	k8s.io/component-helpers => k8s.io/component-helpers v0.20.0
 	k8s.io/controller-manager => k8s.io/controller-manager v0.20.0
 	k8s.io/cri-api => k8s.io/cri-api v0.20.1-rc.1
-	k8s.io/csi-translation-lib => k8s.io/csi-translation-lib v0.20.0
+	k8s.io/csi-translation-lib => k8s.io/csi-translation-lib v0.21.0-alpha.3
 	k8s.io/kube-aggregator => k8s.io/kube-aggregator v0.20.0
 	k8s.io/kube-controller-manager => k8s.io/kube-controller-manager v0.20.0
 	k8s.io/kube-proxy => k8s.io/kube-proxy v0.20.0
