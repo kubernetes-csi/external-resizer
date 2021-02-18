@@ -20,9 +20,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	csilib "github.com/container-storage-interface/spec/lib/go/csi"
+	"github.com/kubernetes-csi/csi-lib-utils/connection"
 	"github.com/kubernetes-csi/external-resizer/pkg/csi"
 	"github.com/kubernetes-csi/external-resizer/pkg/util"
 	v1 "k8s.io/api/core/v1"
@@ -125,6 +127,7 @@ func (r *csiResizer) Resize(pv *v1.PersistentVolume, requestSize resource.Quanti
 	var volumeID string
 	var source *v1.CSIPersistentVolumeSource
 	var pvSpec v1.PersistentVolumeSpec
+	var migrated bool
 	if pv.Spec.CSI != nil {
 		// handle CSI volume
 		source = pv.Spec.CSI
@@ -138,6 +141,7 @@ func (r *csiResizer) Resize(pv *v1.PersistentVolume, requestSize resource.Quanti
 			if err != nil {
 				return oldSize, false, fmt.Errorf("failed to translate persistent volume: %v", err)
 			}
+			migrated = true
 			source = csiPV.Spec.CSI
 			pvSpec = csiPV.Spec
 			volumeID = source.VolumeHandle
@@ -167,8 +171,10 @@ func (r *csiResizer) Resize(pv *v1.PersistentVolume, requestSize resource.Quanti
 	}
 
 	ctx, cancel := timeoutCtx(r.timeout)
+	resizeCtx := context.WithValue(ctx, connection.AdditionalInfoKey, connection.AdditionalInfo{Migrated: strconv.FormatBool(migrated)})
+
 	defer cancel()
-	newSizeBytes, nodeResizeRequired, err := r.client.Expand(ctx, volumeID, requestSize.Value(), secrets, capability)
+	newSizeBytes, nodeResizeRequired, err := r.client.Expand(resizeCtx, volumeID, requestSize.Value(), secrets, capability)
 	if err != nil {
 		return oldSize, nodeResizeRequired, err
 	}

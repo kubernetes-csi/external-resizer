@@ -49,6 +49,9 @@ type Client interface {
 	// Expand expands the volume to a new size at least as big as requestBytes.
 	// It returns the new size and whether the volume need expand operation on the node.
 	Expand(ctx context.Context, volumeID string, requestBytes int64, secrets map[string]string, capability *csi.VolumeCapability) (int64, bool, error)
+
+	//CloseConnection closes the gRPC connection established by the client
+	CloseConnection()
 }
 
 // New creates a new CSI client.
@@ -133,4 +136,8 @@ func (c *client) Expand(
 		return 0, false, err
 	}
 	return resp.CapacityBytes, resp.NodeExpansionRequired, nil
+}
+
+func (c *client) CloseConnection() {
+	c.conn.Close()
 }
