@@ -69,6 +69,8 @@ var (
 
 	handleVolumeInUseError = flag.Bool("handle-volume-inuse-error", true, "Flag to turn on/off capability to handle volume in use error in resizer controller. Defaults to true if not set.")
 
+	enableFSResizeAnnotation = flag.Bool("enable-fs-resize-annotation", true, "Flag to turn on/off capability to add an annotation to PV to denote its size prior to resize and to remove it upon completion of filesystem resize.")
+
 	version = "unknown"
 )
 
@@ -165,7 +167,7 @@ func main() {
 	resizerName := csiResizer.Name()
 	rc := controller.NewResizeController(resizerName, csiResizer, kubeClient, *resyncPeriod, informerFactory,
 		workqueue.NewItemExponentialFailureRateLimiter(*retryIntervalStart, *retryIntervalMax),
-		*handleVolumeInUseError)
+		*handleVolumeInUseError, *enableFSResizeAnnotation)
 	run := func(ctx context.Context) {
 		informerFactory.Start(wait.NeverStop)
 		rc.Run(*workers, ctx)

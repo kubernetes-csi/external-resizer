@@ -41,6 +41,7 @@ func TestController(t *testing.T) {
 		// does PVC being expanded has Failed Precondition errors
 		pvcHasInUseErrors              bool
 		disableVolumeInUseErrorHandler bool
+		enableFSResizeAnnotation       bool
 	}{
 		{
 			Name:          "Invalid key",
@@ -98,13 +99,14 @@ func TestController(t *testing.T) {
 			CallCSIExpand: true,
 		},
 		{
-			Name:                   "PV nodeExpand Complete",
-			PVC:                    createPVC(2, 1),
-			PV:                     createPV(1, "testPVC", defaultNS, "foobar", &fsVolumeMode),
-			CreateObjects:          true,
-			NodeResize:             true,
-			CallCSIExpand:          true,
-			expectDeleteAnnotation: true,
+			Name:                     "PV nodeExpand Complete",
+			PVC:                      createPVC(2, 1),
+			PV:                       createPV(1, "testPVC", defaultNS, "foobar", &fsVolumeMode),
+			CreateObjects:            true,
+			NodeResize:               true,
+			CallCSIExpand:            true,
+			expectDeleteAnnotation:   true,
+			enableFSResizeAnnotation: true,
 		},
 		{
 			Name:              "Block Resize PVC with FS resize",
@@ -232,7 +234,7 @@ func TestController(t *testing.T) {
 			t.Fatalf("Test %s: Unable to create resizer: %v", test.Name, err)
 		}
 
-		controller := NewResizeController(driverName, csiResizer, kubeClient, time.Second, informerFactory, workqueue.DefaultControllerRateLimiter(), !test.disableVolumeInUseErrorHandler)
+		controller := NewResizeController(driverName, csiResizer, kubeClient, time.Second, informerFactory, workqueue.DefaultControllerRateLimiter(), !test.disableVolumeInUseErrorHandler, test.enableFSResizeAnnotation)
 
 		ctrlInstance, _ := controller.(*resizeController)
 
@@ -285,7 +287,7 @@ func TestController(t *testing.T) {
 		}
 
 		// check if pre resize capacity annotation get properly populated after volume resize if node expand is required
-		if test.PV != nil && test.CreateObjects {
+		if test.enableFSResizeAnnotation && test.PV != nil && test.CreateObjects {
 			volObj, _, _ := ctrlInstance.volumes.GetByKey("testPV")
 			pv := volObj.(*v1.PersistentVolume)
 			requestCap, statusCap := test.PVC.Spec.Resources.Requests[v1.ResourceStorage], test.PVC.Status.Capacity[v1.ResourceStorage]
@@ -295,7 +297,7 @@ func TestController(t *testing.T) {
 		}
 
 		// check if pre resize capacity annotation gets properly deleted after node expand
-		if test.PVC != nil && test.CreateObjects && test.expectDeleteAnnotation {
+		if test.enableFSResizeAnnotation && test.PVC != nil && test.CreateObjects && test.expectDeleteAnnotation {
 			ctrlInstance.markPVCResizeFinished(test.PVC, test.PVC.Spec.Resources.Requests[v1.ResourceStorage])
 			time.Sleep(time.Second * 2)
 			volObj, _, _ := ctrlInstance.volumes.GetByKey("testPV")
@@ -363,7 +365,7 @@ func TestResizePVC(t *testing.T) {
 			t.Fatalf("Test %s: Unable to create resizer: %v", test.Name, err)
 		}
 
-		controller := NewResizeController(driverName, csiResizer, kubeClient, time.Second, informerFactory, workqueue.DefaultControllerRateLimiter(), true /* disableVolumeInUseErrorHandler*/)
+		controller := NewResizeController(driverName, csiResizer, kubeClient, time.Second, informerFactory, workqueue.DefaultControllerRateLimiter(), true /* disableVolumeInUseErrorHandler*/, true /*enableFsResizeAnnotation*/)
 
 		ctrlInstance, _ := controller.(*resizeController)
 

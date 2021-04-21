@@ -66,8 +66,9 @@ type resizeController struct {
 	// a cache to store PersistentVolume objects
 	volumes cache.Store
 	// a cache to store PersistentVolumeClaim objects
-	claims                 cache.Store
-	handleVolumeInUseError bool
+	claims                   cache.Store
+	handleVolumeInUseError   bool
+	enableFSResizeAnnotation bool
 }
 
 // NewResizeController returns a ResizeController.
@@ -78,7 +79,8 @@ func NewResizeController(
 	resyncPeriod time.Duration,
 	informerFactory informers.SharedInformerFactory,
 	pvcRateLimiter workqueue.RateLimiter,
-	handleVolumeInUseError bool) ResizeController {
+	handleVolumeInUseError,
+	enableFSResizeAnnotation bool) ResizeController {
 	pvInformer := informerFactory.Core().V1().PersistentVolumes()
 	pvcInformer := informerFactory.Core().V1().PersistentVolumeClaims()
 	eventBroadcaster := record.NewBroadcaster()
@@ -91,17 +93,18 @@ func NewResizeController(
 		pvcRateLimiter, fmt.Sprintf("%s-pvc", name))
 
 	ctrl := &resizeController{
-		name:                   name,
-		resizer:                resizer,
-		kubeClient:             kubeClient,
-		pvSynced:               pvInformer.Informer().HasSynced,
-		pvcSynced:              pvcInformer.Informer().HasSynced,
-		claimQueue:             claimQueue,
-		volumes:                pvInformer.Informer().GetStore(),
-		claims:                 pvcInformer.Informer().GetStore(),
-		eventRecorder:          eventRecorder,
-		usedPVCs:               newUsedPVCStore(),
-		handleVolumeInUseError: handleVolumeInUseError,
+		name:                     name,
+		resizer:                  resizer,
+		kubeClient:               kubeClient,
+		pvSynced:                 pvInformer.Informer().HasSynced,
+		pvcSynced:                pvcInformer.Informer().HasSynced,
+		claimQueue:               claimQueue,
+		volumes:                  pvInformer.Informer().GetStore(),
+		claims:                   pvcInformer.Informer().GetStore(),
+		eventRecorder:            eventRecorder,
+		usedPVCs:                 newUsedPVCStore(),
+		handleVolumeInUseError:   handleVolumeInUseError,
+		enableFSResizeAnnotation: enableFSResizeAnnotation,
 	}
 
 	// Add a resync period as the PVC's request size can be resized again when we handling
@@ -321,7 +324,7 @@ func (ctrl *resizeController) syncPVC(key string) error {
 		return fmt.Errorf("expected volume but got %+v", volumeObj)
 	}
 
-	if ctrl.isNodeExpandComplete(pvc, pv) && metav1.HasAnnotation(pv.ObjectMeta, util.AnnPreResizeCapacity) {
+	if ctrl.enableFSResizeAnnotation && ctrl.isNodeExpandComplete(pvc, pv) && metav1.HasAnnotation(pv.ObjectMeta, util.AnnPreResizeCapacity) {
 		if err := ctrl.deletePreResizeCapAnnotation(pv); err != nil {
 			return fmt.Errorf("failed removing annotation %s from pv %q: %v", util.AnnPreResizeCapacity, pv.Name, err)
 		}
@@ -568,7 +571,7 @@ func (ctrl *resizeController) updatePVCapacity(pv *v1.PersistentVolume, oldCapac
 	newPV := pv.DeepCopy()
 	newPV.Spec.Capacity[v1.ResourceStorage] = newCapacity
 
-	if fsResizeRequired {
+	if ctrl.enableFSResizeAnnotation && fsResizeRequired {
 		// only update annotation if there already isn't one
 		if !metav1.HasAnnotation(pv.ObjectMeta, util.AnnPreResizeCapacity) {
 			if newPV.ObjectMeta.Annotations == nil {
