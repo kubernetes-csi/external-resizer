@@ -1,5 +1,3 @@
-[![Build Status](https://travis-ci.org/kubernetes-csi/external-resizer.svg?branch=master)](https://travis-ci.org/kubernetes-csi/external-resizer)
-
 # CSI Resizer
 
 The CSI `external-resizer` is a sidecar container that watches the Kubernetes API server for `PersistentVolumeClaim` updates and
