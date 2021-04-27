@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	features "sigs.k8s.io/external-resizer/pkg/features" /* TO BE REPLACED WITH features "github.com/external-resizer/pkg/features once PR merged*/
+	"github.com/kubernetes-csi/external-resizer/pkg/features"
 
 	"k8s.io/client-go/util/workqueue"
 

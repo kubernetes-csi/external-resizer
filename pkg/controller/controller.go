@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"time"
 
-	features "sigs.k8s.io/external-resizer/pkg/features" /* TO BE REPLACED WITH features "github.com/external-resizer/pkg/features once PR merged*/
+	"github.com/kubernetes-csi/external-resizer/pkg/features"
 
 	"github.com/kubernetes-csi/external-resizer/pkg/resizer"
 	"github.com/kubernetes-csi/external-resizer/pkg/util"
