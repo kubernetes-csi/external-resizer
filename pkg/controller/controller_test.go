@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	features "sigs.k8s.io/external-resizer/pkg/features" /* TO BE REPLACED WITH features "github.com/external-resizer/pkg/features once PR merged*/
+
 	"k8s.io/client-go/util/workqueue"
 
 	"github.com/kubernetes-csi/external-resizer/pkg/csi"
@@ -16,9 +18,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
+	featuregatetesting "k8s.io/component-base/featuregate/testing"
 )
 
 func TestController(t *testing.T) {
@@ -234,7 +238,8 @@ func TestController(t *testing.T) {
 			t.Fatalf("Test %s: Unable to create resizer: %v", test.Name, err)
 		}
 
-		controller := NewResizeController(driverName, csiResizer, kubeClient, time.Second, informerFactory, workqueue.DefaultControllerRateLimiter(), !test.disableVolumeInUseErrorHandler, test.enableFSResizeAnnotation)
+		defer featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.AnnotateFsResize, true)()
+		controller := NewResizeController(driverName, csiResizer, kubeClient, time.Second, informerFactory, workqueue.DefaultControllerRateLimiter(), !test.disableVolumeInUseErrorHandler)
 
 		ctrlInstance, _ := controller.(*resizeController)
 
@@ -365,7 +370,8 @@ func TestResizePVC(t *testing.T) {
 			t.Fatalf("Test %s: Unable to create resizer: %v", test.Name, err)
 		}
 
-		controller := NewResizeController(driverName, csiResizer, kubeClient, time.Second, informerFactory, workqueue.DefaultControllerRateLimiter(), true /* disableVolumeInUseErrorHandler*/, true /*enableFsResizeAnnotation*/)
+		defer featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.AnnotateFsResize, true)()
+		controller := NewResizeController(driverName, csiResizer, kubeClient, time.Second, informerFactory, workqueue.DefaultControllerRateLimiter(), true /* disableVolumeInUseErrorHandler*/)
 
 		ctrlInstance, _ := controller.(*resizeController)
 

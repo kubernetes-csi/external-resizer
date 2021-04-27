@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/kubernetes-csi/csi-lib-utils/metrics"
@@ -39,7 +40,9 @@ import (
 	csitrans "k8s.io/csi-translation-lib"
 
 	"k8s.io/apimachinery/pkg/util/wait"
+	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	"k8s.io/client-go/informers"
+	cflag "k8s.io/component-base/cli/flag"
 	"k8s.io/klog/v2"
 )
 
@@ -69,12 +72,13 @@ var (
 
 	handleVolumeInUseError = flag.Bool("handle-volume-inuse-error", true, "Flag to turn on/off capability to handle volume in use error in resizer controller. Defaults to true if not set.")
 
-	enableFSResizeAnnotation = flag.Bool("enable-fs-resize-annotation", true, "Flag to turn on/off capability to add an annotation to PV to denote its size prior to resize and to remove it upon completion of filesystem resize.")
+	featureGates map[string]bool
 
 	version = "unknown"
 )
 
 func main() {
+	flag.Var(cflag.NewMapStringBool(&featureGates), "feature-gates", "A set of key=value paris that describe feature gates for alpha/experimental features for csi external resizer."+"Options are:\n"+strings.Join(utilfeature.DefaultFeatureGate.KnownFeatures(), "\n"))
 	klog.InitFlags(nil)
 	flag.Set("logtostderr", "true")
 	flag.Parse()
@@ -92,6 +96,9 @@ func main() {
 	addr := *metricsAddress
 	if addr == "" {
 		addr = *httpEndpoint
+	}
+	if err := utilfeature.DefaultMutableFeatureGate.SetFromMap(featureGates); err != nil {
+		klog.Fatal(err)
 	}
 
 	var config *rest.Config
@@ -167,7 +174,7 @@ func main() {
 	resizerName := csiResizer.Name()
 	rc := controller.NewResizeController(resizerName, csiResizer, kubeClient, *resyncPeriod, informerFactory,
 		workqueue.NewItemExponentialFailureRateLimiter(*retryIntervalStart, *retryIntervalMax),
-		*handleVolumeInUseError, *enableFSResizeAnnotation)
+		*handleVolumeInUseError)
 	run := func(ctx context.Context) {
 		informerFactory.Start(wait.NeverStop)
 		rc.Run(*workers, ctx)

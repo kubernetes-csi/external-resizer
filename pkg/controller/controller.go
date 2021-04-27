@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"time"
 
+	features "sigs.k8s.io/external-resizer/pkg/features" /* TO BE REPLACED WITH features "github.com/external-resizer/pkg/features once PR merged*/
+
 	"github.com/kubernetes-csi/external-resizer/pkg/resizer"
 	"github.com/kubernetes-csi/external-resizer/pkg/util"
 	"google.golang.org/grpc/codes"
@@ -31,6 +33,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
+	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -66,9 +69,8 @@ type resizeController struct {
 	// a cache to store PersistentVolume objects
 	volumes cache.Store
 	// a cache to store PersistentVolumeClaim objects
-	claims                   cache.Store
-	handleVolumeInUseError   bool
-	enableFSResizeAnnotation bool
+	claims                 cache.Store
+	handleVolumeInUseError bool
 }
 
 // NewResizeController returns a ResizeController.
@@ -79,8 +81,7 @@ func NewResizeController(
 	resyncPeriod time.Duration,
 	informerFactory informers.SharedInformerFactory,
 	pvcRateLimiter workqueue.RateLimiter,
-	handleVolumeInUseError,
-	enableFSResizeAnnotation bool) ResizeController {
+	handleVolumeInUseError bool) ResizeController {
 	pvInformer := informerFactory.Core().V1().PersistentVolumes()
 	pvcInformer := informerFactory.Core().V1().PersistentVolumeClaims()
 	eventBroadcaster := record.NewBroadcaster()
@@ -93,18 +94,17 @@ func NewResizeController(
 		pvcRateLimiter, fmt.Sprintf("%s-pvc", name))
 
 	ctrl := &resizeController{
-		name:                     name,
-		resizer:                  resizer,
-		kubeClient:               kubeClient,
-		pvSynced:                 pvInformer.Informer().HasSynced,
-		pvcSynced:                pvcInformer.Informer().HasSynced,
-		claimQueue:               claimQueue,
-		volumes:                  pvInformer.Informer().GetStore(),
-		claims:                   pvcInformer.Informer().GetStore(),
-		eventRecorder:            eventRecorder,
-		usedPVCs:                 newUsedPVCStore(),
-		handleVolumeInUseError:   handleVolumeInUseError,
-		enableFSResizeAnnotation: enableFSResizeAnnotation,
+		name:                   name,
+		resizer:                resizer,
+		kubeClient:             kubeClient,
+		pvSynced:               pvInformer.Informer().HasSynced,
+		pvcSynced:              pvcInformer.Informer().HasSynced,
+		claimQueue:             claimQueue,
+		volumes:                pvInformer.Informer().GetStore(),
+		claims:                 pvcInformer.Informer().GetStore(),
+		eventRecorder:          eventRecorder,
+		usedPVCs:               newUsedPVCStore(),
+		handleVolumeInUseError: handleVolumeInUseError,
 	}
 
 	// Add a resync period as the PVC's request size can be resized again when we handling
@@ -324,7 +324,7 @@ func (ctrl *resizeController) syncPVC(key string) error {
 		return fmt.Errorf("expected volume but got %+v", volumeObj)
 	}
 
-	if ctrl.enableFSResizeAnnotation && ctrl.isNodeExpandComplete(pvc, pv) && metav1.HasAnnotation(pv.ObjectMeta, util.AnnPreResizeCapacity) {
+	if utilfeature.DefaultFeatureGate.Enabled(features.AnnotateFsResize) && ctrl.isNodeExpandComplete(pvc, pv) && metav1.HasAnnotation(pv.ObjectMeta, util.AnnPreResizeCapacity) {
 		if err := ctrl.deletePreResizeCapAnnotation(pv); err != nil {
 			return fmt.Errorf("failed removing annotation %s from pv %q: %v", util.AnnPreResizeCapacity, pv.Name, err)
 		}
@@ -571,7 +571,7 @@ func (ctrl *resizeController) updatePVCapacity(pv *v1.PersistentVolume, oldCapac
 	newPV := pv.DeepCopy()
 	newPV.Spec.Capacity[v1.ResourceStorage] = newCapacity
 
-	if ctrl.enableFSResizeAnnotation && fsResizeRequired {
+	if utilfeature.DefaultFeatureGate.Enabled(features.AnnotateFsResize) && fsResizeRequired {
 		// only update annotation if there already isn't one
 		if !metav1.HasAnnotation(pv.ObjectMeta, util.AnnPreResizeCapacity) {
 			if newPV.ObjectMeta.Annotations == nil {
