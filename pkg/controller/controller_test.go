@@ -5,19 +5,24 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kubernetes-csi/external-resizer/pkg/features"
+
 	"k8s.io/client-go/util/workqueue"
 
 	"github.com/kubernetes-csi/external-resizer/pkg/csi"
 	"github.com/kubernetes-csi/external-resizer/pkg/resizer"
+	"github.com/kubernetes-csi/external-resizer/pkg/util"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
+	featuregatetesting "k8s.io/component-base/featuregate/testing"
 )
 
 func TestController(t *testing.T) {
@@ -29,16 +34,18 @@ func TestController(t *testing.T) {
 		PVC  *v1.PersistentVolumeClaim
 		PV   *v1.PersistentVolume
 
-		CreateObjects     bool
-		NodeResize        bool
-		CallCSIExpand     bool
-		expectBlockVolume bool
+		CreateObjects          bool
+		NodeResize             bool
+		CallCSIExpand          bool
+		expectBlockVolume      bool
+		expectDeleteAnnotation bool
 
 		// is PVC being expanded in-use
 		pvcInUse bool
 		// does PVC being expanded has Failed Precondition errors
 		pvcHasInUseErrors              bool
 		disableVolumeInUseErrorHandler bool
+		enableFSResizeAnnotation       bool
 	}{
 		{
 			Name:          "Invalid key",
@@ -94,6 +101,16 @@ func TestController(t *testing.T) {
 			CreateObjects: true,
 			NodeResize:    true,
 			CallCSIExpand: true,
+		},
+		{
+			Name:                     "PV nodeExpand Complete",
+			PVC:                      createPVC(2, 1),
+			PV:                       createPV(1, "testPVC", defaultNS, "foobar", &fsVolumeMode),
+			CreateObjects:            true,
+			NodeResize:               true,
+			CallCSIExpand:            true,
+			expectDeleteAnnotation:   true,
+			enableFSResizeAnnotation: true,
 		},
 		{
 			Name:              "Block Resize PVC with FS resize",
@@ -193,10 +210,12 @@ func TestController(t *testing.T) {
 		client := csi.NewMockClient("mock", test.NodeResize, true, true)
 		driverName, _ := client.GetDriverName(context.TODO())
 
+		var expectedCap resource.Quantity
 		initialObjects := []runtime.Object{}
 		if test.CreateObjects {
 			if test.PVC != nil {
 				initialObjects = append(initialObjects, test.PVC)
+				expectedCap = test.PVC.Status.Capacity[v1.ResourceStorage]
 			}
 			if test.PV != nil {
 				test.PV.Spec.PersistentVolumeSource.CSI.Driver = driverName
@@ -219,6 +238,7 @@ func TestController(t *testing.T) {
 			t.Fatalf("Test %s: Unable to create resizer: %v", test.Name, err)
 		}
 
+		defer featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.AnnotateFsResize, true)()
 		controller := NewResizeController(driverName, csiResizer, kubeClient, time.Second, informerFactory, workqueue.DefaultControllerRateLimiter(), !test.disableVolumeInUseErrorHandler)
 
 		ctrlInstance, _ := controller.(*resizeController)
@@ -270,6 +290,29 @@ func TestController(t *testing.T) {
 		if test.CallCSIExpand && !test.expectBlockVolume && usedCapability.GetMount() == nil {
 			t.Errorf("For %s: expected mount accesstype got: %v", test.Name, usedCapability)
 		}
+
+		// check if pre resize capacity annotation get properly populated after volume resize if node expand is required
+		if test.enableFSResizeAnnotation && test.PV != nil && test.CreateObjects {
+			volObj, _, _ := ctrlInstance.volumes.GetByKey("testPV")
+			pv := volObj.(*v1.PersistentVolume)
+			requestCap, statusCap := test.PVC.Spec.Resources.Requests[v1.ResourceStorage], test.PVC.Status.Capacity[v1.ResourceStorage]
+			if requestCap.Cmp(statusCap) > 0 && test.NodeResize && !expectedCap.IsZero() {
+				checkPreResizeCap(t, test.Name, pv, expectedCap.String())
+			}
+		}
+
+		// check if pre resize capacity annotation gets properly deleted after node expand
+		if test.enableFSResizeAnnotation && test.PVC != nil && test.CreateObjects && test.expectDeleteAnnotation {
+			ctrlInstance.markPVCResizeFinished(test.PVC, test.PVC.Spec.Resources.Requests[v1.ResourceStorage])
+			time.Sleep(time.Second * 2)
+			volObj, _, _ := ctrlInstance.volumes.GetByKey("testPV")
+			pv := volObj.(*v1.PersistentVolume)
+			if pv.ObjectMeta.Annotations != nil {
+				if _, exists := pv.ObjectMeta.Annotations[util.AnnPreResizeCapacity]; exists {
+					t.Errorf("For %s: expected annotation %s to be empty, but received %s", test.Name, util.AnnPreResizeCapacity, pv.ObjectMeta.Annotations[util.AnnPreResizeCapacity])
+				}
+			}
+		}
 	}
 }
 
@@ -306,9 +349,11 @@ func TestResizePVC(t *testing.T) {
 		}
 		driverName, _ := client.GetDriverName(context.TODO())
 
+		var expectedCap resource.Quantity
 		initialObjects := []runtime.Object{}
 		if test.PVC != nil {
 			initialObjects = append(initialObjects, test.PVC)
+			expectedCap = test.PVC.Status.Capacity[v1.ResourceStorage]
 		}
 		if test.PV != nil {
 			test.PV.Spec.PersistentVolumeSource.CSI.Driver = driverName
@@ -325,6 +370,7 @@ func TestResizePVC(t *testing.T) {
 			t.Fatalf("Test %s: Unable to create resizer: %v", test.Name, err)
 		}
 
+		defer featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.AnnotateFsResize, true)()
 		controller := NewResizeController(driverName, csiResizer, kubeClient, time.Second, informerFactory, workqueue.DefaultControllerRateLimiter(), true /* disableVolumeInUseErrorHandler*/)
 
 		ctrlInstance, _ := controller.(*resizeController)
@@ -350,10 +396,24 @@ func TestResizePVC(t *testing.T) {
 			t.Errorf("for %s expected error got nothing", test.Name)
 			continue
 		}
-		if !test.expectFailure && err != nil {
-			t.Errorf("for %s, unexpected error: %v", test.Name, err)
+		if !test.expectFailure {
+			if err != nil {
+				t.Errorf("for %s, unexpected error: %v", test.Name, err)
+				// check if pre resize capacity annotation gets properly populated after resize
+			} else if test.PV != nil && test.NodeResize && !expectedCap.IsZero() {
+				volObj, _, _ := ctrlInstance.volumes.GetByKey("testPV")
+				pv := volObj.(*v1.PersistentVolume)
+				checkPreResizeCap(t, test.Name, pv, expectedCap.String())
+			}
 		}
+	}
+}
 
+func checkPreResizeCap(t *testing.T, testName string, pv *v1.PersistentVolume, expectedCap string) {
+	if pv.ObjectMeta.Annotations == nil {
+		t.Errorf("for %s, AnnpreResizeCapacity was not successfully updated, expected: %s, received: nil Annotations", testName, expectedCap)
+	} else if pv.ObjectMeta.Annotations[util.AnnPreResizeCapacity] != expectedCap {
+		t.Errorf("for %s, AnnpreResizeCapacity was not successfully updated, expected: %s, received: %s", testName, expectedCap, pv.ObjectMeta.Annotations[util.AnnPreResizeCapacity])
 	}
 }
 
@@ -366,7 +426,7 @@ func invalidPVC() *v1.PersistentVolumeClaim {
 }
 
 func quantityGB(i int) resource.Quantity {
-	q := resource.NewQuantity(int64(i*1024*1024), resource.BinarySI)
+	q := resource.NewQuantity(int64(i*1024*1024*1024), resource.BinarySI)
 	return *q
 }
 
@@ -402,7 +462,8 @@ func createPV(capacityGB int, pvcName, pvcNamespace string, pvcUID types.UID, vo
 
 	pv := &v1.PersistentVolume{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "testPV",
+			Name:        "testPV",
+			Annotations: make(map[string]string),
 		},
 		Spec: v1.PersistentVolumeSpec{
 			AccessModes: []v1.PersistentVolumeAccessMode{v1.ReadWriteOnce},
