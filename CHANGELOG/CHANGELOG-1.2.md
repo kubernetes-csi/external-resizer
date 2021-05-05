@@ -4,20 +4,25 @@
 
 # Changelog since 1.1.0
 
+## Urgent Upgrade Notes
+
+### (No, really, you MUST read this before you upgrade)
+
+- For drivers that support CSI Migration, a "migrated" label was added to the csi_sidecar_operations_seconds metric that indicates if the call is from the migration path. Metric collectors should be updated with the new field ([#138](https://github.com/kubernetes-csi/external-resizer/pull/138), [@nearora-msft](https://github.com/nearora-msft))
+
 ## Changes by Kind
-
-### Other (Cleanup or Flake)
-
-- Fix a bug that when CSI migration is enabled and PV is using GA topology label, resizing is not work. ([#139](https://github.com/kubernetes-csi/external-resizer/pull/139), [@Jiawei0227](https://github.com/Jiawei0227))
-
-### Feature
-
-- Add a feature-gate to allow users to restore size of deleted PVCs ([#140](https://github.com/kubernetes-csi/external-resizer/pull/140), [@sunpa93](https://github.com/sunpa93))
 
 ### Bug fixes
 
-- Set the value of "migrated" field in the metrics to true or false to indicate if the call is a migration enabled feature or not ([#138](https://github.com/kubernetes-csi/external-resizer/pull/138), [@nearora-msft](https://github.com/nearora-msft))
+- Fix a bug that when CSI migration is enabled and PV is using GA topology label, resizing is not work. ([#139](https://github.com/kubernetes-csi/external-resizer/pull/139), [@Jiawei0227](https://github.com/Jiawei0227))
+
+### Other (Cleanup or Flake)
+
 - Updated runtime (Go 1.16) and dependencies ([#141](https://github.com/kubernetes-csi/external-resizer/pull/141), [@pohly](https://github.com/pohly))
+
+### Feature
+
+- Add a feature-gate `AnnotateFsResize` to allow users to restore size of deleted PVCs. This feature requires Kubernetes 1.21. ([#140](https://github.com/kubernetes-csi/external-resizer/pull/140), [@sunpa93](https://github.com/sunpa93))
 
 ## Dependencies
 
