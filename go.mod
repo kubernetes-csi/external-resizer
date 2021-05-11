@@ -6,7 +6,7 @@ require (
 	github.com/container-storage-interface/spec v1.5.0
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/imdario/mergo v0.3.12 // indirect
-	github.com/kubernetes-csi/csi-lib-utils v0.9.1
+	github.com/kubernetes-csi/csi-lib-utils v0.10.0
 	golang.org/x/oauth2 v0.0.0-20210313182246-cd4f82c27b84 // indirect
 	golang.org/x/term v0.0.0-20210317153231-de623e64d2a6 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
