@@ -30,4 +30,6 @@ type Resizer interface {
 	CanSupport(pv *v1.PersistentVolume, pvc *v1.PersistentVolumeClaim) bool
 	// Resize executes the resize operation of this PV.
 	Resize(pv *v1.PersistentVolume, requestSize resource.Quantity) (newSize resource.Quantity, fsResizeRequired bool, err error)
+	// GetVolume calls ControllerGetVolume RPC call and returns volume capacity
+	GetVolume(pv *v1.PersistentVolume) (*resource.Quantity, bool, error)
 }

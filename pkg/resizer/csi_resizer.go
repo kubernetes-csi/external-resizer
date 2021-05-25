@@ -69,7 +69,7 @@ func NewResizerFromClient(
 		}
 		if supportsNodeResize {
 			klog.Info("The CSI driver supports node resize only, using trivial resizer to handle resize requests")
-			return newTrivialResizer(driverName), nil
+			return newTrivialResizer(driverName, csiClient, timeout), nil
 		}
 		return nil, resizeNotSupportErr
 	}
@@ -180,6 +180,10 @@ func (r *csiResizer) Resize(pv *v1.PersistentVolume, requestSize resource.Quanti
 	}
 
 	return *resource.NewQuantity(newSizeBytes, resource.BinarySI), nodeResizeRequired, err
+}
+
+func (r *csiResizer) GetVolume(pv *v1.PersistentVolume) (*resource.Quantity, bool, error) {
+	return util.GetVolume(pv, r.name, r.client, r.timeout)
 }
 
 // GetVolumeCapabilities returns volumecapability from PV spec

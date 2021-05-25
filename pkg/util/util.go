@@ -17,14 +17,20 @@ limitations under the License.
 package util
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"regexp"
+	"time"
 
+	"github.com/kubernetes-csi/external-resizer/pkg/csi"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/strategicpatch"
+	csitrans "k8s.io/csi-translation-lib"
 )
 
 var (
@@ -145,4 +151,58 @@ func SanitizeName(name string) string {
 		name = name + "X"
 	}
 	return name
+}
+
+// GetVolume returns volume capacity by querying the storage provider. If storage provider does not support
+// GET_VOLUME capability it returns false and 0 size.
+func GetVolume(pv *v1.PersistentVolume, driverName string, client csi.Client, timeout time.Duration) (*resource.Quantity, bool, error) {
+	var volumeID string
+	var source *v1.CSIPersistentVolumeSource
+	if pv.Spec.CSI != nil {
+		// handle CSI volume
+		source = pv.Spec.CSI
+		volumeID = source.VolumeHandle
+	} else {
+		translator := csitrans.New()
+		if translator.IsMigratedCSIDriverByName(driverName) {
+			// handle migrated in-tree volume
+			csiPV, err := translator.TranslateInTreePVToCSI(pv)
+			if err != nil {
+				return nil, false, fmt.Errorf("failed to translate persistent volume: %v", err)
+			}
+			source = csiPV.Spec.CSI
+			volumeID = source.VolumeHandle
+		} else {
+			// non-migrated in-tree volume
+			return nil, false, fmt.Errorf("volume %v is not migrated to CSI", pv.Name)
+		}
+	}
+
+	if len(volumeID) == 0 {
+		return nil, false, errors.New("empty volume handle")
+	}
+	ctx, cancel := timeoutCtx(timeout)
+	defer cancel()
+	ok, err := client.SupportsControllerGetVolume(ctx)
+	if err != nil {
+		return nil, false, err
+	}
+	// SP does not support GET_VOLUME call
+	if !ok {
+		return nil, false, nil
+	}
+	size, err := client.GetVolume(ctx, volumeID)
+	if err != nil {
+		return nil, true, err
+	}
+	// if driver reports 0 size in ControllerGetVolume RPC call - that also means
+	// storage provider does not report correct values.
+	if size == 0 {
+		return nil, false, nil
+	}
+	return resource.NewQuantity(size, resource.BinarySI), true, nil
+}
+
+func timeoutCtx(timeout time.Duration) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), timeout)
 }

@@ -29,17 +29,16 @@ require (
 	k8s.io/component-base v0.21.0
 	k8s.io/csi-translation-lib v0.21.0
 	k8s.io/klog/v2 v2.8.0
-	k8s.io/kube-openapi v0.0.0-20210305164622-f622666832c1 // indirect
 	k8s.io/utils v0.0.0-20210305010621-2afb4311ab10 // indirect
 )
 
 replace (
-	k8s.io/api => k8s.io/api v0.21.0
+	k8s.io/api => /home/hekumar/redhat/kubernetes/staging/src/k8s.io/api
 	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.20.0
-	k8s.io/apimachinery => k8s.io/apimachinery v0.21.0
+	k8s.io/apimachinery => /home/hekumar/redhat/kubernetes/staging/src/k8s.io/apimachinery
 	k8s.io/apiserver => k8s.io/apiserver v0.20.0
 	k8s.io/cli-runtime => k8s.io/cli-runtime v0.20.0
-	k8s.io/client-go => k8s.io/client-go v0.21.0
+	k8s.io/client-go => /home/hekumar/redhat/kubernetes/staging/src/k8s.io/client-go
 	k8s.io/cloud-provider => k8s.io/cloud-provider v0.20.0
 	k8s.io/cluster-bootstrap => k8s.io/cluster-bootstrap v0.20.0
 	k8s.io/code-generator => k8s.io/code-generator v0.20.1-rc.1

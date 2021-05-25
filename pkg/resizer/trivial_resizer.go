@@ -17,20 +17,29 @@ limitations under the License.
 package resizer
 
 import (
+	"time"
+
+	"github.com/kubernetes-csi/external-resizer/pkg/csi"
 	"github.com/kubernetes-csi/external-resizer/pkg/util"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	csitrans "k8s.io/csi-translation-lib"
 	"k8s.io/klog/v2"
 )
 
 // newTrivialResizer returns a trivial resizer which will mark all pvs' resize process as finished.
-func newTrivialResizer(name string) Resizer {
-	return &trivialResizer{name: name}
+func newTrivialResizer(name string, client csi.Client, timeout time.Duration) Resizer {
+	return &trivialResizer{
+		name:    name,
+		client:  client,
+		timeout: timeout,
+	}
 }
 
 type trivialResizer struct {
-	name string
+	name    string
+	client  csi.Client
+	timeout time.Duration
 }
 
 func (r *trivialResizer) Name() string {
@@ -54,6 +63,10 @@ func (r *trivialResizer) CanSupport(pv *v1.PersistentVolume, pvc *v1.PersistentV
 		return false
 	}
 	return true
+}
+
+func (r *trivialResizer) GetVolume(pv *v1.PersistentVolume) (*resource.Quantity, bool, error) {
+	return util.GetVolume(pv, r.name, r.client, r.timeout)
 }
 
 func (r *trivialResizer) Resize(pv *v1.PersistentVolume, requestSize resource.Quantity) (newSize resource.Quantity, fsResizeRequired bool, err error) {

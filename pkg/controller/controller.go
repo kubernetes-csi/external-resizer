@@ -324,10 +324,18 @@ func (ctrl *resizeController) syncPVC(key string) error {
 		return fmt.Errorf("expected volume but got %+v", volumeObj)
 	}
 
-	if utilfeature.DefaultFeatureGate.Enabled(features.AnnotateFsResize) && ctrl.isNodeExpandComplete(pvc, pv) && metav1.HasAnnotation(pv.ObjectMeta, util.AnnPreResizeCapacity) {
+	if utilfeature.DefaultFeatureGate.Enabled(features.AnnotateFsResize) && ctrl.isExpansionComplete(pvc, pv) && metav1.HasAnnotation(pv.ObjectMeta, util.AnnPreResizeCapacity) {
 		if err := ctrl.deletePreResizeCapAnnotation(pv); err != nil {
 			return fmt.Errorf("failed removing annotation %s from pv %q: %v", util.AnnPreResizeCapacity, pv.Name, err)
 		}
+	}
+
+	if ctrl.isExpansionComplete(pvc, pv) && requiresAllocatedResourcesAdjust(pvc) {
+		klog.Infof("trying to adjust allocated size %s", util.PVCKey(pvc))
+		if err := ctrl.adjustAllocatedResources(pvc, pv); err != nil {
+			return fmt.Errorf("failed to adjust quota for pvc %s: %v", util.PVCKey(pvc), err)
+		}
+		return nil
 	}
 
 	if !ctrl.pvcNeedResize(pvc) {
@@ -390,11 +398,16 @@ func (ctrl *resizeController) pvNeedResize(pvc *v1.PersistentVolumeClaim, pv *v1
 	return true
 }
 
-// isNodeExpandComplete returns true if  pvc.Status.Capacity >= pv.Spec.Capacity
-func (ctrl *resizeController) isNodeExpandComplete(pvc *v1.PersistentVolumeClaim, pv *v1.PersistentVolume) bool {
-	klog.V(4).Infof("pv %q capacity = %v, pvc %s capacity = %v", pv.Name, pv.Spec.Capacity[v1.ResourceStorage], util.PVCKey(pvc), pvc.Status.Capacity[v1.ResourceStorage])
-	pvcCap, pvCap := pvc.Status.Capacity[v1.ResourceStorage], pv.Spec.Capacity[v1.ResourceStorage]
-	return pvcCap.Cmp(pvCap) >= 0
+// isExpansionComplete returns true if  previously issued volume operation is complete
+func (ctrl *resizeController) isExpansionComplete(pvc *v1.PersistentVolumeClaim, pv *v1.PersistentVolume) bool {
+	logCapacity(pv, pvc)
+	pvcSpecCap := pvc.Spec.Resources.Requests.Storage()
+	pvcStatusCap, pvCap := pvc.Status.Capacity[v1.ResourceStorage], pv.Spec.Capacity[v1.ResourceStorage]
+
+	if pvcStatusCap.Cmp(*pvcSpecCap) >= 0 && pvcStatusCap.Cmp(pvCap) >= 0 {
+		return true
+	}
+	return false
 }
 
 // resizePVC will:
@@ -511,6 +524,9 @@ func (ctrl *resizeController) markPVCResizeInProgress(pvc *v1.PersistentVolumeCl
 	newPVC.Status.Conditions = util.MergeResizeConditionsOfPVC(newPVC.Status.Conditions,
 		[]v1.PersistentVolumeClaimCondition{progressCondition})
 
+	expectedAllocatedResources := getAllocatedResources(pvc)
+	newPVC.Status.AllocatedResources[v1.ResourceStorage] = *expectedAllocatedResources
+
 	updatedPVC, err := ctrl.patchClaim(pvc, newPVC)
 	if err != nil {
 		return nil, err
@@ -564,6 +580,36 @@ func (ctrl *resizeController) deletePreResizeCapAnnotation(pv *v1.PersistentVolu
 
 	_, err := ctrl.patchPersistentVolume(pv, pvClone)
 	return err
+}
+
+func (ctrl *resizeController) adjustAllocatedResources(pvc *v1.PersistentVolumeClaim, pv *v1.PersistentVolume) error {
+	klog.Infof("getting volume size for %s", util.PVCKey(pvc))
+	newSize, ok, err := ctrl.resizer.GetVolume(pv)
+	if err != nil {
+		klog.Errorf("error getting current capacity %s: %v", util.PVCKey(pvc), err)
+		return fmt.Errorf("error getting current capacity of the volume %s: %v", util.PVCKey(pvc), err)
+	}
+
+	if !ok || newSize == nil {
+		klog.Warningf("adjusting allocated Resources for pvc %s failed - the driver does support properly support ControllerGetVolume", util.PVCKey(pvc))
+		return nil
+	}
+
+	allocatedSize := pvc.Status.AllocatedResources.Storage()
+
+	// allocatedSize is bigger than actual size
+	if allocatedSize.Cmp(*newSize) > 0 {
+		newPVC := pvc.DeepCopy()
+		newPVC.Status.AllocatedResources[v1.ResourceStorage] = *newSize
+		_, err := ctrl.patchClaim(pvc, newPVC)
+		if err != nil {
+			return fmt.Errorf("error adjusting pvc size %q: %v", util.PVCKey(pvc), err)
+		}
+
+		klog.V(4).Infof("adjusting PVC size %q finished", util.PVCKey(pvc))
+		ctrl.eventRecorder.Eventf(pvc, v1.EventTypeNormal, util.VolumeSizeRestored, "Allocated PVC size restored")
+	}
+	return nil
 }
 
 func (ctrl *resizeController) updatePVCapacity(pv *v1.PersistentVolume, oldCapacity, newCapacity resource.Quantity, fsResizeRequired bool) error {
@@ -624,6 +670,13 @@ func parsePod(obj interface{}) *v1.Pod {
 	return pod
 }
 
+func logCapacity(pv *v1.PersistentVolume, pvc *v1.PersistentVolumeClaim) {
+	pvSpecCap := pv.Spec.Capacity[v1.ResourceStorage]
+	pvcStatusCap := pvc.Status.Capacity[v1.ResourceStorage]
+	pvcSpecCap := pvc.Spec.Resources.Requests.Storage()
+	klog.V(4).Infof("pv %q: capacity = %s, pvc %s:  spec = %s, statusCap = %s", pv.Name, pvSpecCap.String(), util.PVCKey(pvc), pvcSpecCap.String(), pvcStatusCap.String())
+}
+
 func inUseError(err error) bool {
 	st, ok := status.FromError(err)
 	if !ok {
@@ -634,6 +687,26 @@ func inUseError(err error) bool {
 	// of in-use volumes
 	// More info - https://github.com/container-storage-interface/spec/blob/master/spec.md#controllerexpandvolume-errors
 	if st.Code() == codes.FailedPrecondition {
+		return true
+	}
+	return false
+}
+
+func getAllocatedResources(pvc *v1.PersistentVolumeClaim) *resource.Quantity {
+	currentAllocatedResources := pvc.Status.AllocatedResources.Storage()
+	specResources := pvc.Spec.Resources.Requests.Storage()
+	if currentAllocatedResources.Cmp(*specResources) < 0 {
+		return specResources
+	}
+	return currentAllocatedResources
+}
+
+// requiresAllocatedResourcesAdjust checks if allocatedresources for PVC
+// is higher than user requested value and if so - if it requires adjustment
+func requiresAllocatedResourcesAdjust(pvc *v1.PersistentVolumeClaim) bool {
+	currentAllocatedResources := pvc.Status.AllocatedResources.Storage()
+	specResources := pvc.Spec.Resources.Requests.Storage()
+	if specResources.Cmp(*currentAllocatedResources) < 0 {
 		return true
 	}
 	return false
