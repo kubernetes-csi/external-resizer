@@ -481,7 +481,7 @@ func (ctrl *resizeController) markPVCAsFSResizeRequired(pvc *v1.PersistentVolume
 		Type:               v1.PersistentVolumeClaimFileSystemResizePending,
 		Status:             v1.ConditionTrue,
 		LastTransitionTime: metav1.Now(),
-		Message:            "Waiting for user to (re-)start a pod to finish file system resize of volume on node.",
+		Message:            "Waiting for user to (re-)start a pod to finish expansion of volume on the node.",
 	}
 	newPVC := pvc.DeepCopy()
 	newPVC.Status.Conditions = util.MergeResizeConditionsOfPVC(newPVC.Status.Conditions,
@@ -490,12 +490,12 @@ func (ctrl *resizeController) markPVCAsFSResizeRequired(pvc *v1.PersistentVolume
 	_, err := ctrl.patchClaim(pvc, newPVC)
 
 	if err != nil {
-		return fmt.Errorf("Mark PVC %q as file system resize required failed: %v", util.PVCKey(pvc), err)
+		return fmt.Errorf("Failed to mark PVC %q for node expansion: %v", util.PVCKey(pvc), err)
 	}
 
-	klog.V(4).Infof("Mark PVC %q as file system resize required", util.PVCKey(pvc))
+	klog.V(4).Infof("Mark PVC %q for required node expansion", util.PVCKey(pvc))
 	ctrl.eventRecorder.Eventf(pvc, v1.EventTypeNormal,
-		util.FileSystemResizeRequired, "Require file system resize of volume on node")
+		util.NodeExpansionRequired, "Require expansion of volume on node")
 
 	return nil
 }
