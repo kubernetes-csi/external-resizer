@@ -43,6 +43,12 @@ Note that the external-resizer does not scale with more replicas. Only one exter
 
 * `--leader-election-namespace`: Namespace where the leader election resource lives. Defaults to the pod namespace if not set.
 
+* `--leader-election-lease-duration <duration>`: Duration, in seconds, that non-leader candidates will wait to force acquire leadership. Defaults to 15 seconds.
+
+* `--leader-election-renew-deadline <duration>`: Duration, in seconds, that the acting leader will retry refreshing leadership before giving up. Defaults to 10 seconds.
+
+* `--leader-election-retry-period <duration>`: Duration, in seconds, the LeaderElector clients should wait between tries of actions. Defaults to 5 seconds.
+
 * `--timeout <duration>`: Timeout of all calls to CSI driver. It should be set to value that accommodates majority of `ControllerExpandVolume` calls. 10 seconds is used by default.
 
 * `-kube-api-burst <int>` : Burst to use while communicating with the kubernetes apiserver. Defaults to 10. (default 10).

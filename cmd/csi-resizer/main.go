@@ -60,8 +60,11 @@ var (
 	retryIntervalStart = flag.Duration("retry-interval-start", time.Second, "Initial retry interval of failed volume resize. It exponentially increases with each failure, up to retry-interval-max.")
 	retryIntervalMax   = flag.Duration("retry-interval-max", 5*time.Minute, "Maximum retry interval of failed volume resize.")
 
-	enableLeaderElection    = flag.Bool("leader-election", false, "Enable leader election.")
-	leaderElectionNamespace = flag.String("leader-election-namespace", "", "Namespace where the leader election resource lives. Defaults to the pod namespace if not set.")
+	enableLeaderElection        = flag.Bool("leader-election", false, "Enable leader election.")
+	leaderElectionNamespace     = flag.String("leader-election-namespace", "", "Namespace where the leader election resource lives. Defaults to the pod namespace if not set.")
+	leaderElectionLeaseDuration = flag.Duration("leader-election-lease-duration", 15*time.Second, "Duration, in seconds, that non-leader candidates will wait to force acquire leadership. Defaults to 15 seconds.")
+	leaderElectionRenewDeadline = flag.Duration("leader-election-renew-deadline", 10*time.Second, "Duration, in seconds, that the acting leader will retry refreshing leadership before giving up. Defaults to 10 seconds.")
+	leaderElectionRetryPeriod   = flag.Duration("leader-election-retry-period", 5*time.Second, "Duration, in seconds, the LeaderElector clients should wait between tries of actions. Defaults to 5 seconds.")
 
 	metricsAddress = flag.String("metrics-address", "", "(deprecated) The TCP network address where the prometheus metrics endpoint will listen (example: `:8080`). The default is empty string, which means metrics endpoint is disabled. Only one of `--metrics-address` and `--http-endpoint` can be set.")
 	httpEndpoint   = flag.String("http-endpoint", "", "The TCP network address where the HTTP server for diagnostics, including metrics and leader election health check, will listen (example: `:8080`). The default is empty string, which means the server is disabled. Only one of `--metrics-address` and `--http-endpoint` can be set.")
@@ -197,6 +200,10 @@ func main() {
 		if *leaderElectionNamespace != "" {
 			le.WithNamespace(*leaderElectionNamespace)
 		}
+
+		le.WithLeaseDuration(*leaderElectionLeaseDuration)
+		le.WithRenewDeadline(*leaderElectionRenewDeadline)
+		le.WithRetryPeriod(*leaderElectionRetryPeriod)
 
 		if err := le.Run(); err != nil {
 			klog.Fatalf("error initializing leader election: %v", err)
