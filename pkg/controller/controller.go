@@ -525,7 +525,12 @@ func (ctrl *resizeController) markPVCResizeInProgress(pvc *v1.PersistentVolumeCl
 		[]v1.PersistentVolumeClaimCondition{progressCondition})
 
 	expectedAllocatedResources := getAllocatedResources(pvc)
-	newPVC.Status.AllocatedResources[v1.ResourceStorage] = *expectedAllocatedResources
+	allocatedResources := newPVC.Status.AllocatedResources
+	if len(allocatedResources) == 0 {
+		allocatedResources = v1.ResourceList{}
+	}
+	allocatedResources[v1.ResourceStorage] = *expectedAllocatedResources
+	newPVC.Status.AllocatedResources = allocatedResources
 
 	updatedPVC, err := ctrl.patchClaim(pvc, newPVC)
 	if err != nil {
