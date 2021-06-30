@@ -126,11 +126,6 @@ func (in *CSIDriverSpec) DeepCopyInto(out *CSIDriverSpec) {
 		*out = new(bool)
 		**out = **in
 	}
-	if in.RecoveryFromExpansionFailure != nil {
-		in, out := &in.RecoveryFromExpansionFailure, &out.RecoveryFromExpansionFailure
-		*out = new(bool)
-		**out = **in
-	}
 	return
 }
 

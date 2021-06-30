@@ -186,6 +186,10 @@ func (r *csiResizer) GetVolume(pv *v1.PersistentVolume) (*resource.Quantity, boo
 	return util.GetVolume(pv, r.name, r.client, r.timeout)
 }
 
+func (r *csiResizer) SupportsControllerExpansion() bool {
+	return true
+}
+
 // GetVolumeCapabilities returns volumecapability from PV spec
 func GetVolumeCapabilities(pvSpec v1.PersistentVolumeSpec) (*csilib.VolumeCapability, error) {
 	m := map[v1.PersistentVolumeAccessMode]bool{}

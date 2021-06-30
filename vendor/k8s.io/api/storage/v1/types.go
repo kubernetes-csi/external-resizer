@@ -381,9 +381,6 @@ type CSIDriverSpec struct {
 	// most one token is empty string. To receive a new token after expiry,
 	// RequiresRepublish can be used to trigger NodePublishVolume periodically.
 	//
-	// This is a beta feature and only available when the
-	// CSIServiceAccountToken feature is enabled.
-	//
 	// +optional
 	// +listType=atomic
 	TokenRequests []TokenRequest `json:"tokenRequests,omitempty" protobuf:"bytes,6,opt,name=tokenRequests"`
@@ -396,15 +393,8 @@ type CSIDriverSpec struct {
 	// to NodePublishVolume should only update the contents of the volume. New
 	// mount points will not be seen by a running container.
 	//
-	// This is a beta feature and only available when the
-	// CSIServiceAccountToken feature is enabled.
-	//
 	// +optional
 	RequiresRepublish *bool `json:"requiresRepublish,omitempty" protobuf:"varint,7,opt,name=requiresRepublish"`
-
-	// RecoveryFromExpansionFailure enables expansion failure recovery
-	// +optional
-	RecoveryFromExpansionFailure *bool `json:"recoveryFromExpansionFailure,omitempty" protobuf:"varint,8,opt,name=recoveryFromExpansionFailure"`
 }
 
 // FSGroupPolicy specifies if a CSI Driver supports modifying

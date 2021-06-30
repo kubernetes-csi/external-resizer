@@ -410,6 +410,36 @@ func (ctrl *resizeController) isExpansionComplete(pvc *v1.PersistentVolumeClaim,
 	return false
 }
 
+func (ctrl *resizeController) getNewSize(pvc *v1.PersistentVolumeClaim, pv *v1.PersistentVolume) resource.Quantity {
+	newSize := pvc.Spec.Resources.Requests.Storage()
+	if pvc.Status.ResizeStatus == nil || *pvc.Status.ResizeStatus == "" {
+		return *newSize
+	}
+	resizeStatus := *pvc.Status.ResizeStatus
+	var allocatedSize = pvc.Status.AllocatedResources.Storage()
+
+	switch resizeStatus {
+	case v1.PersistentVolumeClaimResizeInProgress:
+		if allocatedSize != nil {
+			newSize = allocatedSize
+		}
+	case v1.PersistentVolumeClaimResizeFailedOnController:
+		newSize = pvc.Spec.Resources.Requests.Storage()
+	case v1.PersistentVolumeClaimResizeFailedOnNode:
+		if newSize.Cmp(*allocatedSize) > 0 {
+			newSize = pvc.Spec.Resources.Requests.Storage()
+		} else {
+			// newSize is smaller than whatever we tried to expand before
+			// and if expansion failed on the node, we should first let expansion finish on the node
+			if ctrl.resizer.SupportsControllerExpansion() {
+				newSize = allocatedSize
+			}
+		}
+
+	}
+	return *newSize
+}
+
 // resizePVC will:
 // 1. Mark pvc as resizing.
 // 2. Resize the volume and the pv object.

@@ -2976,6 +2976,11 @@ func (in *PersistentVolumeClaimStatus) DeepCopyInto(out *PersistentVolumeClaimSt
 			(*out)[key] = val.DeepCopy()
 		}
 	}
+	if in.ResizeStatus != nil {
+		in, out := &in.ResizeStatus, &out.ResizeStatus
+		*out = new(PersistentVolumeClaimResizeStatus)
+		**out = **in
+	}
 	return
 }
 
@@ -5304,11 +5309,6 @@ func (in *ServiceSpec) DeepCopyInto(out *ServiceSpec) {
 		*out = new(SessionAffinityConfig)
 		(*in).DeepCopyInto(*out)
 	}
-	if in.TopologyKeys != nil {
-		in, out := &in.TopologyKeys, &out.TopologyKeys
-		*out = make([]string, len(*in))
-		copy(*out, *in)
-	}
 	if in.IPFamilies != nil {
 		in, out := &in.IPFamilies, &out.IPFamilies
 		*out = make([]IPFamily, len(*in))
@@ -5915,6 +5915,11 @@ func (in *WindowsSecurityContextOptions) DeepCopyInto(out *WindowsSecurityContex
 	if in.RunAsUserName != nil {
 		in, out := &in.RunAsUserName, &out.RunAsUserName
 		*out = new(string)
+		**out = **in
+	}
+	if in.HostProcess != nil {
+		in, out := &in.HostProcess, &out.HostProcess
+		*out = new(bool)
 		**out = **in
 	}
 	return

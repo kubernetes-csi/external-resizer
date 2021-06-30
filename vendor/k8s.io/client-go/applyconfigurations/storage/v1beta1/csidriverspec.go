@@ -25,14 +25,13 @@ import (
 // CSIDriverSpecApplyConfiguration represents an declarative configuration of the CSIDriverSpec type for use
 // with apply.
 type CSIDriverSpecApplyConfiguration struct {
-	AttachRequired               *bool                            `json:"attachRequired,omitempty"`
-	PodInfoOnMount               *bool                            `json:"podInfoOnMount,omitempty"`
-	VolumeLifecycleModes         []v1beta1.VolumeLifecycleMode    `json:"volumeLifecycleModes,omitempty"`
-	StorageCapacity              *bool                            `json:"storageCapacity,omitempty"`
-	FSGroupPolicy                *v1beta1.FSGroupPolicy           `json:"fsGroupPolicy,omitempty"`
-	TokenRequests                []TokenRequestApplyConfiguration `json:"tokenRequests,omitempty"`
-	RequiresRepublish            *bool                            `json:"requiresRepublish,omitempty"`
-	RecoveryFromExpansionFailure *bool                            `json:"recoveryFromExpansionFailure,omitempty"`
+	AttachRequired       *bool                            `json:"attachRequired,omitempty"`
+	PodInfoOnMount       *bool                            `json:"podInfoOnMount,omitempty"`
+	VolumeLifecycleModes []v1beta1.VolumeLifecycleMode    `json:"volumeLifecycleModes,omitempty"`
+	StorageCapacity      *bool                            `json:"storageCapacity,omitempty"`
+	FSGroupPolicy        *v1beta1.FSGroupPolicy           `json:"fsGroupPolicy,omitempty"`
+	TokenRequests        []TokenRequestApplyConfiguration `json:"tokenRequests,omitempty"`
+	RequiresRepublish    *bool                            `json:"requiresRepublish,omitempty"`
 }
 
 // CSIDriverSpecApplyConfiguration constructs an declarative configuration of the CSIDriverSpec type for use with
@@ -101,13 +100,5 @@ func (b *CSIDriverSpecApplyConfiguration) WithTokenRequests(values ...*TokenRequ
 // If called multiple times, the RequiresRepublish field is set to the value of the last call.
 func (b *CSIDriverSpecApplyConfiguration) WithRequiresRepublish(value bool) *CSIDriverSpecApplyConfiguration {
 	b.RequiresRepublish = &value
-	return b
-}
-
-// WithRecoveryFromExpansionFailure sets the RecoveryFromExpansionFailure field in the declarative configuration to the given value
-// and returns the receiver, so that objects can be built by chaining "With" function invocations.
-// If called multiple times, the RecoveryFromExpansionFailure field is set to the value of the last call.
-func (b *CSIDriverSpecApplyConfiguration) WithRecoveryFromExpansionFailure(value bool) *CSIDriverSpecApplyConfiguration {
-	b.RecoveryFromExpansionFailure = &value
 	return b
 }

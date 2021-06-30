@@ -72,3 +72,7 @@ func (r *trivialResizer) GetVolume(pv *v1.PersistentVolume) (*resource.Quantity,
 func (r *trivialResizer) Resize(pv *v1.PersistentVolume, requestSize resource.Quantity) (newSize resource.Quantity, fsResizeRequired bool, err error) {
 	return requestSize, true, nil
 }
+
+func (r *trivialResizer) SupportsControllerExpansion() bool {
+	return false
+}
