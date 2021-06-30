@@ -330,14 +330,6 @@ func (ctrl *resizeController) syncPVC(key string) error {
 		}
 	}
 
-	if ctrl.isExpansionComplete(pvc, pv) && requiresAllocatedResourcesAdjust(pvc) {
-		klog.Infof("trying to adjust allocated size %s", util.PVCKey(pvc))
-		if err := ctrl.adjustAllocatedResources(pvc, pv); err != nil {
-			return fmt.Errorf("failed to adjust quota for pvc %s: %v", util.PVCKey(pvc), err)
-		}
-		return nil
-	}
-
 	if !ctrl.pvcNeedResize(pvc) {
 		klog.V(4).Infof("No need to resize PVC %q", util.PVCKey(pvc))
 		return nil
@@ -416,7 +408,7 @@ func (ctrl *resizeController) getNewSize(pvc *v1.PersistentVolumeClaim, pv *v1.P
 		return *newSize
 	}
 	resizeStatus := *pvc.Status.ResizeStatus
-	var allocatedSize = pvc.Status.AllocatedResources.Storage()
+	allocatedSize := pvc.Status.AllocatedResources.Storage()
 
 	switch resizeStatus {
 	case v1.PersistentVolumeClaimResizeInProgress:
@@ -445,7 +437,8 @@ func (ctrl *resizeController) getNewSize(pvc *v1.PersistentVolumeClaim, pv *v1.P
 // 2. Resize the volume and the pv object.
 // 3. Mark pvc as resizing finished(no error, no need to resize fs), need resizing fs or resize failed.
 func (ctrl *resizeController) resizePVC(pvc *v1.PersistentVolumeClaim, pv *v1.PersistentVolume) error {
-	if updatedPVC, err := ctrl.markPVCResizeInProgress(pvc); err != nil {
+	expectedSize := ctrl.getNewSize(pvc, pv)
+	if updatedPVC, err := ctrl.markPVCResizeInProgress(pvc, expectedSize); err != nil {
 		return fmt.Errorf("marking pvc %q as resizing failed: %v", util.PVCKey(pvc), err)
 	} else if updatedPVC != nil {
 		pvc = updatedPVC
@@ -465,7 +458,7 @@ func (ctrl *resizeController) resizePVC(pvc *v1.PersistentVolumeClaim, pv *v1.Pe
 		fmt.Sprintf("External resizer is resizing volume %s", pv.Name))
 
 	err := func() error {
-		newSize, fsResizeRequired, err := ctrl.resizeVolume(pvc, pv)
+		newSize, fsResizeRequired, err := ctrl.resizeVolume(pvc, pv, expectedSize)
 		if err != nil {
 			return err
 		}
@@ -488,7 +481,8 @@ func (ctrl *resizeController) resizePVC(pvc *v1.PersistentVolumeClaim, pv *v1.Pe
 // resizeVolume resize the volume to request size, and update PV's capacity if succeeded.
 func (ctrl *resizeController) resizeVolume(
 	pvc *v1.PersistentVolumeClaim,
-	pv *v1.PersistentVolume) (resource.Quantity, bool, error) {
+	pv *v1.PersistentVolume,
+	expectedSize resource.Quantity) (resource.Quantity, bool, error) {
 
 	// before trying expansion we will remove the PVC from map
 	// that tracks PVCs which can't be expanded when in-use. If
@@ -496,15 +490,16 @@ func (ctrl *resizeController) resizeVolume(
 	// back when expansion fails with in-use error.
 	ctrl.usedPVCs.removePVCWithInUseError(pvc)
 
-	requestSize := pvc.Spec.Resources.Requests[v1.ResourceStorage]
-
-	newSize, fsResizeRequired, err := ctrl.resizer.Resize(pv, requestSize)
+	newSize, fsResizeRequired, err := ctrl.resizer.Resize(pv, expectedSize)
 
 	if err != nil {
 		// if this error was a in-use error then it must be tracked so as we don't retry without
 		// first verifying if volume is in-use
 		if inUseError(err) {
 			ctrl.usedPVCs.addPVCWithInUseError(pvc)
+		}
+		if isFinalError(err) {
+			ctrl.markPVCResizeFailed(pvc)
 		}
 		return newSize, fsResizeRequired, fmt.Errorf("resize volume %q by resizer %q failed: %v", pv.Name, ctrl.name, err)
 	}
@@ -543,7 +538,7 @@ func (ctrl *resizeController) markPVCAsFSResizeRequired(pvc *v1.PersistentVolume
 	return nil
 }
 
-func (ctrl *resizeController) markPVCResizeInProgress(pvc *v1.PersistentVolumeClaim) (*v1.PersistentVolumeClaim, error) {
+func (ctrl *resizeController) markPVCResizeInProgress(pvc *v1.PersistentVolumeClaim, newSize resource.Quantity) (*v1.PersistentVolumeClaim, error) {
 	// Mark PVC as Resize Started
 	progressCondition := v1.PersistentVolumeClaimCondition{
 		Type:               v1.PersistentVolumeClaimResizing,
@@ -554,13 +549,14 @@ func (ctrl *resizeController) markPVCResizeInProgress(pvc *v1.PersistentVolumeCl
 	newPVC.Status.Conditions = util.MergeResizeConditionsOfPVC(newPVC.Status.Conditions,
 		[]v1.PersistentVolumeClaimCondition{progressCondition})
 
-	expectedAllocatedResources := getAllocatedResources(pvc)
+	progressStatus := v1.PersistentVolumeClaimResizeInProgress
 	allocatedResources := newPVC.Status.AllocatedResources
 	if len(allocatedResources) == 0 {
 		allocatedResources = v1.ResourceList{}
 	}
-	allocatedResources[v1.ResourceStorage] = *expectedAllocatedResources
+	allocatedResources[v1.ResourceStorage] = newSize
 	newPVC.Status.AllocatedResources = allocatedResources
+	newPVC.Status.ResizeStatus = &progressStatus
 
 	updatedPVC, err := ctrl.patchClaim(pvc, newPVC)
 	if err != nil {
@@ -575,6 +571,7 @@ func (ctrl *resizeController) markPVCResizeFinished(
 	newPVC := pvc.DeepCopy()
 	newPVC.Status.Capacity[v1.ResourceStorage] = newSize
 	newPVC.Status.Conditions = util.MergeResizeConditionsOfPVC(pvc.Status.Conditions, []v1.PersistentVolumeClaimCondition{})
+	newPVC.Status.ResizeStatus = nil
 
 	_, err := ctrl.patchClaim(pvc, newPVC)
 	if err != nil {
@@ -585,6 +582,16 @@ func (ctrl *resizeController) markPVCResizeFinished(
 	ctrl.eventRecorder.Eventf(pvc, v1.EventTypeNormal, util.VolumeResizeSuccess, "Resize volume succeeded")
 
 	return nil
+}
+
+func (ctrl *resizeController) markPVCResizeFailed(pvc *v1.PersistentVolumeClaim) {
+	resizeFailedOnController := v1.PersistentVolumeClaimResizeFailedOnController
+	newPVC := pvc.DeepCopy()
+	newPVC.Status.ResizeStatus = &resizeFailedOnController
+	_, err := ctrl.patchClaim(pvc, newPVC)
+	if err != nil {
+		klog.Errorf("Failed to mark PVC %q as resize failed: %v", util.PVCKey(pvc), err)
+	}
 }
 
 func (ctrl *resizeController) patchClaim(oldPVC, newPVC *v1.PersistentVolumeClaim) (*v1.PersistentVolumeClaim, error) {
@@ -745,4 +752,27 @@ func requiresAllocatedResourcesAdjust(pvc *v1.PersistentVolumeClaim) bool {
 		return true
 	}
 	return false
+}
+func isFinalError(err error) bool {
+	// Sources:
+	// https://github.com/grpc/grpc/blob/master/doc/statuscodes.md
+	// https://github.com/container-storage-interface/spec/blob/master/spec.md
+	st, ok := status.FromError(err)
+	if !ok {
+		// This is not gRPC error. The operation must have failed before gRPC
+		// method was called, otherwise we would get gRPC error.
+		// We don't know if any previous volume operation is in progress, be on the safe side.
+		return false
+	}
+	switch st.Code() {
+	case codes.Canceled, // gRPC: Client Application cancelled the request
+		codes.DeadlineExceeded,  // gRPC: Timeout
+		codes.Unavailable,       // gRPC: Server shutting down, TCP connection broken - previous volume operation may be still in progress.
+		codes.ResourceExhausted, // gRPC: Server temporarily out of resources - previous volume operation may be still in progress.
+		codes.Aborted:           // CSI: Operation pending for volume
+		return false
+	}
+	// All other errors mean that operation either did not
+	// even start or failed. It is for sure not in progress.
+	return true
 }
