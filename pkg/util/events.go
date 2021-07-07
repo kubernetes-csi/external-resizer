@@ -18,10 +18,10 @@ package util
 
 // These constants are PVC condition types related to resize operation.
 const (
-	VolumeResizing           = "Resizing"
-	VolumeResizeFailed       = "VolumeResizeFailed"
-	VolumeResizeSuccess      = "VolumeResizeSuccessful"
-	FileSystemResizeRequired = "FileSystemResizeRequired"
+	VolumeResizing        = "Resizing"
+	VolumeResizeFailed    = "VolumeResizeFailed"
+	VolumeResizeSuccess   = "VolumeResizeSuccessful"
+	NodeExpansionRequired = "NodeExpansionRequired"
 )
 
 const (
