@@ -54,6 +54,14 @@ func (c *MockClient) SetExpansionFailed() {
 	c.expansionFailed = true
 }
 
+func (c *MockClient) SupportsControllerGetVolume(ctx context.Context) (bool, error) {
+	return false, nil
+}
+
+func (c *MockClient) GetVolume(ctx context.Context, volumeID string) (int64, error) {
+	return 0, nil
+}
+
 func (c *MockClient) SetCheckMigratedLabel() {
 	c.checkMigratedLabel = true
 }

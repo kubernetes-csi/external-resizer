@@ -324,7 +324,7 @@ func (ctrl *resizeController) syncPVC(key string) error {
 		return fmt.Errorf("expected volume but got %+v", volumeObj)
 	}
 
-	if utilfeature.DefaultFeatureGate.Enabled(features.AnnotateFsResize) && ctrl.isNodeExpandComplete(pvc, pv) && metav1.HasAnnotation(pv.ObjectMeta, util.AnnPreResizeCapacity) {
+	if utilfeature.DefaultFeatureGate.Enabled(features.AnnotateFsResize) && ctrl.isExpansionComplete(pvc, pv) && metav1.HasAnnotation(pv.ObjectMeta, util.AnnPreResizeCapacity) {
 		if err := ctrl.deletePreResizeCapAnnotation(pv); err != nil {
 			return fmt.Errorf("failed removing annotation %s from pv %q: %v", util.AnnPreResizeCapacity, pv.Name, err)
 		}
@@ -390,11 +390,46 @@ func (ctrl *resizeController) pvNeedResize(pvc *v1.PersistentVolumeClaim, pv *v1
 	return true
 }
 
-// isNodeExpandComplete returns true if  pvc.Status.Capacity >= pv.Spec.Capacity
-func (ctrl *resizeController) isNodeExpandComplete(pvc *v1.PersistentVolumeClaim, pv *v1.PersistentVolume) bool {
-	klog.V(4).Infof("pv %q capacity = %v, pvc %s capacity = %v", pv.Name, pv.Spec.Capacity[v1.ResourceStorage], util.PVCKey(pvc), pvc.Status.Capacity[v1.ResourceStorage])
-	pvcCap, pvCap := pvc.Status.Capacity[v1.ResourceStorage], pv.Spec.Capacity[v1.ResourceStorage]
-	return pvcCap.Cmp(pvCap) >= 0
+// isExpansionComplete returns true if  previously issued volume operation is complete
+func (ctrl *resizeController) isExpansionComplete(pvc *v1.PersistentVolumeClaim, pv *v1.PersistentVolume) bool {
+	logCapacity(pv, pvc)
+	pvcSpecCap := pvc.Spec.Resources.Requests.Storage()
+	pvcStatusCap, pvCap := pvc.Status.Capacity[v1.ResourceStorage], pv.Spec.Capacity[v1.ResourceStorage]
+
+	if pvcStatusCap.Cmp(*pvcSpecCap) >= 0 && pvcStatusCap.Cmp(pvCap) >= 0 {
+		return true
+	}
+	return false
+}
+
+func (ctrl *resizeController) getNewSize(pvc *v1.PersistentVolumeClaim, pv *v1.PersistentVolume) resource.Quantity {
+	newSize := pvc.Spec.Resources.Requests.Storage()
+	if pvc.Status.ResizeStatus == nil || *pvc.Status.ResizeStatus == "" {
+		return *newSize
+	}
+	resizeStatus := *pvc.Status.ResizeStatus
+	allocatedSize := pvc.Status.AllocatedResources.Storage()
+
+	switch resizeStatus {
+	case v1.PersistentVolumeClaimResizeInProgress:
+		if allocatedSize != nil {
+			newSize = allocatedSize
+		}
+	case v1.PersistentVolumeClaimResizeFailedOnController:
+		newSize = pvc.Spec.Resources.Requests.Storage()
+	case v1.PersistentVolumeClaimResizeFailedOnNode:
+		if newSize.Cmp(*allocatedSize) > 0 {
+			newSize = pvc.Spec.Resources.Requests.Storage()
+		} else {
+			// newSize is smaller than whatever we tried to expand before
+			// and if expansion failed on the node, we should first let expansion finish on the node
+			if ctrl.resizer.SupportsControllerExpansion() {
+				newSize = allocatedSize
+			}
+		}
+
+	}
+	return *newSize
 }
 
 // resizePVC will:
@@ -402,7 +437,8 @@ func (ctrl *resizeController) isNodeExpandComplete(pvc *v1.PersistentVolumeClaim
 // 2. Resize the volume and the pv object.
 // 3. Mark pvc as resizing finished(no error, no need to resize fs), need resizing fs or resize failed.
 func (ctrl *resizeController) resizePVC(pvc *v1.PersistentVolumeClaim, pv *v1.PersistentVolume) error {
-	if updatedPVC, err := ctrl.markPVCResizeInProgress(pvc); err != nil {
+	expectedSize := ctrl.getNewSize(pvc, pv)
+	if updatedPVC, err := ctrl.markPVCResizeInProgress(pvc, expectedSize); err != nil {
 		return fmt.Errorf("marking pvc %q as resizing failed: %v", util.PVCKey(pvc), err)
 	} else if updatedPVC != nil {
 		pvc = updatedPVC
@@ -422,7 +458,7 @@ func (ctrl *resizeController) resizePVC(pvc *v1.PersistentVolumeClaim, pv *v1.Pe
 		fmt.Sprintf("External resizer is resizing volume %s", pv.Name))
 
 	err := func() error {
-		newSize, fsResizeRequired, err := ctrl.resizeVolume(pvc, pv)
+		newSize, fsResizeRequired, err := ctrl.resizeVolume(pvc, pv, expectedSize)
 		if err != nil {
 			return err
 		}
@@ -445,7 +481,8 @@ func (ctrl *resizeController) resizePVC(pvc *v1.PersistentVolumeClaim, pv *v1.Pe
 // resizeVolume resize the volume to request size, and update PV's capacity if succeeded.
 func (ctrl *resizeController) resizeVolume(
 	pvc *v1.PersistentVolumeClaim,
-	pv *v1.PersistentVolume) (resource.Quantity, bool, error) {
+	pv *v1.PersistentVolume,
+	expectedSize resource.Quantity) (resource.Quantity, bool, error) {
 
 	// before trying expansion we will remove the PVC from map
 	// that tracks PVCs which can't be expanded when in-use. If
@@ -453,15 +490,16 @@ func (ctrl *resizeController) resizeVolume(
 	// back when expansion fails with in-use error.
 	ctrl.usedPVCs.removePVCWithInUseError(pvc)
 
-	requestSize := pvc.Spec.Resources.Requests[v1.ResourceStorage]
-
-	newSize, fsResizeRequired, err := ctrl.resizer.Resize(pv, requestSize)
+	newSize, fsResizeRequired, err := ctrl.resizer.Resize(pv, expectedSize)
 
 	if err != nil {
 		// if this error was a in-use error then it must be tracked so as we don't retry without
 		// first verifying if volume is in-use
 		if inUseError(err) {
 			ctrl.usedPVCs.addPVCWithInUseError(pvc)
+		}
+		if isFinalError(err) {
+			ctrl.markPVCResizeFailed(pvc)
 		}
 		return newSize, fsResizeRequired, fmt.Errorf("resize volume %q by resizer %q failed: %v", pv.Name, ctrl.name, err)
 	}
@@ -500,7 +538,7 @@ func (ctrl *resizeController) markPVCAsFSResizeRequired(pvc *v1.PersistentVolume
 	return nil
 }
 
-func (ctrl *resizeController) markPVCResizeInProgress(pvc *v1.PersistentVolumeClaim) (*v1.PersistentVolumeClaim, error) {
+func (ctrl *resizeController) markPVCResizeInProgress(pvc *v1.PersistentVolumeClaim, newSize resource.Quantity) (*v1.PersistentVolumeClaim, error) {
 	// Mark PVC as Resize Started
 	progressCondition := v1.PersistentVolumeClaimCondition{
 		Type:               v1.PersistentVolumeClaimResizing,
@@ -510,6 +548,15 @@ func (ctrl *resizeController) markPVCResizeInProgress(pvc *v1.PersistentVolumeCl
 	newPVC := pvc.DeepCopy()
 	newPVC.Status.Conditions = util.MergeResizeConditionsOfPVC(newPVC.Status.Conditions,
 		[]v1.PersistentVolumeClaimCondition{progressCondition})
+
+	progressStatus := v1.PersistentVolumeClaimResizeInProgress
+	allocatedResources := newPVC.Status.AllocatedResources
+	if len(allocatedResources) == 0 {
+		allocatedResources = v1.ResourceList{}
+	}
+	allocatedResources[v1.ResourceStorage] = newSize
+	newPVC.Status.AllocatedResources = allocatedResources
+	newPVC.Status.ResizeStatus = &progressStatus
 
 	updatedPVC, err := ctrl.patchClaim(pvc, newPVC)
 	if err != nil {
@@ -524,6 +571,7 @@ func (ctrl *resizeController) markPVCResizeFinished(
 	newPVC := pvc.DeepCopy()
 	newPVC.Status.Capacity[v1.ResourceStorage] = newSize
 	newPVC.Status.Conditions = util.MergeResizeConditionsOfPVC(pvc.Status.Conditions, []v1.PersistentVolumeClaimCondition{})
+	newPVC.Status.ResizeStatus = nil
 
 	_, err := ctrl.patchClaim(pvc, newPVC)
 	if err != nil {
@@ -534,6 +582,16 @@ func (ctrl *resizeController) markPVCResizeFinished(
 	ctrl.eventRecorder.Eventf(pvc, v1.EventTypeNormal, util.VolumeResizeSuccess, "Resize volume succeeded")
 
 	return nil
+}
+
+func (ctrl *resizeController) markPVCResizeFailed(pvc *v1.PersistentVolumeClaim) {
+	resizeFailedOnController := v1.PersistentVolumeClaimResizeFailedOnController
+	newPVC := pvc.DeepCopy()
+	newPVC.Status.ResizeStatus = &resizeFailedOnController
+	_, err := ctrl.patchClaim(pvc, newPVC)
+	if err != nil {
+		klog.Errorf("Failed to mark PVC %q as resize failed: %v", util.PVCKey(pvc), err)
+	}
 }
 
 func (ctrl *resizeController) patchClaim(oldPVC, newPVC *v1.PersistentVolumeClaim) (*v1.PersistentVolumeClaim, error) {
@@ -564,6 +622,36 @@ func (ctrl *resizeController) deletePreResizeCapAnnotation(pv *v1.PersistentVolu
 
 	_, err := ctrl.patchPersistentVolume(pv, pvClone)
 	return err
+}
+
+func (ctrl *resizeController) adjustAllocatedResources(pvc *v1.PersistentVolumeClaim, pv *v1.PersistentVolume) error {
+	klog.Infof("getting volume size for %s", util.PVCKey(pvc))
+	newSize, ok, err := ctrl.resizer.GetVolume(pv)
+	if err != nil {
+		klog.Errorf("error getting current capacity %s: %v", util.PVCKey(pvc), err)
+		return fmt.Errorf("error getting current capacity of the volume %s: %v", util.PVCKey(pvc), err)
+	}
+
+	if !ok || newSize == nil {
+		klog.Warningf("adjusting allocated Resources for pvc %s failed - the driver does support properly support ControllerGetVolume", util.PVCKey(pvc))
+		return nil
+	}
+
+	allocatedSize := pvc.Status.AllocatedResources.Storage()
+
+	// allocatedSize is bigger than actual size
+	if allocatedSize.Cmp(*newSize) > 0 {
+		newPVC := pvc.DeepCopy()
+		newPVC.Status.AllocatedResources[v1.ResourceStorage] = *newSize
+		_, err := ctrl.patchClaim(pvc, newPVC)
+		if err != nil {
+			return fmt.Errorf("error adjusting pvc size %q: %v", util.PVCKey(pvc), err)
+		}
+
+		klog.V(4).Infof("adjusting PVC size %q finished", util.PVCKey(pvc))
+		ctrl.eventRecorder.Eventf(pvc, v1.EventTypeNormal, util.VolumeSizeRestored, "Allocated PVC size restored")
+	}
+	return nil
 }
 
 func (ctrl *resizeController) updatePVCapacity(pv *v1.PersistentVolume, oldCapacity, newCapacity resource.Quantity, fsResizeRequired bool) error {
@@ -624,6 +712,13 @@ func parsePod(obj interface{}) *v1.Pod {
 	return pod
 }
 
+func logCapacity(pv *v1.PersistentVolume, pvc *v1.PersistentVolumeClaim) {
+	pvSpecCap := pv.Spec.Capacity[v1.ResourceStorage]
+	pvcStatusCap := pvc.Status.Capacity[v1.ResourceStorage]
+	pvcSpecCap := pvc.Spec.Resources.Requests.Storage()
+	klog.V(4).Infof("pv %q: capacity = %s, pvc %s:  spec = %s, statusCap = %s", pv.Name, pvSpecCap.String(), util.PVCKey(pvc), pvcSpecCap.String(), pvcStatusCap.String())
+}
+
 func inUseError(err error) bool {
 	st, ok := status.FromError(err)
 	if !ok {
@@ -637,4 +732,47 @@ func inUseError(err error) bool {
 		return true
 	}
 	return false
+}
+
+func getAllocatedResources(pvc *v1.PersistentVolumeClaim) *resource.Quantity {
+	currentAllocatedResources := pvc.Status.AllocatedResources.Storage()
+	specResources := pvc.Spec.Resources.Requests.Storage()
+	if currentAllocatedResources.Cmp(*specResources) < 0 {
+		return specResources
+	}
+	return currentAllocatedResources
+}
+
+// requiresAllocatedResourcesAdjust checks if allocatedresources for PVC
+// is higher than user requested value and if so - if it requires adjustment
+func requiresAllocatedResourcesAdjust(pvc *v1.PersistentVolumeClaim) bool {
+	currentAllocatedResources := pvc.Status.AllocatedResources.Storage()
+	specResources := pvc.Spec.Resources.Requests.Storage()
+	if specResources.Cmp(*currentAllocatedResources) < 0 {
+		return true
+	}
+	return false
+}
+func isFinalError(err error) bool {
+	// Sources:
+	// https://github.com/grpc/grpc/blob/master/doc/statuscodes.md
+	// https://github.com/container-storage-interface/spec/blob/master/spec.md
+	st, ok := status.FromError(err)
+	if !ok {
+		// This is not gRPC error. The operation must have failed before gRPC
+		// method was called, otherwise we would get gRPC error.
+		// We don't know if any previous volume operation is in progress, be on the safe side.
+		return false
+	}
+	switch st.Code() {
+	case codes.Canceled, // gRPC: Client Application cancelled the request
+		codes.DeadlineExceeded,  // gRPC: Timeout
+		codes.Unavailable,       // gRPC: Server shutting down, TCP connection broken - previous volume operation may be still in progress.
+		codes.ResourceExhausted, // gRPC: Server temporarily out of resources - previous volume operation may be still in progress.
+		codes.Aborted:           // CSI: Operation pending for volume
+		return false
+	}
+	// All other errors mean that operation either did not
+	// even start or failed. It is for sure not in progress.
+	return true
 }
