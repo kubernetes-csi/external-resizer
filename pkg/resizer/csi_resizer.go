@@ -24,6 +24,7 @@ import (
 	"time"
 
 	csilib "github.com/container-storage-interface/spec/lib/go/csi"
+	"github.com/kubernetes-csi/csi-lib-utils/accessmodes"
 	"github.com/kubernetes-csi/csi-lib-utils/connection"
 	"github.com/kubernetes-csi/external-resizer/pkg/csi"
 	"github.com/kubernetes-csi/external-resizer/pkg/util"
@@ -72,6 +73,11 @@ func NewResizerFromClient(
 			return newTrivialResizer(driverName), nil
 		}
 		return nil, resizeNotSupportErr
+	}
+
+	_, err = supportsControllerSingleNodeMultiWriter(csiClient, timeout)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check if plugin supports the SINGLE_NODE_MULTI_WRITER capability: %v", err)
 	}
 
 	return &csiResizer{
@@ -165,7 +171,7 @@ func (r *csiResizer) Resize(pv *v1.PersistentVolume, requestSize resource.Quanti
 		}
 	}
 
-	capability, err := GetVolumeCapabilities(pvSpec)
+	capability, err := r.getVolumeCapabilities(pvSpec)
 	if err != nil {
 		return oldSize, false, fmt.Errorf("failed to get capabilities of volume %s with %v", pv.Name, err)
 	}
@@ -182,13 +188,17 @@ func (r *csiResizer) Resize(pv *v1.PersistentVolume, requestSize resource.Quanti
 	return *resource.NewQuantity(newSizeBytes, resource.BinarySI), nodeResizeRequired, err
 }
 
-// GetVolumeCapabilities returns volumecapability from PV spec
-func GetVolumeCapabilities(pvSpec v1.PersistentVolumeSpec) (*csilib.VolumeCapability, error) {
-	m := map[v1.PersistentVolumeAccessMode]bool{}
-	for _, mode := range pvSpec.AccessModes {
-		m[mode] = true
+func (r *csiResizer) getVolumeCapabilities(pvSpec v1.PersistentVolumeSpec) (*csilib.VolumeCapability, error) {
+	supported, err := supportsControllerSingleNodeMultiWriter(r.client, r.timeout)
+	if err != nil {
+		return nil, err
 	}
+	return GetVolumeCapabilities(pvSpec, supported)
+}
 
+// GetVolumeCapabilities returns a VolumeCapability from the PV spec. Which access mode will be set depends if the driver supports the
+// SINGLE_NODE_MULTI_WRITER capability.
+func GetVolumeCapabilities(pvSpec v1.PersistentVolumeSpec, singleNodeMultiWriterCapable bool) (*csilib.VolumeCapability, error) {
 	if pvSpec.CSI == nil {
 		return nil, errors.New("CSI volume source was nil")
 	}
@@ -216,27 +226,12 @@ func GetVolumeCapabilities(pvSpec v1.PersistentVolumeSpec) (*csilib.VolumeCapabi
 		}
 	}
 
-	// Translate array of modes into single VolumeCapability
-	switch {
-	case m[v1.ReadWriteMany]:
-		// ReadWriteMany trumps everything, regardless what other modes are set
-		cap.AccessMode.Mode = csilib.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER
-
-	case m[v1.ReadOnlyMany] && m[v1.ReadWriteOnce]:
-		// This is no way how to translate this to CSI...
-		return nil, fmt.Errorf("CSI does not support ReadOnlyMany and ReadWriteOnce on the same PersistentVolume")
-
-	case m[v1.ReadOnlyMany]:
-		// There is only ReadOnlyMany set
-		cap.AccessMode.Mode = csilib.VolumeCapability_AccessMode_MULTI_NODE_READER_ONLY
-
-	case m[v1.ReadWriteOnce]:
-		// There is only ReadWriteOnce set
-		cap.AccessMode.Mode = csilib.VolumeCapability_AccessMode_SINGLE_NODE_WRITER
-
-	default:
-		return nil, fmt.Errorf("unsupported AccessMode combination: %+v", pvSpec.AccessModes)
+	am, err := accessmodes.ToCSIAccessMode(pvSpec.AccessModes, singleNodeMultiWriterCapable)
+	if err != nil {
+		return nil, err
 	}
+
+	cap.AccessMode.Mode = am
 	return cap, nil
 }
 
@@ -258,6 +253,12 @@ func supportsNodeResize(client csi.Client, timeout time.Duration) (bool, error) 
 	return client.SupportsNodeResize(ctx)
 }
 
+func supportsControllerSingleNodeMultiWriter(client csi.Client, timeout time.Duration) (bool, error) {
+	ctx, cancel := timeoutCtx(timeout)
+	defer cancel()
+	return client.SupportsControllerSingleNodeMultiWriter(ctx)
+}
+
 func timeoutCtx(timeout time.Duration) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), timeout)
 }
@@ -277,4 +278,12 @@ func getCredentials(k8sClient kubernetes.Interface, ref *v1.SecretReference) (ma
 		credentials[key] = string(value)
 	}
 	return credentials, nil
+}
+
+func uniqueAccessModes(pvSpec v1.PersistentVolumeSpec) map[v1.PersistentVolumeAccessMode]bool {
+	m := map[v1.PersistentVolumeAccessMode]bool{}
+	for _, mode := range pvSpec.AccessModes {
+		m[mode] = true
+	}
+	return m
 }

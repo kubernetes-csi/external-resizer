@@ -20,47 +20,52 @@ import (
 
 func TestNewResizer(t *testing.T) {
 	for i, c := range []struct {
-		SupportsNodeResize              bool
-		SupportsControllerResize        bool
-		SupportsPluginControllerService bool
+		SupportsNodeResize                      bool
+		SupportsControllerResize                bool
+		SupportsPluginControllerService         bool
+		SupportsControllerSingleNodeMultiWriter bool
 
 		Error   error
 		Trivial bool
 	}{
 		// Create succeeded.
 		{
-			SupportsNodeResize:              true,
-			SupportsControllerResize:        true,
-			SupportsPluginControllerService: true,
+			SupportsNodeResize:                      true,
+			SupportsControllerResize:                true,
+			SupportsPluginControllerService:         true,
+			SupportsControllerSingleNodeMultiWriter: true,
 
 			Trivial: false,
 		},
 		// Controller service not supported.
 		{
-			SupportsNodeResize:              true,
-			SupportsControllerResize:        true,
-			SupportsPluginControllerService: false,
+			SupportsNodeResize:                      true,
+			SupportsControllerResize:                true,
+			SupportsPluginControllerService:         false,
+			SupportsControllerSingleNodeMultiWriter: true,
 
 			Error: controllerServiceNotSupportErr,
 		},
 		// Only node resize supported.
 		{
-			SupportsNodeResize:              true,
-			SupportsControllerResize:        false,
-			SupportsPluginControllerService: true,
+			SupportsNodeResize:                      true,
+			SupportsControllerResize:                false,
+			SupportsPluginControllerService:         true,
+			SupportsControllerSingleNodeMultiWriter: true,
 
 			Trivial: true,
 		},
 		// Both controller and node resize not supported.
 		{
-			SupportsNodeResize:              false,
-			SupportsControllerResize:        false,
-			SupportsPluginControllerService: true,
+			SupportsNodeResize:                      false,
+			SupportsControllerResize:                false,
+			SupportsPluginControllerService:         true,
+			SupportsControllerSingleNodeMultiWriter: true,
 
 			Error: resizeNotSupportErr,
 		},
 	} {
-		client := csi.NewMockClient("mock", c.SupportsNodeResize, c.SupportsControllerResize, c.SupportsPluginControllerService)
+		client := csi.NewMockClient("mock", c.SupportsNodeResize, c.SupportsControllerResize, c.SupportsPluginControllerService, c.SupportsControllerSingleNodeMultiWriter)
 		driverName := "mock-driver"
 		k8sClient, informerFactory := fakeK8s()
 		resizer, err := NewResizerFromClient(client, 0, k8sClient, informerFactory, driverName)
@@ -94,7 +99,7 @@ func TestResizeWithSecret(t *testing.T) {
 		},
 	}
 	for _, tc := range tests {
-		client := csi.NewMockClient("mock", true, true, true)
+		client := csi.NewMockClient("mock", true, true, true, true)
 		secret := makeSecret("some-secret", "secret-namespace")
 		k8sClient := fake.NewSimpleClientset(secret)
 		pv := makeTestPV("test-csi", 2, "ebs-csi", "vol-abcde", tc.hasExpansionSecret)
@@ -152,7 +157,7 @@ func TestResizeMigratedPV(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			driverName := tc.driverName
-			client := csi.NewMockClient(driverName, true, true, true)
+			client := csi.NewMockClient(driverName, true, true, true, true)
 			client.SetCheckMigratedLabel()
 			k8sClient, informerFactory := fakeK8s()
 			resizer, err := NewResizerFromClient(client, 0, k8sClient, informerFactory, driverName)
@@ -190,13 +195,14 @@ func TestGetVolumeCapabilities(t *testing.T) {
 	defaultFSType := ""
 
 	tests := []struct {
-		name               string
-		volumeMode         *v1.PersistentVolumeMode
-		fsType             string
-		modes              []v1.PersistentVolumeAccessMode
-		mountOptions       []string
-		expectedCapability *csilib.VolumeCapability
-		expectError        bool
+		name                          string
+		volumeMode                    *v1.PersistentVolumeMode
+		fsType                        string
+		modes                         []v1.PersistentVolumeAccessMode
+		mountOptions                  []string
+		supportsSingleNodeMultiWriter bool
+		expectedCapability            *csilib.VolumeCapability
+		expectError                   bool
 	}{
 		{
 			name:               "RWX",
@@ -263,6 +269,69 @@ func TestGetVolumeCapabilities(t *testing.T) {
 			expectedCapability: nil,
 			expectError:        true,
 		},
+		{
+			name:                          "RWX with SINGLE_NODE_MULTI_WRITER capable driver",
+			volumeMode:                    &filesystemVolumeMode,
+			modes:                         []v1.PersistentVolumeAccessMode{v1.ReadWriteMany},
+			supportsSingleNodeMultiWriter: true,
+			expectedCapability:            createMountCapability(defaultFSType, csilib.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER, nil),
+			expectError:                   false,
+		},
+		{
+			name:                          "ROX + RWO with SINGLE_NODE_MULTI_WRITER capable driver",
+			volumeMode:                    &filesystemVolumeMode,
+			modes:                         []v1.PersistentVolumeAccessMode{v1.ReadOnlyMany, v1.ReadWriteOnce},
+			supportsSingleNodeMultiWriter: true,
+			expectedCapability:            nil,
+			expectError:                   true,
+		},
+		{
+			name:                          "ROX + RWOP with SINGLE_NODE_MULTI_WRITER capable driver",
+			volumeMode:                    &filesystemVolumeMode,
+			modes:                         []v1.PersistentVolumeAccessMode{v1.ReadOnlyMany, v1.ReadWriteOncePod},
+			supportsSingleNodeMultiWriter: true,
+			expectedCapability:            nil,
+			expectError:                   true,
+		},
+		{
+			name:                          "RWO + RWOP with SINGLE_NODE_MULTI_WRITER capable driver",
+			volumeMode:                    &filesystemVolumeMode,
+			modes:                         []v1.PersistentVolumeAccessMode{v1.ReadWriteOnce, v1.ReadWriteOncePod},
+			supportsSingleNodeMultiWriter: true,
+			expectedCapability:            nil,
+			expectError:                   true,
+		},
+		{
+			name:                          "ROX with SINGLE_NODE_MULTI_WRITER capable driver",
+			volumeMode:                    &filesystemVolumeMode,
+			modes:                         []v1.PersistentVolumeAccessMode{v1.ReadOnlyMany},
+			supportsSingleNodeMultiWriter: true,
+			expectedCapability:            createMountCapability(defaultFSType, csilib.VolumeCapability_AccessMode_MULTI_NODE_READER_ONLY, nil),
+			expectError:                   false,
+		},
+		{
+			name:                          "RWO with SINGLE_NODE_MULTI_WRITER capable driver",
+			volumeMode:                    &filesystemVolumeMode,
+			modes:                         []v1.PersistentVolumeAccessMode{v1.ReadWriteOnce},
+			supportsSingleNodeMultiWriter: true,
+			expectedCapability:            createMountCapability(defaultFSType, csilib.VolumeCapability_AccessMode_SINGLE_NODE_MULTI_WRITER, nil),
+			expectError:                   false,
+		},
+		{
+			name:                          "RWOP with SINGLE_NODE_MULTI_WRITER capable driver",
+			volumeMode:                    &filesystemVolumeMode,
+			modes:                         []v1.PersistentVolumeAccessMode{v1.ReadWriteOncePod},
+			supportsSingleNodeMultiWriter: true,
+			expectedCapability:            createMountCapability(defaultFSType, csilib.VolumeCapability_AccessMode_SINGLE_NODE_SINGLE_WRITER, nil),
+			expectError:                   false,
+		},
+		{
+			name:                          "nothing with SINGLE_NODE_MULTI_WRITER capable driver",
+			modes:                         []v1.PersistentVolumeAccessMode{},
+			supportsSingleNodeMultiWriter: true,
+			expectedCapability:            nil,
+			expectError:                   true,
+		},
 	}
 
 	for _, test := range tests {
@@ -278,7 +347,7 @@ func TestGetVolumeCapabilities(t *testing.T) {
 				},
 			},
 		}
-		cap, err := GetVolumeCapabilities(pv.Spec)
+		cap, err := GetVolumeCapabilities(pv.Spec, test.supportsSingleNodeMultiWriter)
 
 		if err == nil && test.expectError {
 			t.Errorf("test %s: expected error, got none", test.name)
@@ -357,7 +426,7 @@ func TestCanSupport(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			driverName := tc.driverName
-			client := csi.NewMockClient(driverName, true, true, true)
+			client := csi.NewMockClient(driverName, true, true, true, true)
 			k8sClient, informerFactory := fakeK8s()
 			resizer, err := NewResizerFromClient(client, 0, k8sClient, informerFactory, driverName)
 			if err != nil {

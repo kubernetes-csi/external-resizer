@@ -12,26 +12,29 @@ func NewMockClient(
 	name string,
 	supportsNodeResize bool,
 	supportsControllerResize bool,
-	supportsPluginControllerService bool) *MockClient {
+	supportsPluginControllerService bool,
+	supportsControllerSingleNodeMultiWriter bool) *MockClient {
 	return &MockClient{
-		name:                            name,
-		supportsNodeResize:              supportsNodeResize,
-		supportsControllerResize:        supportsControllerResize,
-		expandCalled:                    0,
-		supportsPluginControllerService: supportsPluginControllerService,
+		name:                                    name,
+		supportsNodeResize:                      supportsNodeResize,
+		supportsControllerResize:                supportsControllerResize,
+		expandCalled:                            0,
+		supportsPluginControllerService:         supportsPluginControllerService,
+		supportsControllerSingleNodeMultiWriter: supportsControllerSingleNodeMultiWriter,
 	}
 }
 
 type MockClient struct {
-	name                            string
-	supportsNodeResize              bool
-	supportsControllerResize        bool
-	supportsPluginControllerService bool
-	expandCalled                    int
-	expansionFailed                 bool
-	checkMigratedLabel              bool
-	usedSecrets                     map[string]string
-	usedCapability                  *csi.VolumeCapability
+	name                                    string
+	supportsNodeResize                      bool
+	supportsControllerResize                bool
+	supportsPluginControllerService         bool
+	supportsControllerSingleNodeMultiWriter bool
+	expandCalled                            int
+	expansionFailed                         bool
+	checkMigratedLabel                      bool
+	usedSecrets                             map[string]string
+	usedCapability                          *csi.VolumeCapability
 }
 
 func (c *MockClient) GetDriverName(context.Context) (string, error) {
@@ -48,6 +51,10 @@ func (c *MockClient) SupportsControllerResize(context.Context) (bool, error) {
 
 func (c *MockClient) SupportsNodeResize(context.Context) (bool, error) {
 	return c.supportsNodeResize, nil
+}
+
+func (c *MockClient) SupportsControllerSingleNodeMultiWriter(context.Context) (bool, error) {
+	return c.supportsControllerSingleNodeMultiWriter, nil
 }
 
 func (c *MockClient) SetExpansionFailed() {
