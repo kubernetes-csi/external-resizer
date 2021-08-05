@@ -14,12 +14,18 @@ This information reflects the head of this branch.
 
 | Compatible with CSI Version | Container Image | [Min K8s Version](https://kubernetes-csi.github.io/docs/kubernetes-compatibility.html#minimum-version) | [Recommended K8s Version](https://kubernetes-csi.github.io/docs/kubernetes-compatibility.html#recommended-version) |
 | ------------------------------------------------------------------------------------------ | -------------------------------| --------------- | ------------- |
-| [CSI Spec v1.2.0](https://github.com/container-storage-interface/spec/releases/tag/v1.2.0) | k8s.gcr.io/sig-storage/csi-resizer | 1.16 | 1.16 |
-
+| [CSI Spec v1.5.0](https://github.com/container-storage-interface/spec/releases/tag/v1.5.0) | k8s.gcr.io/sig-storage/csi-resizer | 1.16 | 1.22 |
 
 ## Feature status
 
-Currently all CSI volume expansion features are supported as Beta features by external-resizer.
+Various external-resizer releases come with different alpha / beta features.
+
+The following table reflects the head of this branch.
+
+| Feature           | Status  | Default | Description                                                                                                                   |
+| ----------------- | ------- | ------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| VolumeExpansion   | Beta    | On      | [Support for expanding CSI volumes](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#csi-volume-expansion).    |
+| ReadWriteOncePod  | Alpha   | Off     | [Single pod access mode for PersistentVolumes](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#access-modes). |
 
 ## Usage
 
