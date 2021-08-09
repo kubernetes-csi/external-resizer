@@ -79,15 +79,15 @@ func TestAddRemovePods(t *testing.T) {
 		initialObjects   []runtime.Object
 		addPod           *v1.Pod
 		removePod        *v1.Pod
-		expectedInUsePVC map[string]map[UniquePodName]UniquePodName
+		expectedInUsePVC map[string]map[UniquePodName]struct{}
 	}{
 		{
 			name:           "with no initial pods",
 			initialObjects: []runtime.Object{},
 			addPod:         withPVC("no-init-pod", pod()),
-			expectedInUsePVC: map[string]map[UniquePodName]UniquePodName{
+			expectedInUsePVC: map[string]map[UniquePodName]struct{}{
 				"default/no-init-pod": {
-					UniquePodName(defaultUID): UniquePodName(defaultUID),
+					UniquePodName(defaultUID): struct{}{},
 				},
 			},
 		},
@@ -95,13 +95,13 @@ func TestAddRemovePods(t *testing.T) {
 			name:             "adding failed pod",
 			initialObjects:   []runtime.Object{},
 			addPod:           withStatus(v1.PodFailed, withPVC("foobar", pod())),
-			expectedInUsePVC: map[string]map[UniquePodName]UniquePodName{},
+			expectedInUsePVC: map[string]map[UniquePodName]struct{}{},
 		},
 		{
 			name:             "with success pod",
 			initialObjects:   []runtime.Object{},
 			addPod:           withStatus(v1.PodSucceeded, withPVC("foobar", pod())),
-			expectedInUsePVC: map[string]map[UniquePodName]UniquePodName{},
+			expectedInUsePVC: map[string]map[UniquePodName]struct{}{},
 		},
 		{
 			name: "removing running pod",
@@ -109,7 +109,7 @@ func TestAddRemovePods(t *testing.T) {
 				withUID(types.UID("foobar-pod"), pod()),
 			},
 			removePod:        withUID(types.UID("foobar-pod"), pod()),
-			expectedInUsePVC: map[string]map[UniquePodName]UniquePodName{},
+			expectedInUsePVC: map[string]map[UniquePodName]struct{}{},
 		},
 		{
 			name: "removing failed pod",
@@ -117,7 +117,7 @@ func TestAddRemovePods(t *testing.T) {
 				withUID(types.UID("foobar-pod"), pod()),
 			},
 			removePod:        withStatus(v1.PodFailed, withUID(types.UID("foobar-pod"), pod())),
-			expectedInUsePVC: map[string]map[UniquePodName]UniquePodName{},
+			expectedInUsePVC: map[string]map[UniquePodName]struct{}{},
 		},
 	}
 

@@ -30,17 +30,17 @@ type UniquePodName types.UID
 type UniquePVCName types.UID
 
 type inUsePVCStore struct {
-	// map of pvc unique name and number of pods using it.
-	inUsePVC map[string]map[UniquePodName]UniquePodName
-	// map of PVC unique name and whether in-use error has been triggered for it.
-	inUseErrors map[UniquePVCName]bool
+	// Map of pvc unique name and set of pods using it.
+	inUsePVC map[string]map[UniquePodName]struct{}
+	// Set of unique name of PVCs that have in-use error.
+	inUseErrors map[UniquePVCName]struct{}
 	sync.RWMutex
 }
 
 func newUsedPVCStore() *inUsePVCStore {
 	return &inUsePVCStore{
-		inUseErrors: map[UniquePVCName]bool{},
-		inUsePVC:    map[string]map[UniquePodName]UniquePodName{},
+		inUseErrors: map[UniquePVCName]struct{}{},
+		inUsePVC:    map[string]map[UniquePodName]struct{}{},
 	}
 }
 
@@ -59,10 +59,10 @@ func (store *inUsePVCStore) addPod(pod *v1.Pod) {
 
 			podsUsingPVC, ok := store.inUsePVC[pvcNameUniqueName]
 			if !ok {
-				podsUsingPVC = map[UniquePodName]UniquePodName{}
+				podsUsingPVC = map[UniquePodName]struct{}{}
 			}
 			podUID := UniquePodName(pod.UID)
-			podsUsingPVC[podUID] = podUID
+			podsUsingPVC[podUID] = struct{}{}
 			store.inUsePVC[pvcNameUniqueName] = podsUsingPVC
 		}
 	}
@@ -108,10 +108,10 @@ func (store *inUsePVCStore) hasInUseErrors(pvc *v1.PersistentVolumeClaim) bool {
 	store.RLock()
 	defer store.RUnlock()
 
-	hasErrors, ok := store.inUseErrors[UniquePVCName(pvc.UID)]
-	if ok {
-		return hasErrors
+	if _, ok := store.inUseErrors[UniquePVCName(pvc.UID)]; ok {
+		return true
 	}
+
 	return false
 }
 
@@ -119,7 +119,7 @@ func (store *inUsePVCStore) addPVCWithInUseError(pvc *v1.PersistentVolumeClaim) 
 	store.Lock()
 	defer store.Unlock()
 	pvcUID := UniquePVCName(pvc.UID)
-	store.inUseErrors[pvcUID] = true
+	store.inUseErrors[pvcUID] = struct{}{}
 }
 
 func (store *inUsePVCStore) removePVCWithInUseError(pvc *v1.PersistentVolumeClaim) {
