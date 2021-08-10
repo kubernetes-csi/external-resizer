@@ -17,6 +17,7 @@ limitations under the License.
 package features
 
 import (
+	"k8s.io/apimachinery/pkg/util/runtime"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	"k8s.io/component-base/featuregate"
 )
@@ -34,7 +35,7 @@ const (
 )
 
 func init() {
-	utilfeature.DefaultMutableFeatureGate.Add(defaultResizerFeatureGates)
+	runtime.Must(utilfeature.DefaultMutableFeatureGate.Add(defaultResizerFeatureGates))
 }
 
 var defaultResizerFeatureGates = map[featuregate.Feature]featuregate.FeatureSpec{
