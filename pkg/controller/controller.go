@@ -310,6 +310,11 @@ func (ctrl *resizeController) syncPVC(key string) error {
 		return fmt.Errorf("expected PVC got: %v", pvcObject)
 	}
 
+	if pvc.Spec.VolumeName == "" {
+		klog.V(4).Infof("PV bound to PVC %q is not created yet", util.PVCKey(pvc))
+		return nil
+	}
+
 	volumeObj, exists, err := ctrl.volumes.GetByKey(pvc.Spec.VolumeName)
 	if err != nil {
 		return fmt.Errorf("Get PV %q of pvc %q failed: %v", pvc.Spec.VolumeName, util.PVCKey(pvc), err)
