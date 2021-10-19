@@ -161,7 +161,11 @@ func (ctrl *resizeController) updatePod(oldObj, newObj interface{}) {
 		return
 	}
 
-	ctrl.usedPVCs.addPod(pod)
+	if isPodTerminated(pod) {
+		ctrl.usedPVCs.removePod(pod)
+	} else {
+		ctrl.usedPVCs.addPod(pod)
+	}
 }
 
 func (ctrl *resizeController) updatePVC(oldObj, newObj interface{}) {
