@@ -12,7 +12,7 @@ require (
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/grpc v1.40.0
 	k8s.io/api v0.23.0
-	k8s.io/apimachinery v0.23.1-rc.0
+	k8s.io/apimachinery v0.23.0
 	k8s.io/apiserver v0.23.0
 	k8s.io/client-go v0.23.0
 	k8s.io/component-base v0.23.0
@@ -64,7 +64,7 @@ replace k8s.io/api => k8s.io/api v0.23.0
 
 replace k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.23.0
 
-replace k8s.io/apimachinery => k8s.io/apimachinery v0.23.1-rc.0
+replace k8s.io/apimachinery => k8s.io/apimachinery v0.23.0
 
 replace k8s.io/apiserver => k8s.io/apiserver v0.23.0
 
@@ -76,7 +76,7 @@ replace k8s.io/cloud-provider => k8s.io/cloud-provider v0.23.0
 
 replace k8s.io/cluster-bootstrap => k8s.io/cluster-bootstrap v0.23.0
 
-replace k8s.io/code-generator => k8s.io/code-generator v0.23.1-rc.0
+replace k8s.io/code-generator => k8s.io/code-generator v0.23.0
 
 replace k8s.io/component-base => k8s.io/component-base v0.23.0
 
@@ -84,7 +84,7 @@ replace k8s.io/component-helpers => k8s.io/component-helpers v0.23.0
 
 replace k8s.io/controller-manager => k8s.io/controller-manager v0.23.0
 
-replace k8s.io/cri-api => k8s.io/cri-api v0.23.1-rc.0
+replace k8s.io/cri-api => k8s.io/cri-api v0.23.0
 
 replace k8s.io/csi-translation-lib => k8s.io/csi-translation-lib v0.23.0
 
@@ -104,7 +104,7 @@ replace k8s.io/legacy-cloud-providers => k8s.io/legacy-cloud-providers v0.23.0
 
 replace k8s.io/metrics => k8s.io/metrics v0.23.0
 
-replace k8s.io/mount-utils => k8s.io/mount-utils v0.23.1-rc.0
+replace k8s.io/mount-utils => k8s.io/mount-utils v0.23.0
 
 replace k8s.io/pod-security-admission => k8s.io/pod-security-admission v0.23.0
 
