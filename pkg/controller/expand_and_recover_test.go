@@ -69,18 +69,18 @@ func TestExpandAndRecover(t *testing.T) {
 		{
 			name:                  "pv.spec.size >= pvc.spec.size, recover_expansion=on, resize_status=node_expansion_failed",
 			pvc:                   getTestPVC("test-vol0", "2G", "1G", "2G", v1.PersistentVolumeClaimNodeExpansionFailed),
-			pv:                    createPV(1, "claim01", defaultNS, "test-uid", &fsVolumeMode),
+			pv:                    createPV(2, "claim01", defaultNS, "test-uid", &fsVolumeMode),
 			recoverFeatureGate:    true,
 			expectedResizeStatus:  v1.PersistentVolumeClaimNodeExpansionPending,
 			expectedAllocatedSize: resource.MustParse("2G"),
-			expectResizeCall:      false,
+			expectResizeCall:      true,
 		},
 	}
 	for i := range tests {
 		test := tests[i]
 		t.Run(test.name, func(t *testing.T) {
 			defer featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.RecoverVolumeExpansionFailure, test.recoverFeatureGate)()
-			client := csi.NewMockClient("mock", !test.disableNodeExpansion, true, true, true)
+			client := csi.NewMockClient("foo", !test.disableNodeExpansion, true, true, true)
 			driverName, _ := client.GetDriverName(context.TODO())
 
 			var initialObjects []runtime.Object
@@ -103,6 +103,9 @@ func TestExpandAndRecover(t *testing.T) {
 			if err != nil {
 				t.Fatalf("expansion failed with %v", err)
 			}
+			if test.expectResizeCall != resizeCalled {
+				t.Fatalf("expansion failed: expected resize called %t, got %t", test.expectResizeCall, resizeCalled)
+			}
 			if *pvc.Status.ResizeStatus != test.expectedResizeStatus {
 				t.Fatalf("expected resize status to be %s, got %s", test.expectedResizeStatus, *pvc.Status.ResizeStatus)
 			}
@@ -112,9 +115,7 @@ func TestExpandAndRecover(t *testing.T) {
 			if test.expectedAllocatedSize.Cmp(*actualAllocatedSize) != 0 {
 				t.Fatalf("expansion failed: expected allocated size %s, got %s", test.expectedAllocatedSize.String(), actualAllocatedSize.String())
 			}
-			if test.expectResizeCall != resizeCalled {
-				t.Fatalf("expansion failed: expected resize called %t, got %t", test.expectResizeCall, resizeCalled)
-			}
+
 		})
 	}
 }

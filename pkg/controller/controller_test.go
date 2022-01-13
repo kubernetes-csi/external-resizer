@@ -485,6 +485,7 @@ func createPV(capacityGB int, pvcName, pvcNamespace string, pvcUID types.UID, vo
 			Name:      pvcName,
 			UID:       pvcUID,
 		}
+		pv.Status.Phase = v1.VolumeBound
 	}
 	return pv
 }
