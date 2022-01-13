@@ -25,6 +25,12 @@ const (
 	// owner: @sunpa93
 	// alpha: v1.22
 	AnnotateFsResize featuregate.Feature = "AnnotateFsResize"
+
+	// owner: @gnufied
+	// alpha: v1.23
+	//
+	// Allows users to recover from volume expansion failures
+	RecoverVolumeExpansionFailure featuregate.Feature = "RecoverVolumeExpansionFailure"
 )
 
 func init() {
@@ -32,5 +38,6 @@ func init() {
 }
 
 var defaultResizerFeatureGates = map[featuregate.Feature]featuregate.FeatureSpec{
-	AnnotateFsResize: {Default: false, PreRelease: featuregate.Alpha},
+	AnnotateFsResize:              {Default: false, PreRelease: featuregate.Alpha},
+	RecoverVolumeExpansionFailure: {Default: false, PreRelease: featuregate.Alpha},
 }

@@ -56,6 +56,10 @@ func (r *trivialResizer) CanSupport(pv *v1.PersistentVolume, pvc *v1.PersistentV
 	return true
 }
 
+func (r *trivialResizer) DriverSupportsControlPlaneExpansion() bool {
+	return false
+}
+
 func (r *trivialResizer) Resize(pv *v1.PersistentVolume, requestSize resource.Quantity) (newSize resource.Quantity, fsResizeRequired bool, err error) {
 	return requestSize, true, nil
 }
