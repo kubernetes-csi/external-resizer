@@ -31,7 +31,7 @@ func (ctrl *resizeController) expandAndRecover(pvc *v1.PersistentVolumeClaim, pv
 		klog.V(4).Infof("No need to resize PV %q", pv.Name)
 		return pvc, pv, nil, false
 	}
-	resizeCalled := false
+	resizeNotCalled := false
 
 	// if we are here that already means pvc.Spec.Size > pvc.Status.Size
 	pvcSpecSize := pvc.Spec.Resources.Requests[v1.ResourceStorage]
@@ -53,14 +53,25 @@ func (ctrl *resizeController) expandAndRecover(pvc *v1.PersistentVolumeClaim, pv
 	if pvSize.Cmp(pvcSpecSize) < 0 {
 		// PV is smaller than user requested size. In general some control-plane volume expansion
 		// is necessary at this point but if we were expanding the PVC before we should let
-		// previous operation finished before starting expansion to new user requested size.
+		// previous operation finish before starting expansion to new user requested size.
 		switch resizeStatus {
-		case v1.PersistentVolumeClaimControllerExpansionInProgress:
-		case v1.PersistentVolumeClaimNodeExpansionPending:
-		case v1.PersistentVolumeClaimNodeExpansionInProgress:
-		case v1.PersistentVolumeClaimNodeExpansionFailed:
+		case v1.PersistentVolumeClaimControllerExpansionInProgress,
+			v1.PersistentVolumeClaimNodeExpansionFailed:
 			if allocatedSize != nil {
 				newSize = *allocatedSize
+			}
+		case v1.PersistentVolumeClaimNodeExpansionPending,
+			v1.PersistentVolumeClaimNodeExpansionInProgress:
+			if allocatedSize != nil {
+				newSize = *allocatedSize
+			}
+			// If PV is already greater or equal to whatever newSize is, then we should
+			// let previously issued node expansion finish before starting new one.
+			// This case is essentially an optimization on previous case, generally it is safe
+			// to let volume plugin receive the expansion call (expansion calls are idempotent)
+			// but having this check here *avoids* unnecessary RPC calls to plugin.
+			if pvSize.Cmp(newSize) >= 0 {
+				return pvc, pv, nil, resizeNotCalled
 			}
 		default:
 			newSize = pvcSpecSize
@@ -77,11 +88,11 @@ func (ctrl *resizeController) expandAndRecover(pvc *v1.PersistentVolumeClaim, pv
 		//      safe to do so.
 		//   4. While expansion was still pending on the node, user reduced the pvc size.
 		switch resizeStatus {
-		case v1.PersistentVolumeClaimNodeExpansionInProgress:
-		case v1.PersistentVolumeClaimNodeExpansionPending:
+		case v1.PersistentVolumeClaimNodeExpansionInProgress,
+			v1.PersistentVolumeClaimNodeExpansionPending:
 			// we don't need to do any work. We could be here because of a spurious update event.
 			// This is case #1
-			return pvc, pv, nil, resizeCalled
+			return pvc, pv, nil, resizeNotCalled
 		case v1.PersistentVolumeClaimNodeExpansionFailed:
 			// This is case#3, we need to reset the pvc status in such a way that kubelet can safely retry volume
 			// expansion.
@@ -90,9 +101,9 @@ func (ctrl *resizeController) expandAndRecover(pvc *v1.PersistentVolumeClaim, pv
 			} else {
 				newSize = pvcSpecSize
 			}
-		case v1.PersistentVolumeClaimControllerExpansionInProgress:
-		case v1.PersistentVolumeClaimControllerExpansionFailed:
-		case v1.PersistentVolumeClaimNoExpansionInProgress:
+		case v1.PersistentVolumeClaimControllerExpansionInProgress,
+			v1.PersistentVolumeClaimControllerExpansionFailed,
+			v1.PersistentVolumeClaimNoExpansionInProgress:
 			// This is case#2 or it could also be case#4 when user manually shrunk the PVC
 			// after expanding it.
 			if allocatedSize != nil {
@@ -112,7 +123,7 @@ func (ctrl *resizeController) expandAndRecover(pvc *v1.PersistentVolumeClaim, pv
 	var err error
 	pvc, err = ctrl.markControllerResizeInProgress(pvc, newSize)
 	if err != nil {
-		return pvc, pv, fmt.Errorf("marking pvc %q as resizing failed: %v", util.PVCKey(pvc), err), resizeCalled
+		return pvc, pv, fmt.Errorf("marking pvc %q as resizing failed: %v", util.PVCKey(pvc), err), resizeNotCalled
 	}
 
 	// if pvc previously failed to expand because it can't be expanded when in-use
@@ -138,6 +149,7 @@ func (ctrl *resizeController) expandAndRecover(pvc *v1.PersistentVolumeClaim, pv
 	if err != nil {
 		// Record an event to indicate that resize operation is failed.
 		ctrl.eventRecorder.Eventf(pvc, v1.EventTypeWarning, util.VolumeResizeFailed, err.Error())
+		return pvc, pv, err, true
 	}
 
 	klog.V(4).Infof("Update capacity of PV %q to %s succeeded", pv.Name, newSize.String())

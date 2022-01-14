@@ -529,7 +529,7 @@ func (ctrl *resizeController) markPVCResizeInProgress(pvc *v1.PersistentVolumeCl
 
 	updatedPVC, err := ctrl.patchClaim(pvc, newPVC, true /* addResourceVersionCheck */)
 	if err != nil {
-		return nil, err
+		return updatedPVC, err
 	}
 	return updatedPVC, nil
 }
@@ -555,16 +555,16 @@ func (ctrl *resizeController) markPVCResizeFinished(
 func (ctrl *resizeController) patchClaim(oldPVC, newPVC *v1.PersistentVolumeClaim, addResourceVersionCheck bool) (*v1.PersistentVolumeClaim, error) {
 	patchBytes, err := util.GetPVCPatchData(oldPVC, newPVC, addResourceVersionCheck)
 	if err != nil {
-		return nil, fmt.Errorf("can't patch status of PVC %s as generate path data failed: %v", util.PVCKey(oldPVC), err)
+		return oldPVC, fmt.Errorf("can't patch status of PVC %s as generate path data failed: %v", util.PVCKey(oldPVC), err)
 	}
 	updatedClaim, updateErr := ctrl.kubeClient.CoreV1().PersistentVolumeClaims(oldPVC.Namespace).
 		Patch(context.TODO(), oldPVC.Name, types.StrategicMergePatchType, patchBytes, metav1.PatchOptions{}, "status")
 	if updateErr != nil {
-		return nil, fmt.Errorf("can't patch status of  PVC %s with %v", util.PVCKey(oldPVC), updateErr)
+		return oldPVC, fmt.Errorf("can't patch status of  PVC %s with %v", util.PVCKey(oldPVC), updateErr)
 	}
 	err = ctrl.claims.Update(updatedClaim)
 	if err != nil {
-		return nil, fmt.Errorf("error updating PVC %s in local cache: %v", util.PVCKey(newPVC), err)
+		return oldPVC, fmt.Errorf("error updating PVC %s in local cache: %v", util.PVCKey(newPVC), err)
 	}
 
 	return updatedClaim, nil

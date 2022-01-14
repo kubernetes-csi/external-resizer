@@ -75,6 +75,24 @@ func TestExpandAndRecover(t *testing.T) {
 			expectedAllocatedSize: resource.MustParse("2G"),
 			expectResizeCall:      true,
 		},
+		{
+			name:                  "pvc.spec.size > pv.spec.size, recover_expansion=on, resize_status-node_expansion_pending",
+			pvc:                   getTestPVC("test-vol0", "10G", "1G", "3G", v1.PersistentVolumeClaimNodeExpansionPending),
+			pv:                    createPV(3, "claim01", defaultNS, "test-uid", &fsVolumeMode),
+			recoverFeatureGate:    true,
+			expectedResizeStatus:  v1.PersistentVolumeClaimNodeExpansionPending,
+			expectedAllocatedSize: resource.MustParse("3G"),
+			expectResizeCall:      false,
+		},
+		{
+			name:                  "pvc.spec.size > pv.spec.size, recover_expansion=on, resize_status-node_expansion_inprogress",
+			pvc:                   getTestPVC("test-vol0", "10G", "1G", "3G", v1.PersistentVolumeClaimNodeExpansionInProgress),
+			pv:                    createPV(3, "claim01", defaultNS, "test-uid", &fsVolumeMode),
+			recoverFeatureGate:    true,
+			expectedResizeStatus:  v1.PersistentVolumeClaimNodeExpansionInProgress,
+			expectedAllocatedSize: resource.MustParse("3G"),
+			expectResizeCall:      false,
+		},
 	}
 	for i := range tests {
 		test := tests[i]
