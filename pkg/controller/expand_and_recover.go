@@ -1,5 +1,5 @@
 /*
-Copyright 2018 The Kubernetes Authors.
+Copyright 2022 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -31,6 +31,8 @@ func (ctrl *resizeController) expandAndRecover(pvc *v1.PersistentVolumeClaim, pv
 		klog.V(4).Infof("No need to resize PV %q", pv.Name)
 		return pvc, pv, nil, false
 	}
+	// only used as a sentinel value when function returns without
+	// actually performing expansion on the volume.
 	resizeNotCalled := false
 
 	// if we are here that already means pvc.Spec.Size > pvc.Status.Size
@@ -132,7 +134,7 @@ func (ctrl *resizeController) expandAndRecover(pvc *v1.PersistentVolumeClaim, pv
 		// Record an event to indicate that resizer is not expanding the pvc
 		msg := fmt.Sprintf("Unable to expand %s because CSI driver %s only supports offline expansion and volume is currently in-use", util.PVCKey(pvc), ctrl.resizer.Name())
 		ctrl.eventRecorder.Event(pvc, v1.EventTypeWarning, util.VolumeResizeFailed, msg)
-		return pvc, pv, fmt.Errorf(msg), false
+		return pvc, pv, fmt.Errorf(msg), resizeNotCalled
 	}
 
 	// Record an event to indicate that external resizer is resizing this volume.

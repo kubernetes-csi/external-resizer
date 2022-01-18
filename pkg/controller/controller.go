@@ -528,10 +528,7 @@ func (ctrl *resizeController) markPVCResizeInProgress(pvc *v1.PersistentVolumeCl
 		[]v1.PersistentVolumeClaimCondition{progressCondition})
 
 	updatedPVC, err := ctrl.patchClaim(pvc, newPVC, true /* addResourceVersionCheck */)
-	if err != nil {
-		return updatedPVC, err
-	}
-	return updatedPVC, nil
+	return updatedPVC, err
 }
 
 func (ctrl *resizeController) markPVCResizeFinished(
@@ -552,6 +549,9 @@ func (ctrl *resizeController) markPVCResizeFinished(
 	return nil
 }
 
+// Patches a given PVC with changes from newPVC. If addResourceVersionCheck is true
+// then a version check is added to the patch to ensure that we are not patching
+// old(and possibly outdated) PVC objects.
 func (ctrl *resizeController) patchClaim(oldPVC, newPVC *v1.PersistentVolumeClaim, addResourceVersionCheck bool) (*v1.PersistentVolumeClaim, error) {
 	patchBytes, err := util.GetPVCPatchData(oldPVC, newPVC, addResourceVersionCheck)
 	if err != nil {

@@ -1,5 +1,5 @@
 /*
-Copyright 2018 The Kubernetes Authors.
+Copyright 2022 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -83,6 +83,12 @@ func (ctrl *resizeController) markControllerExpansionFailed(pvc *v1.PersistentVo
 	newPVC := pvc.DeepCopy()
 	newPVC.Status.ResizeStatus = &expansionFailedOnController
 
+	// We are setting addResourceVersionCheck as false as an optimization
+	// because if expansion fails on controller and somehow we can't update PVC
+	// because our version of object is slightly older then the entire resize
+	// operation must be restarted before ResizeStatus can be set to Expansionfailedoncontroller.
+	// Setting addResourceVersionCheck to `false` ensures that we set `ResizeStatus`
+	// even if our version of PVC was slightly older.
 	updatedPVC, err := ctrl.patchClaim(pvc, newPVC, false /* addResourceVersionCheck */)
 	if err != nil {
 		return pvc, fmt.Errorf("Mark PVC %q as controller expansion failed, errored with: %v", util.PVCKey(pvc), err)
