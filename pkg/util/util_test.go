@@ -18,7 +18,7 @@ func TestGetPVCPatchData(t *testing.T) {
 		newPVC := c.OldPVC.DeepCopy()
 		newPVC.Status.Conditions = append(newPVC.Status.Conditions,
 			v1.PersistentVolumeClaimCondition{Type: VolumeResizing, Status: v1.ConditionTrue})
-		patchBytes, err := GetPVCPatchData(c.OldPVC, newPVC)
+		patchBytes, err := GetPVCPatchData(c.OldPVC, newPVC, true /*addResourceVersionCheck*/)
 		if err != nil {
 			t.Errorf("Case %d: Get patch data failed: %v", i, err)
 		}

@@ -125,6 +125,10 @@ func (r *csiResizer) CanSupport(pv *v1.PersistentVolume, pvc *v1.PersistentVolum
 	return true
 }
 
+func (r *csiResizer) DriverSupportsControlPlaneExpansion() bool {
+	return true
+}
+
 // Resize resizes the persistence volume given request size
 // It supports both CSI volume and migrated in-tree volume
 func (r *csiResizer) Resize(pv *v1.PersistentVolume, requestSize resource.Quantity) (resource.Quantity, bool, error) {

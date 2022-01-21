@@ -25,6 +25,8 @@ import (
 type Resizer interface {
 	// Name returns the resizer's name.
 	Name() string
+	// DriverSupportsControlPlaneExpansion returns true if driver really supports control-plane expansion
+	DriverSupportsControlPlaneExpansion() bool
 	// CanSupport returns true if resizer supports resize operation of this PV
 	// with its corresponding PVC.
 	CanSupport(pv *v1.PersistentVolume, pvc *v1.PersistentVolumeClaim) bool

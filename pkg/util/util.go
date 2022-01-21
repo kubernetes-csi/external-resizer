@@ -77,15 +77,17 @@ func MergeResizeConditionsOfPVC(oldConditions, newConditions []v1.PersistentVolu
 	return resultConditions
 }
 
-func GetPVCPatchData(oldPVC, newPVC *v1.PersistentVolumeClaim) ([]byte, error) {
+func GetPVCPatchData(oldPVC, newPVC *v1.PersistentVolumeClaim, addResourceVersionCheck bool) ([]byte, error) {
 	patchBytes, err := GetPatchData(oldPVC, newPVC)
 	if err != nil {
 		return patchBytes, err
 	}
 
-	patchBytes, err = addResourceVersion(patchBytes, oldPVC.ResourceVersion)
-	if err != nil {
-		return nil, fmt.Errorf("apply ResourceVersion to patch data failed: %v", err)
+	if addResourceVersionCheck {
+		patchBytes, err = addResourceVersion(patchBytes, oldPVC.ResourceVersion)
+		if err != nil {
+			return nil, fmt.Errorf("apply ResourceVersion to patch data failed: %v", err)
+		}
 	}
 	return patchBytes, nil
 }
