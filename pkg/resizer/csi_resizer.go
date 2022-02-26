@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strconv"
 	"time"
 
@@ -47,7 +48,7 @@ func NewResizerFromClient(
 	timeout time.Duration,
 	k8sClient kubernetes.Interface,
 	informerFactory informers.SharedInformerFactory,
-	driverName string) (Resizer, error) {
+	driverName string, enableNodeDeployment bool) (Resizer, error) {
 
 	supportControllerService, err := supportsPluginControllerService(csiClient, timeout)
 	if err != nil {
@@ -81,18 +82,20 @@ func NewResizerFromClient(
 	}
 
 	return &csiResizer{
-		name:    driverName,
-		client:  csiClient,
-		timeout: timeout,
+		name:                 driverName,
+		client:               csiClient,
+		timeout:              timeout,
+		enableNodeDeployment: enableNodeDeployment,
 
 		k8sClient: k8sClient,
 	}, nil
 }
 
 type csiResizer struct {
-	name    string
-	client  csi.Client
-	timeout time.Duration
+	name                 string
+	client               csi.Client
+	timeout              time.Duration
+	enableNodeDeployment bool
 
 	k8sClient kubernetes.Interface
 }
@@ -105,6 +108,7 @@ func (r *csiResizer) Name() string {
 // Resizer will resize the volume if it is CSI volume or is migration enabled in-tree volume
 func (r *csiResizer) CanSupport(pv *v1.PersistentVolume, pvc *v1.PersistentVolumeClaim) bool {
 	resizerName := pvc.Annotations[util.VolumeResizerKey]
+	selectedNode := pvc.Annotations[util.VolumeSelectedNodeKey]
 	// resizerName will be CSI driver name when CSI migration is enabled
 	// otherwise, it will be in-tree plugin name
 	// r.name is the CSI driver name, return true only when they match
@@ -119,7 +123,11 @@ func (r *csiResizer) CanSupport(pv *v1.PersistentVolume, pvc *v1.PersistentVolum
 		return false
 	}
 	if source.Driver != r.name {
-		klog.V(4).Infof("Skip resize PV %s for resizer %s", pv.Name, source.Driver)
+		klog.V(4).Infof("Skip resize PV %s for resizer %s non-matching driver", pv.Name, source.Driver)
+		return false
+	}
+	if r.enableNodeDeployment && selectedNode != os.Getenv("NODE_NAME") {
+		klog.V(4).Infof("Skip resize PV %s for resizer %s non-matching node", pv.Name, source.Driver)
 		return false
 	}
 	return true

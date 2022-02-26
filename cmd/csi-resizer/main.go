@@ -75,6 +75,8 @@ var (
 
 	handleVolumeInUseError = flag.Bool("handle-volume-inuse-error", true, "Flag to turn on/off capability to handle volume in use error in resizer controller. Defaults to true if not set.")
 
+	enableNodeDeployment = flag.Bool("node-deployment", false, "Enables deploying the sidecar controller together with a CSI driver on nodes to manage resizing for node-local volumes.")
+
 	featureGates map[string]bool
 
 	version = "unknown"
@@ -102,6 +104,19 @@ func main() {
 	}
 	if err := utilfeature.DefaultMutableFeatureGate.SetFromMap(featureGates); err != nil {
 		klog.Fatal(err)
+	}
+
+	// If distributed resizing is enabled and leaderElection is also set to true, return
+	if *enableNodeDeployment && *enableLeaderElection {
+		klog.Error("Leader election cannot happen when node-deployment is set to true")
+		os.Exit(1)
+	}
+
+	if *enableNodeDeployment {
+		node := os.Getenv("NODE_NAME")
+		if node == "" {
+			klog.Fatal("The NODE_NAME environment variable must be set when using --node-deployment.")
+		}
 	}
 
 	var config *rest.Config
@@ -156,7 +171,8 @@ func main() {
 		*timeout,
 		kubeClient,
 		informerFactory,
-		driverName)
+		driverName,
+		*enableNodeDeployment)
 	if err != nil {
 		klog.Fatal(err.Error())
 	}

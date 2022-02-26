@@ -68,7 +68,7 @@ func TestNewResizer(t *testing.T) {
 		client := csi.NewMockClient("mock", c.SupportsNodeResize, c.SupportsControllerResize, c.SupportsPluginControllerService, c.SupportsControllerSingleNodeMultiWriter)
 		driverName := "mock-driver"
 		k8sClient, informerFactory := fakeK8s()
-		resizer, err := NewResizerFromClient(client, 0, k8sClient, informerFactory, driverName)
+		resizer, err := NewResizerFromClient(client, 0, k8sClient, informerFactory, driverName, false)
 		if err != c.Error {
 			t.Errorf("Case %d: Unexpected error: wanted %v, got %v", i, c.Error, err)
 		}
@@ -160,7 +160,7 @@ func TestResizeMigratedPV(t *testing.T) {
 			client := csi.NewMockClient(driverName, true, true, true, true)
 			client.SetCheckMigratedLabel()
 			k8sClient, informerFactory := fakeK8s()
-			resizer, err := NewResizerFromClient(client, 0, k8sClient, informerFactory, driverName)
+			resizer, err := NewResizerFromClient(client, 0, k8sClient, informerFactory, driverName, false)
 			if err != nil {
 				t.Fatalf("Failed to create resizer: %v", err)
 			}
@@ -428,7 +428,7 @@ func TestCanSupport(t *testing.T) {
 			driverName := tc.driverName
 			client := csi.NewMockClient(driverName, true, true, true, true)
 			k8sClient, informerFactory := fakeK8s()
-			resizer, err := NewResizerFromClient(client, 0, k8sClient, informerFactory, driverName)
+			resizer, err := NewResizerFromClient(client, 0, k8sClient, informerFactory, driverName, false)
 			if err != nil {
 				t.Fatalf("Failed to create resizer: %v", err)
 			}

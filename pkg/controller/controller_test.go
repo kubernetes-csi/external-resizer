@@ -233,7 +233,7 @@ func TestController(t *testing.T) {
 		pvcInformer := informerFactory.Core().V1().PersistentVolumeClaims()
 		podInformer := informerFactory.Core().V1().Pods()
 
-		csiResizer, err := resizer.NewResizerFromClient(client, 15*time.Second, kubeClient, informerFactory, driverName)
+		csiResizer, err := resizer.NewResizerFromClient(client, 15*time.Second, kubeClient, informerFactory, driverName, false)
 		if err != nil {
 			t.Fatalf("Test %s: Unable to create resizer: %v", test.Name, err)
 		}
@@ -365,7 +365,7 @@ func TestResizePVC(t *testing.T) {
 		pvcInformer := informerFactory.Core().V1().PersistentVolumeClaims()
 		podInformer := informerFactory.Core().V1().Pods()
 
-		csiResizer, err := resizer.NewResizerFromClient(client, 15*time.Second, kubeClient, informerFactory, driverName)
+		csiResizer, err := resizer.NewResizerFromClient(client, 15*time.Second, kubeClient, informerFactory, driverName, false)
 		if err != nil {
 			t.Fatalf("Test %s: Unable to create resizer: %v", test.Name, err)
 		}

@@ -57,6 +57,8 @@ Note that the external-resizer does not scale with more replicas. Only one exter
 
 * `--timeout <duration>`: Timeout of all calls to CSI driver. It should be set to value that accommodates majority of `ControllerExpandVolume` calls. 10 seconds is used by default.
 
+* `--node-deployment`: Enables the resizer sidecar to handle resize operations for the volumes local to the node on which it is deployed. Off by default.
+
 * `-kube-api-burst <int>` : Burst to use while communicating with the kubernetes apiserver. Defaults to 10. (default 10).
 
 * `-kube-api-qps <float>` : QPS to use while communicating with the kubernetes apiserver. Defaults to 5.0. (default 5).
@@ -96,6 +98,16 @@ Note that the external-resizer does not scale with more replicas. Only one exter
 * `--version`: Prints current external-resizer version and quits.
 
 * All glog / klog arguments are supported, such as `-v <log level>` or `-alsologtostderr`.
+
+
+### Distributed Resizing
+
+The distributed resizing feature is provided to handle resize operations for local volumes. To use this functionality, the resizer sidecar should be deployed along with the csi driver on each node so that every node manages the resize operations only for the volumes local to that node. This feature can be enabled by setting the following command line options to true:
+
+* `--node-deployment`: Enables the resizer sidecar to handle resize operations for the volumes local to the node on which it is deployed. Off by default.
+
+Other than this, the NODE_NAME environment variable must be set where the CSI snapshotter sidecar is deployed. The value of NODE_NAME should be the name of the node where the sidecar is running.
+
 
 ### HTTP endpoint
 
