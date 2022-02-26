@@ -102,11 +102,11 @@ Note that the external-resizer does not scale with more replicas. Only one exter
 
 ### Distributed Resizing
 
-The distributed resizing feature is provided to handle resize operations for local volumes. To use this functionality, the resizer sidecar should be deployed along with the csi driver on each node so that every node manages the resize operations only for the volumes local to that node. This feature can be enabled by setting the following command line options to true:
+The distributed resizing feature is provided to handle resize operations for local volumes. To use this functionality, the resizer sidecar should be deployed along with the csi driver on each node so that every node manages the resize operations only for the volumes local to that node. This feature can be enabled by setting the following command line option to true:
 
 * `--node-deployment`: Enables the resizer sidecar to handle resize operations for the volumes local to the node on which it is deployed. Off by default.
 
-Other than this, the NODE_NAME environment variable must be set where the CSI snapshotter sidecar is deployed. The value of NODE_NAME should be the name of the node where the sidecar is running.
+Other than this, the NODE_NAME environment variable must be set where the CSI resizer sidecar is deployed. The value of NODE_NAME should be the name of the node where the sidecar is running.
 
 
 ### HTTP endpoint
