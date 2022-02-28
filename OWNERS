@@ -3,10 +3,7 @@
 approvers:
 - kubernetes-csi-approvers
 - gnufied
-- mlmhl
 
 reviewers:
 - kubernetes-csi-reviewers
 
-emeritus_reviewers:
-- mlmhl
