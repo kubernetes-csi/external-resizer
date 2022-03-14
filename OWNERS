@@ -8,5 +8,5 @@ approvers:
 reviewers:
 - kubernetes-csi-reviewers
 
-emeritus_reviewers:
-- mlmhl
+# emeritus_reviewers:
+# - mlmhl
