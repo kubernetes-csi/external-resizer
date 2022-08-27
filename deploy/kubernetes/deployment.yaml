@@ -19,7 +19,7 @@ spec:
       serviceAccount: csi-resizer
       containers:
         - name: csi-resizer
-          image: gcr.io/k8s-staging-sig-storage/csi-resizer:canary
+          image: registry.k8s.io/k8s-staging-sig-storage/csi-resizer:canary
           args:
             - "--v=5"
             - "--csi-address=$(ADDRESS)"
