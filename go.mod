@@ -17,7 +17,7 @@ require (
 	k8s.io/client-go v0.25.0
 	k8s.io/component-base v0.25.0
 	k8s.io/csi-translation-lib v0.23.0
-	k8s.io/klog/v2 v2.70.1
+	k8s.io/klog/v2 v2.80.1
 )
 
 require (
