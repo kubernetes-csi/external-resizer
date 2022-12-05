@@ -45,7 +45,7 @@ func (ctrl *resizeController) markControllerResizeInProgress(
 	newPVC.Status.AllocatedResources = v1.ResourceList{v1.ResourceStorage: newSize}
 	updatedPVC, err := ctrl.patchClaim(pvc, newPVC, true /* addResourceVersionCheck */)
 	if err != nil {
-		return nil, err
+		return pvc, err
 	}
 	return updatedPVC, nil
 }
