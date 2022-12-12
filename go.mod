@@ -1,6 +1,6 @@
 module github.com/kubernetes-csi/external-resizer
 
-go 1.17
+go 1.19
 
 require (
 	github.com/container-storage-interface/spec v1.7.0
@@ -13,10 +13,10 @@ require (
 	google.golang.org/grpc v1.49.0
 	k8s.io/api v0.26.0
 	k8s.io/apimachinery v0.26.0
-	k8s.io/apiserver v0.26.0-rc.0
+	k8s.io/apiserver v0.26.0
 	k8s.io/client-go v0.26.0
 	k8s.io/component-base v0.26.0
-	k8s.io/csi-translation-lib v0.26.0-rc.0
+	k8s.io/csi-translation-lib v0.26.0
 	k8s.io/klog/v2 v2.80.1
 )
 
