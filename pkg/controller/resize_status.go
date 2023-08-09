@@ -36,12 +36,12 @@ func (ctrl *resizeController) markControllerResizeInProgress(
 		Status:             v1.ConditionTrue,
 		LastTransitionTime: metav1.Now(),
 	}
-	controllerExpansionInProgress := v1.PersistentVolumeClaimControllerExpansionInProgress
+	controllerResizeInProgress := v1.PersistentVolumeClaimControllerResizeInProgress
 	conditions := []v1.PersistentVolumeClaimCondition{progressCondition}
 
 	newPVC := pvc.DeepCopy()
 	newPVC.Status.Conditions = util.MergeResizeConditionsOfPVC(newPVC.Status.Conditions, conditions)
-	newPVC.Status.ResizeStatus = &controllerExpansionInProgress
+	newPVC.Status.AllocatedResourceStatuses[v1.ResourceStorage] = controllerResizeInProgress
 	newPVC.Status.AllocatedResources = v1.ResourceList{v1.ResourceStorage: newSize}
 	updatedPVC, err := ctrl.patchClaim(pvc, newPVC, true /* addResourceVersionCheck */)
 	if err != nil {
@@ -60,15 +60,15 @@ func (ctrl *resizeController) markForPendingNodeExpansion(pvc *v1.PersistentVolu
 		Message:            "Waiting for user to (re-)start a pod to finish file system resize of volume on node.",
 	}
 
-	nodeExpansionPendingVar := v1.PersistentVolumeClaimNodeExpansionPending
+	nodeResizePendingVar := v1.PersistentVolumeClaimNodeResizePending
 	newPVC := pvc.DeepCopy()
 	newPVC.Status.Conditions = util.MergeResizeConditionsOfPVC(newPVC.Status.Conditions,
 		[]v1.PersistentVolumeClaimCondition{pvcCondition})
-	newPVC.Status.ResizeStatus = &nodeExpansionPendingVar
+	newPVC.Status.AllocatedResourceStatuses[v1.ResourceStorage] = nodeResizePendingVar
 	updatedPVC, err := ctrl.patchClaim(pvc, newPVC, true /* addResourceVersionCheck */)
 
 	if err != nil {
-		return updatedPVC, fmt.Errorf("Mark PVC %q as node expansion required failed: %v", util.PVCKey(pvc), err)
+		return updatedPVC, fmt.Errorf("Mark PVC %q as node resize required failed: %v", util.PVCKey(pvc), err)
 	}
 
 	klog.V(4).Infof("Mark PVC %q as file system resize required", util.PVCKey(pvc))
@@ -79,19 +79,19 @@ func (ctrl *resizeController) markForPendingNodeExpansion(pvc *v1.PersistentVolu
 }
 
 func (ctrl *resizeController) markControllerExpansionFailed(pvc *v1.PersistentVolumeClaim) (*v1.PersistentVolumeClaim, error) {
-	expansionFailedOnController := v1.PersistentVolumeClaimControllerExpansionFailed
+	resizeFailedOnController := v1.PersistentVolumeClaimControllerResizeFailed
 	newPVC := pvc.DeepCopy()
-	newPVC.Status.ResizeStatus = &expansionFailedOnController
+	newPVC.Status.AllocatedResourceStatuses[v1.ResourceStorage] = resizeFailedOnController
 
 	// We are setting addResourceVersionCheck as false as an optimization
-	// because if expansion fails on controller and somehow we can't update PVC
+	// because if resize fails on controller and somehow we can't update PVC
 	// because our version of object is slightly older then the entire resize
 	// operation must be restarted before ResizeStatus can be set to Expansionfailedoncontroller.
 	// Setting addResourceVersionCheck to `false` ensures that we set `ResizeStatus`
 	// even if our version of PVC was slightly older.
 	updatedPVC, err := ctrl.patchClaim(pvc, newPVC, false /* addResourceVersionCheck */)
 	if err != nil {
-		return pvc, fmt.Errorf("Mark PVC %q as controller expansion failed, errored with: %v", util.PVCKey(pvc), err)
+		return pvc, fmt.Errorf("Mark PVC %q as controller resize failed, errored with: %v", util.PVCKey(pvc), err)
 	}
 	return updatedPVC, nil
 }
@@ -102,8 +102,8 @@ func (ctrl *resizeController) markOverallExpansionAsFinished(
 	newPVC := pvc.DeepCopy()
 	newPVC.Status.Capacity[v1.ResourceStorage] = newSize
 	newPVC.Status.Conditions = util.MergeResizeConditionsOfPVC(pvc.Status.Conditions, []v1.PersistentVolumeClaimCondition{})
-	expansionFinished := v1.PersistentVolumeClaimNoExpansionInProgress
-	newPVC.Status.ResizeStatus = &expansionFinished
+	var resizeFinished v1.ClaimResourceStatus
+	newPVC.Status.AllocatedResourceStatuses[v1.ResourceStorage] = resizeFinished
 
 	updatedPVC, err := ctrl.patchClaim(pvc, newPVC, true /* addResourceVersionCheck */)
 	if err != nil {
