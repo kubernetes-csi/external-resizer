@@ -53,6 +53,14 @@ func TestResizeFunctions(t *testing.T) {
 			},
 		},
 		{
+			name:        "mark controller resize failed",
+			pvc:         basePVC.get(),
+			expectedPVC: basePVC.withStorageResourceStatus(v1.PersistentVolumeClaimControllerResizeFailed).get(),
+			testFunc: func(pvc *v1.PersistentVolumeClaim, ctrl *resizeController, q resource.Quantity) (*v1.PersistentVolumeClaim, error) {
+				return ctrl.markControllerExpansionFailed(pvc)
+			},
+		},
+		{
 			name: "mark resize finished",
 			pvc: basePVC.withResourceStatus(v1.ResourceCPU, v1.PersistentVolumeClaimControllerResizeFailed).
 				withStorageResourceStatus(v1.PersistentVolumeClaimNodeResizePending).get(),
