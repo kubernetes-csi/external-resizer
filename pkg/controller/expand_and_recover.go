@@ -18,6 +18,7 @@ package controller
 
 import (
 	"fmt"
+
 	"github.com/kubernetes-csi/external-resizer/pkg/util"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -41,10 +42,7 @@ func (ctrl *resizeController) expandAndRecover(pvc *v1.PersistentVolumeClaim, pv
 	pvSize := pv.Spec.Capacity[v1.ResourceStorage]
 
 	newSize := pvcSpecSize
-	resizeStatus := v1.PersistentVolumeClaimNoExpansionInProgress
-	if pvc.Status.ResizeStatus != nil {
-		resizeStatus = *pvc.Status.ResizeStatus
-	}
+	resizeStatus := pvc.Status.AllocatedResourceStatuses[v1.ResourceStorage]
 
 	var allocatedSize *resource.Quantity
 	t, ok := pvc.Status.AllocatedResources[v1.ResourceStorage]
@@ -57,13 +55,13 @@ func (ctrl *resizeController) expandAndRecover(pvc *v1.PersistentVolumeClaim, pv
 		// is necessary at this point but if we were expanding the PVC before we should let
 		// previous operation finish before starting expansion to new user requested size.
 		switch resizeStatus {
-		case v1.PersistentVolumeClaimControllerExpansionInProgress,
-			v1.PersistentVolumeClaimNodeExpansionFailed:
+		case v1.PersistentVolumeClaimControllerResizeInProgress,
+			v1.PersistentVolumeClaimNodeResizeFailed:
 			if allocatedSize != nil {
 				newSize = *allocatedSize
 			}
-		case v1.PersistentVolumeClaimNodeExpansionPending,
-			v1.PersistentVolumeClaimNodeExpansionInProgress:
+		case v1.PersistentVolumeClaimNodeResizePending,
+			v1.PersistentVolumeClaimNodeResizeInProgress:
 			if allocatedSize != nil {
 				newSize = *allocatedSize
 			}
@@ -90,12 +88,12 @@ func (ctrl *resizeController) expandAndRecover(pvc *v1.PersistentVolumeClaim, pv
 		//      safe to do so.
 		//   4. While expansion was still pending on the node, user reduced the pvc size.
 		switch resizeStatus {
-		case v1.PersistentVolumeClaimNodeExpansionInProgress,
-			v1.PersistentVolumeClaimNodeExpansionPending:
+		case v1.PersistentVolumeClaimNodeResizeInProgress,
+			v1.PersistentVolumeClaimNodeResizePending:
 			// we don't need to do any work. We could be here because of a spurious update event.
 			// This is case #1
 			return pvc, pv, nil, resizeNotCalled
-		case v1.PersistentVolumeClaimNodeExpansionFailed:
+		case v1.PersistentVolumeClaimNodeResizeFailed:
 			// This is case#3, we need to reset the pvc status in such a way that kubelet can safely retry volume
 			// expansion.
 			if ctrl.resizer.DriverSupportsControlPlaneExpansion() && allocatedSize != nil {
@@ -103,19 +101,18 @@ func (ctrl *resizeController) expandAndRecover(pvc *v1.PersistentVolumeClaim, pv
 			} else {
 				newSize = pvcSpecSize
 			}
-		case v1.PersistentVolumeClaimControllerExpansionInProgress,
-			v1.PersistentVolumeClaimControllerExpansionFailed,
-			v1.PersistentVolumeClaimNoExpansionInProgress:
+		case v1.PersistentVolumeClaimControllerResizeInProgress,
+			v1.PersistentVolumeClaimControllerResizeFailed:
 			// This is case#2 or it could also be case#4 when user manually shrunk the PVC
 			// after expanding it.
 			if allocatedSize != nil {
 				newSize = *allocatedSize
 			}
 		default:
-			// It is impossible for ResizeStatus to be nil and allocatedSize to be not nil but somehow
+			// It is impossible for ResizeStatus to be empty and allocatedSize to be not nil but somehow
 			// if we do end up in this state, it is safest to resume expansion to last recorded size in
 			// allocatedSize variable.
-			if pvc.Status.ResizeStatus == nil && allocatedSize != nil {
+			if resizeStatus == "" && allocatedSize != nil {
 				newSize = *allocatedSize
 			} else {
 				newSize = pvcSpecSize
