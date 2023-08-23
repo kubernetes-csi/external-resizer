@@ -11,10 +11,10 @@ require (
 	golang.org/x/term v0.10.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/grpc v1.54.0
-	k8s.io/api v0.28.0-rc.0
-	k8s.io/apimachinery v0.28.0-rc.0
+	k8s.io/api v0.29.0-alpha.0
+	k8s.io/apimachinery v0.29.0-alpha.0
 	k8s.io/apiserver v0.28.0-rc.0
-	k8s.io/client-go v0.28.0-rc.0
+	k8s.io/client-go v0.29.0-alpha.0
 	k8s.io/component-base v0.28.0-rc.0
 	k8s.io/csi-translation-lib v0.28.0-rc.0
 	k8s.io/klog/v2 v2.100.1
