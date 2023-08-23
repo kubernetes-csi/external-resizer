@@ -10,7 +10,7 @@ require (
 	golang.org/x/oauth2 v0.8.0 // indirect
 	golang.org/x/term v0.10.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
-	google.golang.org/grpc v1.54.0
+	google.golang.org/grpc v1.57.0
 	k8s.io/api v0.28.0-rc.0
 	k8s.io/apimachinery v0.28.0-rc.0
 	k8s.io/apiserver v0.28.0-rc.0
