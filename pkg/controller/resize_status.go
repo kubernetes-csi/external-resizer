@@ -66,10 +66,10 @@ func (ctrl *resizeController) markForPendingNodeExpansion(pvc *v1.PersistentVolu
 	updatedPVC, err := ctrl.patchClaim(pvc, newPVC, true /* addResourceVersionCheck */)
 
 	if err != nil {
-		return updatedPVC, fmt.Errorf("mark PVC %q as node expansion required failed: %v", util.PVCKey(pvc), err)
+		return updatedPVC, fmt.Errorf("mark PVC %q as node expansion required failed: %v", klog.KObj(pvc), err)
 	}
 
-	klog.V(4).Infof("Mark PVC %q as file system resize required", util.PVCKey(pvc))
+	klog.V(4).InfoS("Mark PVC as file system resize required", "PVC", klog.KObj(pvc))
 	ctrl.eventRecorder.Eventf(pvc, v1.EventTypeNormal,
 		util.FileSystemResizeRequired, "Require file system resize of volume on node")
 
@@ -88,7 +88,7 @@ func (ctrl *resizeController) markControllerExpansionFailed(pvc *v1.PersistentVo
 	// even if our version of PVC was slightly older.
 	updatedPVC, err := ctrl.patchClaim(pvc, newPVC, false /* addResourceVersionCheck */)
 	if err != nil {
-		return pvc, fmt.Errorf("mark PVC %q as controller expansion failed, errored with: %v", util.PVCKey(pvc), err)
+		return pvc, fmt.Errorf("mark PVC %q as controller expansion failed, errored with: %v", klog.KObj(pvc), err)
 	}
 	return updatedPVC, nil
 }
@@ -111,10 +111,10 @@ func (ctrl *resizeController) markOverallExpansionAsFinished(
 
 	updatedPVC, err := ctrl.patchClaim(pvc, newPVC, true /* addResourceVersionCheck */)
 	if err != nil {
-		return pvc, fmt.Errorf("mark PVC %q as resize finished failed: %v", util.PVCKey(pvc), err)
+		return pvc, fmt.Errorf("mark PVC %q as resize finished failed: %v", klog.KObj(pvc), err)
 	}
 
-	klog.V(4).Infof("Resize PVC %q finished", util.PVCKey(pvc))
+	klog.V(4).InfoS("Resize PVC finished", "PVC", klog.KObj(pvc))
 	ctrl.eventRecorder.Eventf(pvc, v1.EventTypeNormal, util.VolumeResizeSuccess, "Resize volume succeeded")
 
 	return updatedPVC, nil
