@@ -6,17 +6,17 @@ require (
 	github.com/container-storage-interface/spec v1.8.0
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/imdario/mergo v0.3.12 // indirect
-	github.com/kubernetes-csi/csi-lib-utils v0.13.0
+	github.com/kubernetes-csi/csi-lib-utils v0.14.0
 	golang.org/x/oauth2 v0.8.0 // indirect
 	golang.org/x/term v0.10.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/grpc v1.54.0
-	k8s.io/api v0.28.0-rc.0
-	k8s.io/apimachinery v0.28.0-rc.0
-	k8s.io/apiserver v0.28.0-rc.0
-	k8s.io/client-go v0.28.0-rc.0
-	k8s.io/component-base v0.28.0-rc.0
-	k8s.io/csi-translation-lib v0.28.0-rc.0
+	k8s.io/api v0.28.0
+	k8s.io/apimachinery v0.28.0
+	k8s.io/apiserver v0.28.0
+	k8s.io/client-go v0.28.0
+	k8s.io/component-base v0.28.0
+	k8s.io/csi-translation-lib v0.28.0
 	k8s.io/klog/v2 v2.100.1
 )
 
@@ -52,7 +52,7 @@ require (
 	github.com/prometheus/procfs v0.10.1 // indirect
 	github.com/spf13/cobra v1.7.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
-	golang.org/x/net v0.12.0 // indirect
+	golang.org/x/net v0.13.0 // indirect
 	golang.org/x/sys v0.10.0 // indirect
 	golang.org/x/text v0.11.0 // indirect
 	golang.org/x/time v0.3.0 // indirect
@@ -67,3 +67,17 @@ require (
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.3 // indirect
 	sigs.k8s.io/yaml v1.3.0 // indirect
 )
+
+replace k8s.io/api => k8s.io/api v0.28.0
+
+replace k8s.io/apimachinery => k8s.io/apimachinery v0.28.0
+
+replace k8s.io/apiserver => k8s.io/apiserver v0.28.0
+
+replace k8s.io/client-go => k8s.io/client-go v0.28.0
+
+replace k8s.io/component-base => k8s.io/component-base v0.28.0
+
+replace k8s.io/csi-translation-lib => k8s.io/csi-translation-lib v0.28.0
+
+replace k8s.io/kms => k8s.io/kms v0.28.0
