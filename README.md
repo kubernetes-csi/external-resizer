@@ -14,7 +14,7 @@ This information reflects the head of this branch.
 
 | Compatible with CSI Version | Container Image | [Min K8s Version](https://kubernetes-csi.github.io/docs/kubernetes-compatibility.html#minimum-version) | [Recommended K8s Version](https://kubernetes-csi.github.io/docs/kubernetes-compatibility.html#recommended-version) |
 | ------------------------------------------------------------------------------------------ | -------------------------------| --------------- | ------------- |
-| [CSI Spec v1.5.0](https://github.com/container-storage-interface/spec/releases/tag/v1.5.0) | k8s.gcr.io/sig-storage/csi-resizer | 1.16 | 1.22 |
+| [CSI Spec v1.5.0](https://github.com/container-storage-interface/spec/releases/tag/v1.5.0) | k8s.gcr.io/sig-storage/csi-resizer | 1.16 | 1.28 |
 
 ## Feature status
 
@@ -82,7 +82,7 @@ Note that the external-resizer does not scale with more replicas. Only one exter
     smaller proposed size, edit `.spec.resources` for that PVC and choose a value that is less than the value you previously tried.
     This is useful if expansion to a higher value did not succeed because of capacity constraint.
     If that has happened, or you suspect that it might have, you can retry expansion by specifying a
-    size that is within the capacity limits of underlying storage provider. You can monitor status of resize operation by watching `.status.resizeStatus` and events on the PVC.
+    size that is within the capacity limits of underlying storage provider. You can monitor status of resize operation by watching `.status.resizeStatus` and events on the PVC. Use of this feature-gate requires Kubernetes 1.28.
 
 
 #### Other recognized arguments
