@@ -7,7 +7,7 @@
 ## Changes by Kind
 
 ### Feature
-- Update recover from expansion failure to use newer APIs (#270, @gnufied)
+- Update recover from expansion failure to use newer APIs. This is part of recover from volume expansion feature, which is an alpha feature and it requires Kubernetes 1.28. (#270, @gnufied)
 
 ### Other (Cleanup or Flake)
 - Update kubernetes dependencies to v1.28.0 (#332, @Sneha-at)
