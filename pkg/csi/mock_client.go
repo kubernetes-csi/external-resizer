@@ -12,13 +12,16 @@ func NewMockClient(
 	name string,
 	supportsNodeResize bool,
 	supportsControllerResize bool,
+	supportsControllerModify bool,
 	supportsPluginControllerService bool,
 	supportsControllerSingleNodeMultiWriter bool) *MockClient {
 	return &MockClient{
 		name:                                    name,
 		supportsNodeResize:                      supportsNodeResize,
 		supportsControllerResize:                supportsControllerResize,
+		supportsControllerModify:                supportsControllerModify,
 		expandCalled:                            0,
+		modifyCalled:                            0,
 		supportsPluginControllerService:         supportsPluginControllerService,
 		supportsControllerSingleNodeMultiWriter: supportsControllerSingleNodeMultiWriter,
 	}
@@ -28,10 +31,13 @@ type MockClient struct {
 	name                                    string
 	supportsNodeResize                      bool
 	supportsControllerResize                bool
+	supportsControllerModify                bool
 	supportsPluginControllerService         bool
 	supportsControllerSingleNodeMultiWriter bool
 	expandCalled                            int
+	modifyCalled                            int
 	expansionFailed                         bool
+	modifyFailed                            bool
 	checkMigratedLabel                      bool
 	usedSecrets                             map[string]string
 	usedCapability                          *csi.VolumeCapability
@@ -49,6 +55,10 @@ func (c *MockClient) SupportsControllerResize(context.Context) (bool, error) {
 	return c.supportsControllerResize, nil
 }
 
+func (c *MockClient) SupportsControllerModify(context.Context) (bool, error) {
+	return c.supportsControllerModify, nil
+}
+
 func (c *MockClient) SupportsNodeResize(context.Context) (bool, error) {
 	return c.supportsNodeResize, nil
 }
@@ -59,6 +69,10 @@ func (c *MockClient) SupportsControllerSingleNodeMultiWriter(context.Context) (b
 
 func (c *MockClient) SetExpansionFailed() {
 	c.expansionFailed = true
+}
+
+func (c *MockClient) SetModifyFailed() {
+	c.modifyFailed = true
 }
 
 func (c *MockClient) SetCheckMigratedLabel() {
@@ -95,6 +109,10 @@ func (c *MockClient) GetExpandCount() int {
 	return c.expandCalled
 }
 
+func (c *MockClient) GetModifyCount() int {
+	return c.modifyCalled
+}
+
 func (c *MockClient) GetCapability() *csi.VolumeCapability {
 	return c.usedCapability
 }
@@ -106,4 +124,16 @@ func (c *MockClient) GetSecrets() map[string]string {
 
 func (c *MockClient) CloseConnection() {
 
+}
+
+func (c *MockClient) Modify(
+	ctx context.Context,
+	volumeID string,
+	secrets map[string]string,
+	mutableParameters map[string]string) error {
+	c.modifyCalled++
+	if c.modifyFailed {
+		return fmt.Errorf("modify failed")
+	}
+	return nil
 }
