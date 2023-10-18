@@ -27,5 +27,6 @@ const (
 const (
 	// If CSI migration is enabled, the value will be CSI driver name
 	// Otherwise, it will be in-tree storage plugin name
-	VolumeResizerKey = "volume.kubernetes.io/storage-resizer"
+	VolumeResizerKey      = "volume.kubernetes.io/storage-resizer"
+	VolumeSelectedNodeKey = "volume.kubernetes.io/selected-node"
 )
