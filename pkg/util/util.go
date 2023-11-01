@@ -40,11 +40,6 @@ var (
 	AnnPreResizeCapacity = "volume.alpha.kubernetes.io/pre-resize-capacity"
 )
 
-// PVCKey returns an unique key of a PVC object,
-func PVCKey(pvc *v1.PersistentVolumeClaim) string {
-	return fmt.Sprintf("%s/%s", pvc.Namespace, pvc.Name)
-}
-
 // MergeResizeConditionsOfPVC updates pvc with requested resize conditions
 // leaving other conditions untouched.
 func MergeResizeConditionsOfPVC(oldConditions, newConditions []v1.PersistentVolumeClaimCondition) []v1.PersistentVolumeClaimCondition {

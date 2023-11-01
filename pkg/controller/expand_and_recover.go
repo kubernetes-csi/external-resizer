@@ -29,7 +29,7 @@ import (
 
 func (ctrl *resizeController) expandAndRecover(pvc *v1.PersistentVolumeClaim, pv *v1.PersistentVolume) (*v1.PersistentVolumeClaim, *v1.PersistentVolume, error, bool) {
 	if !ctrl.pvCanBeExpanded(pv, pvc) {
-		klog.V(4).Infof("No need to resize PV %q", pv.Name)
+		klog.V(4).InfoS("No need to resize", "PV", klog.KObj(pv))
 		return pvc, pv, nil, false
 	}
 	// only used as a sentinel value when function returns without
@@ -122,14 +122,14 @@ func (ctrl *resizeController) expandAndRecover(pvc *v1.PersistentVolumeClaim, pv
 	var err error
 	pvc, err = ctrl.markControllerResizeInProgress(pvc, newSize)
 	if err != nil {
-		return pvc, pv, fmt.Errorf("marking pvc %q as resizing failed: %v", util.PVCKey(pvc), err), resizeNotCalled
+		return pvc, pv, fmt.Errorf("marking pvc %q as resizing failed: %v", klog.KObj(pvc), err), resizeNotCalled
 	}
 
 	// if pvc previously failed to expand because it can't be expanded when in-use
 	// we must not try expansion here
 	if ctrl.usedPVCs.hasInUseErrors(pvc) && ctrl.usedPVCs.checkForUse(pvc) {
 		// Record an event to indicate that resizer is not expanding the pvc
-		msg := fmt.Sprintf("Unable to expand %s because CSI driver %s only supports offline expansion and volume is currently in-use", util.PVCKey(pvc), ctrl.resizer.Name())
+		msg := fmt.Sprintf("Unable to expand %s because CSI driver %s only supports offline expansion and volume is currently in-use", klog.KObj(pvc), ctrl.resizer.Name())
 		ctrl.eventRecorder.Event(pvc, v1.EventTypeWarning, util.VolumeResizeFailed, msg)
 		return pvc, pv, fmt.Errorf(msg), resizeNotCalled
 	}
@@ -151,7 +151,7 @@ func (ctrl *resizeController) expandAndRecover(pvc *v1.PersistentVolumeClaim, pv
 		return pvc, pv, err, true
 	}
 
-	klog.V(4).Infof("Update capacity of PV %q to %s succeeded", pv.Name, newSize.String())
+	klog.V(4).InfoS("Update capacity of PV succeeded", "PV", klog.KObj(pv), "capacity", newSize.String())
 	return pvc, pv, nil, true
 }
 
@@ -171,13 +171,13 @@ func (ctrl *resizeController) callResizeOnPlugin(
 			var markExpansionFailedError error
 			pvc, markExpansionFailedError = ctrl.markControllerExpansionFailed(pvc)
 			if markExpansionFailedError != nil {
-				return pvc, pv, fmt.Errorf("resizing failed in controller with %v but failed to update PVC %s with: %v", err, util.PVCKey(pvc), markExpansionFailedError)
+				return pvc, pv, fmt.Errorf("resizing failed in controller with %v but failed to update PVC %s with: %v", err, klog.KObj(pvc), markExpansionFailedError)
 			}
 		}
 		return pvc, pv, fmt.Errorf("resize volume %q by resizer %q failed: %v", pv.Name, ctrl.name, err)
 	}
 
-	klog.V(4).Infof("Resize volume succeeded for volume %q, start to update PV's capacity", pv.Name)
+	klog.V(4).InfoS("Resize volume succeeded, start to update PV's capacity", "PV", klog.KObj(pv))
 
 	pv, err = ctrl.updatePVCapacity(pv, oldSize, updatedSize, fsResizeRequired)
 	if err != nil {
@@ -195,12 +195,12 @@ func (ctrl *resizeController) callResizeOnPlugin(
 // checks if pv can be expanded
 func (ctrl *resizeController) pvCanBeExpanded(pv *v1.PersistentVolume, pvc *v1.PersistentVolumeClaim) bool {
 	if !ctrl.resizer.CanSupport(pv, pvc) {
-		klog.V(4).Infof("Resizer %q doesn't support PV %q", ctrl.name, pv.Name)
+		klog.V(4).InfoS("Resizer doesn't support PV", "controller", ctrl.name, "PV", klog.KObj(pv))
 		return false
 	}
 
 	if (pv.Spec.ClaimRef == nil) || (pvc.Namespace != pv.Spec.ClaimRef.Namespace) || (pvc.UID != pv.Spec.ClaimRef.UID) {
-		klog.V(4).Infof("persistent volume is not bound to PVC being updated: %s", util.PVCKey(pvc))
+		klog.V(4).InfoS("Persistent volume is not bound to PVC being updated", "PVC", klog.KObj(pvc))
 		return false
 	}
 	return true
