@@ -1,3 +1,38 @@
+# Release notes for 1.9.2
+
+[Documentation](https://kubernetes-csi.github.io)
+
+# Changelog since 1.9.1
+
+## Changes by Kind
+
+### Bug or Regression
+
+- Bump google.golang.org/grpc from v1.54.0 to v1.59.0 to fix CVE-2023-44487. ([#349](https://github.com/kubernetes-csi/external-resizer/pull/349), [@songjiaxun](https://github.com/songjiaxun))
+
+## Dependencies
+
+### Added
+_Nothing has changed._
+
+### Changed
+- cloud.google.com/go/compute: v1.15.1 → v1.23.0
+- github.com/cncf/xds/go: [06c439d → e9ce688](https://github.com/cncf/xds/go/compare/06c439d...e9ce688)
+- github.com/envoyproxy/go-control-plane: [v0.10.3 → v0.11.1](https://github.com/envoyproxy/go-control-plane/compare/v0.10.3...v0.11.1)
+- github.com/envoyproxy/protoc-gen-validate: [v0.9.1 → v1.0.2](https://github.com/envoyproxy/protoc-gen-validate/compare/v0.9.1...v1.0.2)
+- github.com/golang/glog: [v1.0.0 → v1.1.2](https://github.com/golang/glog/compare/v1.0.0...v1.1.2)
+- github.com/google/uuid: [v1.3.0 → v1.3.1](https://github.com/google/uuid/compare/v1.3.0...v1.3.1)
+- golang.org/x/oauth2: v0.8.0 → v0.11.0
+- golang.org/x/sync: v0.2.0 → v0.3.0
+- google.golang.org/genproto/googleapis/api: dd9d682 → b8732ec
+- google.golang.org/genproto/googleapis/rpc: 28d5490 → b8732ec
+- google.golang.org/genproto: 0005af6 → b8732ec
+- google.golang.org/grpc: v1.54.0 → v1.59.0
+- google.golang.org/protobuf: v1.30.0 → v1.31.0
+
+### Removed
+_Nothing has changed._
+
 # Release notes for 1.9.1
 
 [Documentation](https://kubernetes-csi.github.io)
