@@ -459,7 +459,7 @@ func createPVC(resizerName string) *v1.PersistentVolumeClaim {
 			},
 		},
 		Spec: v1.PersistentVolumeClaimSpec{
-			Resources: v1.ResourceRequirements{
+			Resources: v1.VolumeResourceRequirements{
 				Requests: map[v1.ResourceName]resource.Quantity{
 					v1.ResourceStorage: request,
 				},
