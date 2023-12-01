@@ -155,7 +155,6 @@ func main() {
 		csiClient,
 		*timeout,
 		kubeClient,
-		informerFactory,
 		driverName)
 	if err != nil {
 		klog.Fatal(err.Error())

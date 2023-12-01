@@ -13,8 +13,6 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/informers"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
 )
 
@@ -67,8 +65,8 @@ func TestNewResizer(t *testing.T) {
 	} {
 		client := csi.NewMockClient("mock", c.SupportsNodeResize, c.SupportsControllerResize, c.SupportsPluginControllerService, c.SupportsControllerSingleNodeMultiWriter)
 		driverName := "mock-driver"
-		k8sClient, informerFactory := fakeK8s()
-		resizer, err := NewResizerFromClient(client, 0, k8sClient, informerFactory, driverName)
+		k8sClient := fake.NewSimpleClientset()
+		resizer, err := NewResizerFromClient(client, 0, k8sClient, driverName)
 		if err != c.Error {
 			t.Errorf("Case %d: Unexpected error: wanted %v, got %v", i, c.Error, err)
 		}
@@ -159,8 +157,8 @@ func TestResizeMigratedPV(t *testing.T) {
 			driverName := tc.driverName
 			client := csi.NewMockClient(driverName, true, true, true, true)
 			client.SetCheckMigratedLabel()
-			k8sClient, informerFactory := fakeK8s()
-			resizer, err := NewResizerFromClient(client, 0, k8sClient, informerFactory, driverName)
+			k8sClient := fake.NewSimpleClientset()
+			resizer, err := NewResizerFromClient(client, 0, k8sClient, driverName)
 			if err != nil {
 				t.Fatalf("Failed to create resizer: %v", err)
 			}
@@ -427,8 +425,8 @@ func TestCanSupport(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			driverName := tc.driverName
 			client := csi.NewMockClient(driverName, true, true, true, true)
-			k8sClient, informerFactory := fakeK8s()
-			resizer, err := NewResizerFromClient(client, 0, k8sClient, informerFactory, driverName)
+			k8sClient := fake.NewSimpleClientset()
+			resizer, err := NewResizerFromClient(client, 0, k8sClient, driverName)
 			if err != nil {
 				t.Fatalf("Failed to create resizer: %v", err)
 			}
@@ -503,12 +501,6 @@ func makeTestPV(name string, sizeGig int, driverName, volID string, withSecret b
 		}
 	}
 	return pv
-}
-
-func fakeK8s() (kubernetes.Interface, informers.SharedInformerFactory) {
-	client := fake.NewSimpleClientset()
-	informerFactory := informers.NewSharedInformerFactory(client, 0)
-	return client, informerFactory
 }
 
 func createInTreeEBSPV(capacityGB int) *v1.PersistentVolume {

@@ -118,7 +118,7 @@ func TestExpandAndRecover(t *testing.T) {
 
 			kubeClient, informerFactory := fakeK8s(initialObjects)
 
-			csiResizer, err := resizer.NewResizerFromClient(client, 15*time.Second, kubeClient, informerFactory, driverName)
+			csiResizer, err := resizer.NewResizerFromClient(client, 15*time.Second, kubeClient, driverName)
 			if err != nil {
 				t.Fatalf("Test %s: Unable to create resizer: %v", test.name, err)
 			}
