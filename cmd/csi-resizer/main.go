@@ -31,6 +31,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/util/workqueue"
 
 	"github.com/kubernetes-csi/csi-lib-utils/leaderelection"
@@ -131,6 +132,9 @@ func main() {
 
 	config.QPS = float32(*kubeAPIQPS)
 	config.Burst = *kubeAPIBurst
+	// Use protobuf as default contentType to communicate with apiserver
+	config.AcceptContentTypes = strings.Join([]string{runtime.ContentTypeProtobuf, runtime.ContentTypeJSON}, ",")
+	config.ContentType = runtime.ContentTypeProtobuf
 
 	kubeClient, err := kubernetes.NewForConfig(config)
 	if err != nil {
