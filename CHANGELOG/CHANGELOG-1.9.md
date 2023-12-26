@@ -1,3 +1,18 @@
+# Release notes for v1.9.3
+
+[Documentation](https://kubernetes-csi.github.io)
+
+## Dependencies
+
+### Added
+_Nothing has changed._
+
+### Changed
+- github.com/kubernetes-csi/csi-lib-utils: [v0.14.0 → v0.14.1](https://github.com/kubernetes-csi/csi-lib-utils/compare/v0.14.0...v0.14.1)
+
+### Removed
+_Nothing has changed._
+
 # Release notes for 1.9.2
 
 [Documentation](https://kubernetes-csi.github.io)
