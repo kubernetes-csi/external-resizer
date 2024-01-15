@@ -173,7 +173,6 @@ func main() {
 		csiClient,
 		*timeout,
 		kubeClient,
-		informerFactory,
 		driverName)
 	if err != nil {
 		klog.ErrorS(err, "Failed to create CSI resizer")
