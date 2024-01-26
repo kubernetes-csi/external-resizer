@@ -35,6 +35,9 @@ import (
 
 	"github.com/kubernetes-csi/csi-lib-utils/leaderelection"
 	"github.com/kubernetes-csi/external-resizer/pkg/controller"
+	"github.com/kubernetes-csi/external-resizer/pkg/features"
+	"github.com/kubernetes-csi/external-resizer/pkg/modifier"
+	"github.com/kubernetes-csi/external-resizer/pkg/modifycontroller"
 	"github.com/kubernetes-csi/external-resizer/pkg/resizer"
 	"github.com/kubernetes-csi/external-resizer/pkg/util"
 	csitrans "k8s.io/csi-translation-lib"
@@ -179,6 +182,17 @@ func main() {
 		klog.FlushAndExit(klog.ExitFlushTimeout, 1)
 	}
 
+	csiModifier, err := modifier.NewModifierFromClient(
+		csiClient,
+		*timeout,
+		kubeClient,
+		informerFactory,
+		driverName)
+	if err != nil {
+		klog.ErrorS(err, "Failed to create CSI modifier")
+		klog.FlushAndExit(klog.ExitFlushTimeout, 1)
+	}
+
 	// Start HTTP server for metrics + leader election healthz
 	if addr != "" {
 		metricsManager.RegisterToServer(mux, *metricsPath)
@@ -197,10 +211,21 @@ func main() {
 	rc := controller.NewResizeController(resizerName, csiResizer, kubeClient, *resyncPeriod, informerFactory,
 		workqueue.NewItemExponentialFailureRateLimiter(*retryIntervalStart, *retryIntervalMax),
 		*handleVolumeInUseError)
+	modifierName := csiModifier.Name()
+	var mc modifycontroller.ModifyController
+	// Add modify controller only if the feature gate is enabled
+	if utilfeature.DefaultFeatureGate.Enabled(features.VolumeAttributesClass) {
+		mc = modifycontroller.NewModifyController(modifierName, csiModifier, kubeClient, *resyncPeriod, informerFactory,
+			workqueue.NewItemExponentialFailureRateLimiter(*retryIntervalStart, *retryIntervalMax))
+	}
+
 	run := func(ctx context.Context) {
 		informerFactory.Start(wait.NeverStop)
-		rc.Run(*workers, ctx)
-
+		go rc.Run(*workers, ctx)
+		if utilfeature.DefaultFeatureGate.Enabled(features.VolumeAttributesClass) {
+			go mc.Run(*workers, ctx)
+		}
+		<-ctx.Done()
 	}
 
 	if !*enableLeaderElection {
