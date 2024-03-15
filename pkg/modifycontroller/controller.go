@@ -196,6 +196,23 @@ func isFirstTimeModifyVolumeWithPVC(pvc *v1.PersistentVolumeClaim, pv *v1.Persis
 	return false
 }
 
+func (ctrl *modifyController) init(ctx context.Context) bool {
+	informersSyncd := []cache.InformerSynced{ctrl.pvListerSynced, ctrl.pvcListerSynced}
+	informersSyncd = append(informersSyncd, ctrl.vacListerSynced)
+
+	if !cache.WaitForCacheSync(ctx.Done(), informersSyncd...) {
+		klog.ErrorS(nil, "Cannot sync pod, pv, pvc or vac caches")
+		return false
+	}
+
+	// Cache all the InProgress/Infeasible PVCs as Uncertain for ModifyVolume
+	err := ctrl.initUncertainPVCs()
+	if err != nil {
+		klog.ErrorS(err, "Failed to initialize uncertain pvcs")
+	}
+	return true
+}
+
 // Run starts the controller.
 func (ctrl *modifyController) Run(
 	workers int, ctx context.Context) {
@@ -204,21 +221,11 @@ func (ctrl *modifyController) Run(
 	klog.InfoS("Starting external resizer for modify volume", "controller", ctrl.name)
 	defer klog.InfoS("Shutting down external resizer", "controller", ctrl.name)
 
-	stopCh := ctx.Done()
-	informersSyncd := []cache.InformerSynced{ctrl.pvListerSynced, ctrl.pvcListerSynced}
-	informersSyncd = append(informersSyncd, ctrl.vacListerSynced)
-
-	if !cache.WaitForCacheSync(stopCh, informersSyncd...) {
-		klog.ErrorS(nil, "Cannot sync pod, pv, pvc or vac caches")
+	if !ctrl.init(ctx) {
 		return
 	}
 
-	// Cache all the InProgress/Infeasible PVCs as Uncertain for ModifyVolume
-	err := ctrl.initUncertainPVCs()
-	if err != nil {
-		klog.ErrorS(err, "Failed to initialize uncertain pvcs")
-	}
-
+	stopCh := ctx.Done()
 	for i := 0; i < workers; i++ {
 		go wait.Until(ctrl.sync, 0, stopCh)
 	}
