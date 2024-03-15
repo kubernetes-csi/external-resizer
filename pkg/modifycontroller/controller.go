@@ -156,7 +156,7 @@ func (ctrl *modifyController) updatePVC(oldObj, newObj interface{}) {
 	// 3. PVC is in Bound state
 	oldVacName := oldPVC.Spec.VolumeAttributesClassName
 	newVacName := newPVC.Spec.VolumeAttributesClassName
-	if newVacName != nil && *newVacName != "" && (*newVacName != *oldVacName || oldVacName == nil) && oldPVC.Status.Phase == v1.ClaimBound {
+	if newVacName != nil && *newVacName != "" && (oldVacName == nil || *newVacName != *oldVacName) && oldPVC.Status.Phase == v1.ClaimBound {
 		_, err := ctrl.pvLister.Get(oldPVC.Spec.VolumeName)
 		if err != nil {
 			klog.Errorf("Get PV %q of pvc %q in PVInformer cache failed: %v", oldPVC.Spec.VolumeName, klog.KObj(oldPVC), err)
