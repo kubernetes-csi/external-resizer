@@ -32,6 +32,9 @@ REGISTRY_NAME?=quay.io/k8scsi
 # Can be set to -mod=vendor to ensure that the "vendor" directory is used.
 GOFLAGS_VENDOR=
 
+# Allow CGO_ENABLED value to be overridden.
+CGO_ENABLED=0
+
 # Revision that gets built into each binary via the main.version
 # string. Uses the `git describe` output based on the most recent
 # version tag with a short revision suffix or, if nothing has been
@@ -94,7 +97,7 @@ $(CMDS:%=build-%): build-%: check-go-version-go
 		if ! [ $${#os_arch_seen_pre} = $${#os_arch_seen} ]; then \
 			continue; \
 		fi; \
-		if ! (set -x; cd ./$(CMDS_DIR)/$* && CGO_ENABLED=0 GOOS="$$os" GOARCH="$$arch" go build $(GOFLAGS_VENDOR) -a -ldflags '$(FULL_LDFLAGS)' -o "$(abspath ./bin)/$*$$suffix" .); then \
+		if ! (set -x; cd ./$(CMDS_DIR)/$* && CGO_ENABLED=$(CGO_ENABLED) GOOS="$$os" GOARCH="$$arch" go build $(GOFLAGS_VENDOR) -a -ldflags '$(FULL_LDFLAGS)' -o "$(abspath ./bin)/$*$$suffix" .); then \
 			echo "Building $* for GOOS=$$os GOARCH=$$arch failed, see error(s) above."; \
 			exit 1; \
 		fi; \
