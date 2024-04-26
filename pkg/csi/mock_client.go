@@ -35,7 +35,7 @@ type MockClient struct {
 	supportsControllerSingleNodeMultiWriter bool
 	expandCalled                            atomic.Int32
 	modifyCalled                            atomic.Int32
-	expansionFailed                         bool
+	expansionError                          error
 	modifyFailed                            bool
 	checkMigratedLabel                      bool
 	usedSecrets                             atomic.Pointer[map[string]string]
@@ -66,8 +66,8 @@ func (c *MockClient) SupportsControllerSingleNodeMultiWriter(context.Context) (b
 	return c.supportsControllerSingleNodeMultiWriter, nil
 }
 
-func (c *MockClient) SetExpansionFailed() {
-	c.expansionFailed = true
+func (c *MockClient) SetExpansionError(err error) {
+	c.expansionError = err
 }
 
 func (c *MockClient) SetModifyFailed() {
@@ -85,9 +85,9 @@ func (c *MockClient) Expand(
 	secrets map[string]string,
 	capability *csi.VolumeCapability) (int64, bool, error) {
 	// TODO: Determine whether the operation succeeds or fails by parameters.
-	if c.expansionFailed {
+	if c.expansionError != nil {
 		c.expandCalled.Add(1)
-		return requestBytes, c.supportsNodeResize, fmt.Errorf("expansion failed")
+		return requestBytes, c.supportsNodeResize, c.expansionError
 	}
 	if c.checkMigratedLabel {
 		additionalInfo := ctx.Value(connection.AdditionalInfoKey)

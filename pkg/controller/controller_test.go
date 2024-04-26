@@ -2,10 +2,14 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/kubernetes-csi/external-resizer/pkg/features"
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/tools/record"
 
 	"k8s.io/client-go/util/workqueue"
 
@@ -324,88 +328,131 @@ func TestResizePVC(t *testing.T) {
 		PVC  *v1.PersistentVolumeClaim
 		PV   *v1.PersistentVolume
 
-		NodeResize       bool
-		expansionFailure bool
-		expectFailure    bool
+		NodeResize     bool
+		expansionError error
+		expectFailure  bool
+		expectedEvents []string
 	}{
 		{
 			Name:       "Resize PVC with FS resize",
 			PVC:        createPVC(2, 1),
 			PV:         createPV(1, "testPVC", defaultNS, "foobar", &fsVolumeMode),
 			NodeResize: true,
+			expectedEvents: []string{
+				"Normal Resizing External resizer is resizing volume testPV",
+				"Normal FileSystemResizeRequired Require file system resize of volume on node",
+			},
 		},
 		{
-			Name:             "Resize PVC with FS resize failure",
-			PVC:              createPVC(2, 1),
-			PV:               createPV(1, "testPVC", defaultNS, "foobar", &fsVolumeMode),
-			NodeResize:       true,
-			expansionFailure: true,
-			expectFailure:    true,
+			Name:           "Resize PVC with FS resize failure",
+			PVC:            createPVC(2, 1),
+			PV:             createPV(1, "testPVC", defaultNS, "foobar", &fsVolumeMode),
+			NodeResize:     true,
+			expansionError: fmt.Errorf("expansion failed"),
+			expectFailure:  true,
+			expectedEvents: []string{
+				"Normal Resizing External resizer is resizing volume testPV",
+				"Warning VolumeResizeFailed resize volume \"testPV\" by resizer \"mock\" failed: expansion failed",
+			},
+		},
+		{
+			Name:       "Resize PVC with resource version conflict should not emit event",
+			PVC:        createPVC(2, 1),
+			PV:         createPV(1, "testPVC", defaultNS, "foobar", &fsVolumeMode),
+			NodeResize: true,
+			expansionError: errors.NewConflict(
+				schema.GroupResource{
+					Group:    v1.GroupName,
+					Resource: "persistentvolumeclaims",
+				},
+				"testPVC",
+				fmt.Errorf("the object has been modified; "+
+					"please apply your changes to the latest version and try again"),
+			),
+			expectFailure: true,
+			expectedEvents: []string{
+				"Normal Resizing External resizer is resizing volume testPV",
+			},
 		},
 	} {
-		client := csi.NewMockClient("mock", test.NodeResize, true, false, true, true)
-		if test.expansionFailure {
-			client.SetExpansionFailed()
-		}
-		driverName, _ := client.GetDriverName(context.TODO())
-
-		var expectedCap resource.Quantity
-		initialObjects := []runtime.Object{}
-		if test.PVC != nil {
-			initialObjects = append(initialObjects, test.PVC)
-			expectedCap = test.PVC.Status.Capacity[v1.ResourceStorage]
-		}
-		if test.PV != nil {
-			test.PV.Spec.PersistentVolumeSource.CSI.Driver = driverName
-			initialObjects = append(initialObjects, test.PV)
-		}
-
-		kubeClient, informerFactory := fakeK8s(initialObjects)
-		pvInformer := informerFactory.Core().V1().PersistentVolumes()
-		pvcInformer := informerFactory.Core().V1().PersistentVolumeClaims()
-		podInformer := informerFactory.Core().V1().Pods()
-
-		csiResizer, err := resizer.NewResizerFromClient(client, 15*time.Second, kubeClient, driverName)
-		if err != nil {
-			t.Fatalf("Test %s: Unable to create resizer: %v", test.Name, err)
-		}
-
-		defer featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.AnnotateFsResize, true)()
-		controller := NewResizeController(driverName, csiResizer, kubeClient, time.Second, informerFactory, workqueue.DefaultControllerRateLimiter(), true /* disableVolumeInUseErrorHandler*/)
-
-		ctrlInstance, _ := controller.(*resizeController)
-
-		stopCh := make(chan struct{})
-		informerFactory.Start(stopCh)
-
-		for _, obj := range initialObjects {
-			switch obj.(type) {
-			case *v1.PersistentVolume:
-				pvInformer.Informer().GetStore().Add(obj)
-			case *v1.PersistentVolumeClaim:
-				pvcInformer.Informer().GetStore().Add(obj)
-			case *v1.Pod:
-				podInformer.Informer().GetStore().Add(obj)
-			default:
-				t.Fatalf("Test %s: Unknown initalObject type: %+v", test.Name, obj)
+		t.Run(test.Name, func(t *testing.T) {
+			client := csi.NewMockClient("mock", test.NodeResize, true, false, true, true)
+			if test.expansionError != nil {
+				client.SetExpansionError(test.expansionError)
 			}
-		}
+			driverName, _ := client.GetDriverName(context.TODO())
 
-		err = ctrlInstance.resizePVC(test.PVC, test.PV)
-		if test.expectFailure && err == nil {
-			t.Errorf("for %s expected error got nothing", test.Name)
-			continue
-		}
-		if !test.expectFailure {
+			var expectedCap resource.Quantity
+			var initialObjects []runtime.Object
+			if test.PVC != nil {
+				initialObjects = append(initialObjects, test.PVC)
+				expectedCap = test.PVC.Status.Capacity[v1.ResourceStorage]
+			}
+			if test.PV != nil {
+				test.PV.Spec.PersistentVolumeSource.CSI.Driver = driverName
+				initialObjects = append(initialObjects, test.PV)
+			}
+
+			kubeClient, informerFactory := fakeK8s(initialObjects)
+			pvInformer := informerFactory.Core().V1().PersistentVolumes()
+			pvcInformer := informerFactory.Core().V1().PersistentVolumeClaims()
+			podInformer := informerFactory.Core().V1().Pods()
+
+			csiResizer, err := resizer.NewResizerFromClient(client, 15*time.Second, kubeClient, driverName)
 			if err != nil {
-				t.Errorf("for %s, unexpected error: %v", test.Name, err)
-				// check if pre resize capacity annotation gets properly populated after resize
-			} else if test.PV != nil && test.NodeResize && !expectedCap.IsZero() {
-				volObj, _, _ := ctrlInstance.volumes.GetByKey("testPV")
-				pv := volObj.(*v1.PersistentVolume)
-				checkPreResizeCap(t, test.Name, pv, expectedCap.String())
+				t.Fatalf("Unable to create resizer: %v", err)
 			}
-		}
+
+			defer featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.AnnotateFsResize, true)()
+			controller := NewResizeController(driverName, csiResizer, kubeClient, time.Second, informerFactory, workqueue.DefaultControllerRateLimiter(), true /* disableVolumeInUseErrorHandler*/)
+
+			ctrlInstance, _ := controller.(*resizeController)
+
+			ctrlInstance.eventRecorder = record.NewFakeRecorder(10)
+
+			stopCh := make(chan struct{})
+			informerFactory.Start(stopCh)
+
+			for _, obj := range initialObjects {
+				switch obj.(type) {
+				case *v1.PersistentVolume:
+					pvInformer.Informer().GetStore().Add(obj)
+				case *v1.PersistentVolumeClaim:
+					pvcInformer.Informer().GetStore().Add(obj)
+				case *v1.Pod:
+					podInformer.Informer().GetStore().Add(obj)
+				default:
+					t.Fatalf("Unknown initalObject type: %+v", obj)
+				}
+			}
+
+			err = ctrlInstance.resizePVC(test.PVC, test.PV)
+			if test.expectFailure && err == nil {
+				t.Errorf("expected error but got nothing")
+				return
+			}
+			if !test.expectFailure {
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+					// check if pre resize capacity annotation gets properly populated after resize
+				} else if test.PV != nil && test.NodeResize && !expectedCap.IsZero() {
+					volObj, _, _ := ctrlInstance.volumes.GetByKey("testPV")
+					pv := volObj.(*v1.PersistentVolume)
+					checkPreResizeCap(t, test.Name, pv, expectedCap.String())
+				}
+			}
+
+			events, expectedEvents := ctrlInstance.eventRecorder.(*record.FakeRecorder).Events, test.expectedEvents
+			if len(events) != len(expectedEvents) {
+				t.Errorf("expected %d events, got %d", len(expectedEvents), len(events))
+				return
+			}
+			for i, expectedEvent := range expectedEvents {
+				if event := <-events; expectedEvent != event {
+					t.Errorf("expected event %s, got %s", expectedEvents[i], event)
+				}
+			}
+		})
 	}
 }
 

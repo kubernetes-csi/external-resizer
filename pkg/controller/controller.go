@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/kubernetes-csi/external-resizer/pkg/features"
+	"k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/kubernetes-csi/external-resizer/pkg/resizer"
 	"github.com/kubernetes-csi/external-resizer/pkg/util"
@@ -438,7 +439,7 @@ func (ctrl *resizeController) resizePVC(pvc *v1.PersistentVolumeClaim, pv *v1.Pe
 		return ctrl.markPVCResizeFinished(pvc, newSize)
 	}()
 
-	if err != nil {
+	if err != nil && !errors.IsConflict(err) /* ignore conflicts as they should be silently retried */ {
 		// Record an event to indicate that resize operation is failed.
 		ctrl.eventRecorder.Eventf(pvc, v1.EventTypeWarning, util.VolumeResizeFailed, err.Error())
 	}
@@ -466,7 +467,7 @@ func (ctrl *resizeController) resizeVolume(
 		if inUseError(err) {
 			ctrl.usedPVCs.addPVCWithInUseError(pvc)
 		}
-		return newSize, fsResizeRequired, fmt.Errorf("resize volume %q by resizer %q failed: %v", pv.Name, ctrl.name, err)
+		return newSize, fsResizeRequired, fmt.Errorf("resize volume %q by resizer %q failed: %w", pv.Name, ctrl.name, err)
 	}
 	klog.V(4).InfoS("Resize volume succeeded start to update PV's capacity", "PV", klog.KObj(pv))
 
@@ -492,12 +493,12 @@ func (ctrl *resizeController) markPVCAsFSResizeRequired(pvc *v1.PersistentVolume
 
 	updatedPVC, err := util.PatchClaim(ctrl.kubeClient, pvc, newPVC, true /* addResourceVersionCheck */)
 	if err != nil {
-		return fmt.Errorf("Mark PVC %q as file system resize required failed: %v", klog.KObj(pvc), err)
+		return fmt.Errorf("Mark PVC %q as file system resize required failed: %w", klog.KObj(pvc), err)
 	}
 
 	err = ctrl.claims.Update(updatedPVC)
 	if err != nil {
-		return fmt.Errorf("error updating PVC %s in local cache: %v", klog.KObj(newPVC), err)
+		return fmt.Errorf("error updating PVC %s in local cache: %w", klog.KObj(newPVC), err)
 	}
 
 	klog.V(4).InfoS("Mark PVC as file system resize required", "PVC", klog.KObj(pvc))
@@ -539,12 +540,12 @@ func (ctrl *resizeController) markPVCResizeFinished(
 
 	updatedPVC, err := util.PatchClaim(ctrl.kubeClient, pvc, newPVC, true /* addResourceVersionCheck */)
 	if err != nil {
-		return fmt.Errorf("Mark PVC %q as resize finished failed: %v", klog.KObj(pvc), err)
+		return fmt.Errorf("Mark PVC %q as resize finished failed: %w", klog.KObj(pvc), err)
 	}
 
 	err = ctrl.claims.Update(updatedPVC)
 	if err != nil {
-		return fmt.Errorf("error updating PVC %s in local cache: %v", klog.KObj(newPVC), err)
+		return fmt.Errorf("error updating PVC %s in local cache: %w", klog.KObj(newPVC), err)
 	}
 
 	klog.V(4).InfoS("Resize PVC finished", "PVC", klog.KObj(pvc))
