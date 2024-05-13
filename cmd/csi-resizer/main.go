@@ -147,7 +147,8 @@ func main() {
 
 	metricsManager := metrics.NewCSIMetricsManager("" /* driverName */)
 
-	csiClient, err := csi.New(*csiAddress, *timeout, metricsManager)
+	ctx := context.Background()
+	csiClient, err := csi.New(ctx, *csiAddress, *timeout, metricsManager)
 	if err != nil {
 		klog.ErrorS(err, "Failed to create CSI client")
 		klog.FlushAndExit(klog.ExitFlushTimeout, 1)
@@ -163,7 +164,7 @@ func main() {
 	translator := csitrans.New()
 	if translator.IsMigratedCSIDriverByName(driverName) {
 		metricsManager = metrics.NewCSIMetricsManagerWithOptions(driverName, metrics.WithMigration())
-		migratedCsiClient, err := csi.New(*csiAddress, *timeout, metricsManager)
+		migratedCsiClient, err := csi.New(ctx, *csiAddress, *timeout, metricsManager)
 		if err != nil {
 			klog.ErrorS(err, "Failed to create MigratedCSI client")
 			klog.FlushAndExit(klog.ExitFlushTimeout, 1)
@@ -229,7 +230,7 @@ func main() {
 	}
 
 	if !*enableLeaderElection {
-		run(context.TODO())
+		run(ctx)
 	} else {
 		lockName := "external-resizer-" + util.SanitizeName(resizerName)
 		leKubeClient, err := kubernetes.NewForConfig(config)
