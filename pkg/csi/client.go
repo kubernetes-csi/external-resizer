@@ -66,13 +66,13 @@ type Client interface {
 }
 
 // New creates a new CSI client.
-func New(address string, timeout time.Duration, metricsManager metrics.CSIMetricsManager) (Client, error) {
-	conn, err := connection.Connect(address, metricsManager, connection.OnConnectionLoss(connection.ExitOnConnectionLoss()))
+func New(ctx context.Context, address string, timeout time.Duration, metricsManager metrics.CSIMetricsManager) (Client, error) {
+	conn, err := connection.Connect(ctx, address, metricsManager, connection.OnConnectionLoss(connection.ExitOnConnectionLoss()))
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to CSI driver: %v", err)
 	}
 
-	err = csirpc.ProbeForever(conn, timeout)
+	err = csirpc.ProbeForever(ctx, conn, timeout)
 	if err != nil {
 		return nil, fmt.Errorf("failed probing CSI driver: %v", err)
 	}
