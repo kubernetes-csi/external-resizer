@@ -321,7 +321,10 @@ func TestRemovePVCFromModifyVolumeUncertainCache(t *testing.T) {
 
 			ctx := context.TODO()
 			defer ctx.Done()
-			go controller.Run(1, ctx)
+			success := ctrlInstance.init(ctx)
+			if !success {
+				t.Fatal("failed to init controller")
+			}
 
 			for _, obj := range initialObjects {
 				switch obj.(type) {
