@@ -56,7 +56,7 @@ var (
 )
 
 func TestMarkControllerModifyVolumeStatus(t *testing.T) {
-	basePVC := testutil.MakeTestPVC([]v1.PersistentVolumeClaimCondition{})
+	basePVC := makeTestPVC([]v1.PersistentVolumeClaimCondition{})
 
 	tests := []struct {
 		name               string
@@ -143,7 +143,7 @@ func TestMarkControllerModifyVolumeStatus(t *testing.T) {
 }
 
 func TestUpdateConditionBasedOnError(t *testing.T) {
-	basePVC := testutil.MakeTestPVC([]v1.PersistentVolumeClaimCondition{})
+	basePVC := makeTestPVC([]v1.PersistentVolumeClaimCondition{})
 
 	tests := []struct {
 		name               string
@@ -196,7 +196,7 @@ func TestUpdateConditionBasedOnError(t *testing.T) {
 }
 
 func TestMarkControllerModifyVolumeCompleted(t *testing.T) {
-	basePVC := testutil.MakeTestPVC([]v1.PersistentVolumeClaimCondition{})
+	basePVC := makeTestPVC([]v1.PersistentVolumeClaimCondition{})
 	basePV := createTestPV(1, pvcName, pvcNamespace, "foobaz" /*pvcUID*/, &fsVolumeMode, testVac)
 	expectedPV := basePV.DeepCopy()
 	expectedPV.Spec.VolumeAttributesClassName = &targetVac
@@ -271,7 +271,7 @@ func TestMarkControllerModifyVolumeCompleted(t *testing.T) {
 }
 
 func TestRemovePVCFromModifyVolumeUncertainCache(t *testing.T) {
-	basePVC := testutil.MakeTestPVC([]v1.PersistentVolumeClaimCondition{})
+	basePVC := makeTestPVC([]v1.PersistentVolumeClaimCondition{})
 	basePVC.WithModifyVolumeStatus(v1.PersistentVolumeClaimModifyVolumeInProgress)
 	secondPVC := testutil.GetTestPVC("test-vol0", "2G", "1G", "", "")
 	secondPVC.Status.Phase = v1.ClaimBound
@@ -406,4 +406,20 @@ func createTestPV(capacityGB int, pvcName, pvcNamespace string, pvcUID types.UID
 		pv.Status.Phase = v1.VolumeBound
 	}
 	return pv
+}
+
+func makeTestPVC(conditions []v1.PersistentVolumeClaimCondition) *testutil.PVCWrapper {
+	capacity := "2Gi"
+
+	return testutil.MakePVC("foo").
+		WithNamespace("modify").
+		WithAccessModes([]v1.PersistentVolumeAccessMode{v1.ReadWriteOnce, v1.ReadOnlyMany}).
+		WithRequest(capacity).
+		WithVolumeAttributesClassName(targetVac).
+		WithPhase(v1.ClaimBound).
+		WithCapacity(capacity).
+		WithPhase(v1.ClaimBound).
+		WithConditions(conditions).
+		WithTargetVolumeAttributeClassName(targetVac).
+		WithCurrentVolumeAttributesClassName(testVac)
 }
