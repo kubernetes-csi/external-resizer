@@ -19,7 +19,7 @@ import (
 )
 
 func TestResizeFunctions(t *testing.T) {
-	basePVC := testutil.MakePVC([]v1.PersistentVolumeClaimCondition{})
+	basePVC := testutil.OldMakePVC([]v1.PersistentVolumeClaimCondition{})
 
 	tests := []struct {
 		name        string
