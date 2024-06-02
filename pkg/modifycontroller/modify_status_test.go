@@ -273,10 +273,16 @@ func TestMarkControllerModifyVolumeCompleted(t *testing.T) {
 func TestRemovePVCFromModifyVolumeUncertainCache(t *testing.T) {
 	basePVC := makeTestPVC([]v1.PersistentVolumeClaimCondition{})
 	basePVC.WithModifyVolumeStatus(v1.PersistentVolumeClaimModifyVolumeInProgress)
-	secondPVC := testutil.GetTestPVC("test-vol0", "2G", "1G", "", "")
-	secondPVC.Status.Phase = v1.ClaimBound
-	secondPVC.Status.ModifyVolumeStatus = &v1.ModifyVolumeStatus{}
-	secondPVC.Status.ModifyVolumeStatus.Status = v1.PersistentVolumeClaimModifyVolumeInfeasible
+	secondPVC := testutil.MakePVC("claim02").
+		WithNamespace("default").
+		WithVolumeName("test-vol0").
+		WithUID("test-uid").
+		WithAccessModes([]v1.PersistentVolumeAccessMode{v1.ReadWriteOnce}).
+		WithRequest("2G").
+		WithPhase(v1.ClaimBound).
+		WithCapacity("1G").
+		WithModifyVolumeStatus(v1.PersistentVolumeClaimModifyVolumeInfeasible).
+		Get()
 
 	tests := []struct {
 		name string

@@ -7,10 +7,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-const (
-	defaultNS = "default"
-)
-
 // PVCWrapper wraps a PVC inside.
 type PVCWrapper struct {
 	pvc *v1.PersistentVolumeClaim
@@ -27,176 +23,159 @@ func MakePVC(name string) *PVCWrapper {
 }
 
 // Get returns the inner PVC.
-func (m *PVCWrapper) Get() *v1.PersistentVolumeClaim {
-	return m.pvc.DeepCopy()
+func (p *PVCWrapper) Get() *v1.PersistentVolumeClaim {
+	return p.pvc.DeepCopy()
+}
+
+// WithName sets name of inner PVC.
+func (p *PVCWrapper) WithName(name string) *PVCWrapper {
+	p.pvc.ObjectMeta.Name = name
+	return p
 }
 
 // WithNamespace sets namespace of inner PVC.
-func (m *PVCWrapper) WithNamespace(namespace string) *PVCWrapper {
-	m.pvc.ObjectMeta.Namespace = namespace
-	return m
+func (p *PVCWrapper) WithNamespace(namespace string) *PVCWrapper {
+	p.pvc.ObjectMeta.Namespace = namespace
+	return p
 }
 
 // WithUID sets UID of inner PVC.
-func (m *PVCWrapper) WithUID(uid string) *PVCWrapper {
-	m.pvc.ObjectMeta.UID = types.UID(uid)
-	return m
+func (p *PVCWrapper) WithUID(uid string) *PVCWrapper {
+	p.pvc.ObjectMeta.UID = types.UID(uid)
+	return p
+}
+
+// WithAnnotations sets `annotations` as .Annotations of inner PVC.
+func (p *PVCWrapper) WithAnnotations(annotations map[string]string) *PVCWrapper {
+	p.pvc.Annotations = annotations
+	return p
 }
 
 // WithVolumeName sets `name` as .Spec.VolumeName of inner PVC.
-func (m *PVCWrapper) WithVolumeName(name string) *PVCWrapper {
-	m.pvc.Spec.VolumeName = name
-	return m
+func (p *PVCWrapper) WithVolumeName(name string) *PVCWrapper {
+	p.pvc.Spec.VolumeName = name
+	return p
 }
 
 // WithAccessModes sets `modes` as .Spec.AccessModes of inner PVC.
-func (m *PVCWrapper) WithAccessModes(modes []v1.PersistentVolumeAccessMode) *PVCWrapper {
-	m.pvc.Spec.AccessModes = modes
-	return m
+func (p *PVCWrapper) WithAccessModes(modes []v1.PersistentVolumeAccessMode) *PVCWrapper {
+	p.pvc.Spec.AccessModes = modes
+	return p
 }
 
 // WithRequest sets the resource storage request of inner PVC's Spec. Accepts strings like `2Gi`.
-func (m *PVCWrapper) WithRequest(storage string) *PVCWrapper {
-	m.pvc.Spec.Resources = v1.VolumeResourceRequirements{
+func (p *PVCWrapper) WithRequest(storage string) *PVCWrapper {
+	p.pvc.Spec.Resources = v1.VolumeResourceRequirements{
 		Requests: v1.ResourceList{
 			v1.ResourceStorage: resource.MustParse(storage),
 		},
 	}
-	return m
+	return p
 }
 
 // WithVolumeAttributesClassName sets `vacName` as .Spec.VolumeAttributeClass of inner PVC.
-func (m *PVCWrapper) WithVolumeAttributesClassName(vacName string) *PVCWrapper {
-	m.pvc.Spec.VolumeAttributesClassName = &vacName
-	return m
+func (p *PVCWrapper) WithVolumeAttributesClassName(vacName string) *PVCWrapper {
+	p.pvc.Spec.VolumeAttributesClassName = &vacName
+	return p
 }
 
 // WithStatus sets status of inner PVC.
-func (m *PVCWrapper) WithStatus(status v1.PersistentVolumeClaimStatus) *PVCWrapper {
-	m.pvc.Status = status
-	return m
+func (p *PVCWrapper) WithStatus(status v1.PersistentVolumeClaimStatus) *PVCWrapper {
+	p.pvc.Status = status
+	return p
 }
 
 // WithPhase sets `phase` as .status.Phase of inner PVC.
-func (m *PVCWrapper) WithPhase(phase v1.PersistentVolumeClaimPhase) *PVCWrapper {
-	m.pvc.Status.Phase = phase
-	return m
+func (p *PVCWrapper) WithPhase(phase v1.PersistentVolumeClaimPhase) *PVCWrapper {
+	p.pvc.Status.Phase = phase
+	return p
 }
 
 // WithConditions sets `conditions` as .Status.Conditions of inner PVC's.
-func (m *PVCWrapper) WithConditions(conditions []v1.PersistentVolumeClaimCondition) *PVCWrapper {
-	m.pvc.Status.Conditions = conditions
-	return m
+func (p *PVCWrapper) WithConditions(conditions []v1.PersistentVolumeClaimCondition) *PVCWrapper {
+	p.pvc.Status.Conditions = conditions
+	return p
 }
 
 // WithCapacity `capacity` of .Status.Capacity of inner PVC. Accepts strings like `2Gi`.
-func (m *PVCWrapper) WithCapacity(capacity string) *PVCWrapper {
-	m.pvc.Status.Capacity = v1.ResourceList{
+func (p *PVCWrapper) WithCapacity(capacity string) *PVCWrapper {
+	p.pvc.Status.Capacity = v1.ResourceList{
 		v1.ResourceStorage: resource.MustParse(capacity),
 	}
-	return m
+	return p
 }
 
 // WithModifyVolumeStatus sets `status` as .Status.ModifyVolumeStatus.Status of inner PVC.
-func (m *PVCWrapper) WithModifyVolumeStatus(status v1.PersistentVolumeClaimModifyVolumeStatus) *PVCWrapper {
-	if m.pvc.Status.ModifyVolumeStatus == nil {
-		m.pvc.Status.ModifyVolumeStatus = &v1.ModifyVolumeStatus{}
+func (p *PVCWrapper) WithModifyVolumeStatus(status v1.PersistentVolumeClaimModifyVolumeStatus) *PVCWrapper {
+	if p.pvc.Status.ModifyVolumeStatus == nil {
+		p.pvc.Status.ModifyVolumeStatus = &v1.ModifyVolumeStatus{}
 	}
-	m.pvc.Status.ModifyVolumeStatus.Status = status
-	return m
+	p.pvc.Status.ModifyVolumeStatus.Status = status
+	return p
 }
 
 // WithTargetVolumeAttributeClassName sets `targetVacName` as .Status.ModifyVolumeStatus.TargetVolumeAttributesClassName
 // of inner PVC.
-func (m *PVCWrapper) WithTargetVolumeAttributeClassName(targetVacName string) *PVCWrapper {
-	if m.pvc.Status.ModifyVolumeStatus == nil {
-		m.pvc.Status.ModifyVolumeStatus = &v1.ModifyVolumeStatus{}
+func (p *PVCWrapper) WithTargetVolumeAttributeClassName(targetVacName string) *PVCWrapper {
+	if p.pvc.Status.ModifyVolumeStatus == nil {
+		p.pvc.Status.ModifyVolumeStatus = &v1.ModifyVolumeStatus{}
 	}
-	m.pvc.Status.ModifyVolumeStatus.TargetVolumeAttributesClassName = targetVacName
-	return m
+	p.pvc.Status.ModifyVolumeStatus.TargetVolumeAttributesClassName = targetVacName
+	return p
 }
 
 // WithCurrentVolumeAttributesClassName sets `currentVacName`
 // as .Status.ModifyVolumeStatus.CurrentVolumeAttributesClassName of inner PVC.
-func (m *PVCWrapper) WithCurrentVolumeAttributesClassName(currentVacName string) *PVCWrapper {
-	if m.pvc.Status.ModifyVolumeStatus == nil {
-		m.pvc.Status.ModifyVolumeStatus = &v1.ModifyVolumeStatus{}
+func (p *PVCWrapper) WithCurrentVolumeAttributesClassName(currentVacName string) *PVCWrapper {
+	if p.pvc.Status.ModifyVolumeStatus == nil {
+		p.pvc.Status.ModifyVolumeStatus = &v1.ModifyVolumeStatus{}
 	}
-	m.pvc.Status.CurrentVolumeAttributesClassName = &currentVacName
-	return m
+	p.pvc.Status.CurrentVolumeAttributesClassName = &currentVacName
+	return p
 }
 
 // WithStorageResource adds `allocatedSize` as a `ResourceStorage` to .Status.AllocatedResources of inner PVC.
 // Accepts strings like `2Gi`.
-func (m *PVCWrapper) WithStorageResource(allocatedSize string) *PVCWrapper {
-	return m.WithResource(v1.ResourceStorage, resource.MustParse(allocatedSize))
+func (p *PVCWrapper) WithStorageResource(allocatedSize string) *PVCWrapper {
+	return p.WithResource(v1.ResourceStorage, resource.MustParse(allocatedSize))
 }
 
 // WithResource adds `quantity` as .Status.AllocatedResources[`resource`] of inner PVC.
-func (m *PVCWrapper) WithResource(resource v1.ResourceName, quantity resource.Quantity) *PVCWrapper {
-	if m.pvc.Status.AllocatedResources != nil && &quantity == nil {
-		delete(m.pvc.Status.AllocatedResources, resource)
-		return m
+func (p *PVCWrapper) WithResource(resource v1.ResourceName, quantity resource.Quantity) *PVCWrapper {
+	if p.pvc.Status.AllocatedResources != nil && &quantity == nil {
+		delete(p.pvc.Status.AllocatedResources, resource)
+		return p
 	}
-	if m.pvc.Status.AllocatedResources != nil {
-		m.pvc.Status.AllocatedResources[resource] = quantity
+	if p.pvc.Status.AllocatedResources != nil {
+		p.pvc.Status.AllocatedResources[resource] = quantity
 	} else {
-		m.pvc.Status.AllocatedResources = v1.ResourceList{v1.ResourceStorage: quantity}
+		p.pvc.Status.AllocatedResources = v1.ResourceList{v1.ResourceStorage: quantity}
 	}
-	return m
+	return p
 }
 
 // WithStorageResourceStatus adds `status` as .Status.AllocatedResourceStatuses[v1.ResourceStorage] of inner PVC.
-func (m *PVCWrapper) WithStorageResourceStatus(status v1.ClaimResourceStatus) *PVCWrapper {
-	return m.WithResourceStatus(v1.ResourceStorage, status)
+func (p *PVCWrapper) WithStorageResourceStatus(status v1.ClaimResourceStatus) *PVCWrapper {
+	return p.WithResourceStatus(v1.ResourceStorage, status)
 }
 
 // WithResourceStatus adds `status` as .Status.AllocatedResourceStatuses[`resource`] of inner PVC.
-func (m *PVCWrapper) WithResourceStatus(resource v1.ResourceName, status v1.ClaimResourceStatus) *PVCWrapper {
-	if m.pvc.Status.AllocatedResourceStatuses != nil && status == "" {
-		delete(m.pvc.Status.AllocatedResourceStatuses, resource)
-		return m
+func (p *PVCWrapper) WithResourceStatus(resource v1.ResourceName, status v1.ClaimResourceStatus) *PVCWrapper {
+	if p.pvc.Status.AllocatedResourceStatuses != nil && status == "" {
+		delete(p.pvc.Status.AllocatedResourceStatuses, resource)
+		return p
 	}
-	if m.pvc.Status.AllocatedResourceStatuses != nil {
-		m.pvc.Status.AllocatedResourceStatuses[resource] = status
+	if p.pvc.Status.AllocatedResourceStatuses != nil {
+		p.pvc.Status.AllocatedResourceStatuses[resource] = status
 	} else {
-		m.pvc.Status.AllocatedResourceStatuses = map[v1.ResourceName]v1.ClaimResourceStatus{
+		p.pvc.Status.AllocatedResourceStatuses = map[v1.ResourceName]v1.ClaimResourceStatus{
 			resource: status,
 		}
 	}
-	return m
+	return p
 }
 
-func GetTestPVC(volumeName string, specSize, statusSize, allocatedSize string, resizeStatus v1.ClaimResourceStatus) *v1.PersistentVolumeClaim {
-	pvc := &v1.PersistentVolumeClaim{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "claim01",
-			Namespace: defaultNS,
-			UID:       "test-uid",
-		},
-		Spec: v1.PersistentVolumeClaimSpec{
-			AccessModes: []v1.PersistentVolumeAccessMode{v1.ReadWriteOnce},
-			Resources:   v1.VolumeResourceRequirements{Requests: v1.ResourceList{v1.ResourceStorage: resource.MustParse(specSize)}},
-			VolumeName:  volumeName,
-		},
-		Status: v1.PersistentVolumeClaimStatus{
-			Phase: v1.ClaimBound,
-		},
-	}
-	if len(statusSize) > 0 {
-		pvc.Status.Capacity = v1.ResourceList{v1.ResourceStorage: resource.MustParse(statusSize)}
-	}
-	if len(allocatedSize) > 0 {
-		pvc.Status.AllocatedResources = v1.ResourceList{v1.ResourceStorage: resource.MustParse(allocatedSize)}
-	}
-	if len(resizeStatus) > 0 {
-		pvc.Status.AllocatedResourceStatuses = map[v1.ResourceName]v1.ClaimResourceStatus{
-			v1.ResourceStorage: resizeStatus,
-		}
-	}
-	return pvc
-}
-
+// CompareConditions returns true if `realConditions` and `expectedConditions` are equivalent.
 func CompareConditions(realConditions, expectedConditions []v1.PersistentVolumeClaimCondition) bool {
 	if realConditions == nil && expectedConditions == nil {
 		return true
