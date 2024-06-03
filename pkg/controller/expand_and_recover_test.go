@@ -32,32 +32,32 @@ func TestExpandAndRecover(t *testing.T) {
 	}{
 		{
 			name:                  "pvc.spec.size > pv.spec.size, resize_status=node_expansion_inprogress",
-			pvc:                   getTestPVC("test-vol0", "2G", "1G", "", ""),
-			pv:                    createPV(1, "claim01", defaultNS, "test-uid", &fsVolumeMode),
+			pvc:                   makeTestPVC("test-vol0", "2G", "1G", "", "").Get(),
+			pv:                    createPV(1, "claim01", defaultNS, "test-uid", &fsVolumeMode).Get(),
 			expectedResizeStatus:  v1.PersistentVolumeClaimNodeResizePending,
 			expectedAllocatedSize: resource.MustParse("2G"),
 			expectResizeCall:      true,
 		},
 		{
 			name:                  "pvc.spec.size = pv.spec.size, resize_status=no_expansion_inprogress",
-			pvc:                   getTestPVC("test-vol0", "1G", "1G", "", ""),
-			pv:                    createPV(1, "claim01", defaultNS, "test-uid", &fsVolumeMode),
+			pvc:                   makeTestPVC("test-vol0", "1G", "1G", "", "").Get(),
+			pv:                    createPV(1, "claim01", defaultNS, "test-uid", &fsVolumeMode).Get(),
 			expectedResizeStatus:  v1.PersistentVolumeClaimNodeResizePending,
 			expectedAllocatedSize: resource.MustParse("1G"),
 			expectResizeCall:      true,
 		},
 		{
 			name:                  "pvc.spec.size > pv.spec.size, resize_status=controller_expansion_failed",
-			pvc:                   getTestPVC("test-vol0", "5G" /*specSize*/, "3G" /*statusSize*/, "10G" /*allocatedSize*/, v1.PersistentVolumeClaimControllerResizeFailed),
-			pv:                    createPV(3, "claim01", defaultNS, "test-uid", &fsVolumeMode),
+			pvc:                   makeTestPVC("test-vol0", "5G" /*specSize*/, "3G" /*statusSize*/, "10G" /*allocatedSize*/, v1.PersistentVolumeClaimControllerResizeFailed).Get(),
+			pv:                    createPV(3, "claim01", defaultNS, "test-uid", &fsVolumeMode).Get(),
 			expectedResizeStatus:  v1.PersistentVolumeClaimNodeResizePending,
 			expectedAllocatedSize: resource.MustParse("5G"),
 			expectResizeCall:      true,
 		},
 		{
 			name:                       "pvc.spec.size = pv.spec.size, resize_status=node_expansion_failed, disable_controller_expansion=true",
-			pvc:                        getTestPVC("test-vol0", "5G" /*specSize*/, "3G" /*statusSize*/, "10G" /*allocatedSize*/, v1.PersistentVolumeClaimNodeResizeFailed),
-			pv:                         createPV(10, "claim01", defaultNS, "test-uid", &fsVolumeMode),
+			pvc:                        makeTestPVC("test-vol0", "5G" /*specSize*/, "3G" /*statusSize*/, "10G" /*allocatedSize*/, v1.PersistentVolumeClaimNodeResizeFailed).Get(),
+			pv:                         createPV(10, "claim01", defaultNS, "test-uid", &fsVolumeMode).Get(),
 			disableControllerExpansion: true,
 			expectedResizeStatus:       v1.PersistentVolumeClaimNodeResizePending,
 			expectedAllocatedSize:      resource.MustParse("5G"),
@@ -65,16 +65,16 @@ func TestExpandAndRecover(t *testing.T) {
 		},
 		{
 			name:                  "pvc.spec.size = pv.spec.size, resize_status=node_expansion_pending",
-			pvc:                   getTestPVC("test-vol0", "1G", "1G", "1G", v1.PersistentVolumeClaimNodeResizePending),
-			pv:                    createPV(1, "claim01", defaultNS, "test-uid", &fsVolumeMode),
+			pvc:                   makeTestPVC("test-vol0", "1G", "1G", "1G", v1.PersistentVolumeClaimNodeResizePending).Get(),
+			pv:                    createPV(1, "claim01", defaultNS, "test-uid", &fsVolumeMode).Get(),
 			expectedResizeStatus:  v1.PersistentVolumeClaimNodeResizePending,
 			expectedAllocatedSize: resource.MustParse("1G"),
 			expectResizeCall:      false,
 		},
 		{
 			name:                  "pvc.spec.size > pv.spec.size, disable_node_expansion=true, resize_status=no_expansion_inprogress",
-			pvc:                   getTestPVC("test-vol0", "2G", "1G", "", ""),
-			pv:                    createPV(1, "claim01", defaultNS, "test-uid", &fsVolumeMode),
+			pvc:                   makeTestPVC("test-vol0", "2G", "1G", "", "").Get(),
+			pv:                    createPV(1, "claim01", defaultNS, "test-uid", &fsVolumeMode).Get(),
 			disableNodeExpansion:  true,
 			expectedResizeStatus:  "",
 			expectedAllocatedSize: resource.MustParse("2G"),
@@ -82,24 +82,24 @@ func TestExpandAndRecover(t *testing.T) {
 		},
 		{
 			name:                  "pv.spec.size >= pvc.spec.size, resize_status=node_expansion_failed",
-			pvc:                   getTestPVC("test-vol0", "2G", "1G", "2G", v1.PersistentVolumeClaimNodeResizeFailed),
-			pv:                    createPV(2, "claim01", defaultNS, "test-uid", &fsVolumeMode),
+			pvc:                   makeTestPVC("test-vol0", "2G", "1G", "2G", v1.PersistentVolumeClaimNodeResizeFailed).Get(),
+			pv:                    createPV(2, "claim01", defaultNS, "test-uid", &fsVolumeMode).Get(),
 			expectedResizeStatus:  v1.PersistentVolumeClaimNodeResizePending,
 			expectedAllocatedSize: resource.MustParse("2G"),
 			expectResizeCall:      true,
 		},
 		{
 			name:                  "pvc.spec.size > pv.spec.size, resize_status-node_expansion_pending",
-			pvc:                   getTestPVC("test-vol0", "10G", "1G", "3G", v1.PersistentVolumeClaimNodeResizePending),
-			pv:                    createPV(3, "claim01", defaultNS, "test-uid", &fsVolumeMode),
+			pvc:                   makeTestPVC("test-vol0", "10G", "1G", "3G", v1.PersistentVolumeClaimNodeResizePending).Get(),
+			pv:                    createPV(3, "claim01", defaultNS, "test-uid", &fsVolumeMode).Get(),
 			expectedResizeStatus:  v1.PersistentVolumeClaimNodeResizePending,
 			expectedAllocatedSize: resource.MustParse("3G"),
 			expectResizeCall:      false,
 		},
 		{
 			name:                  "pvc.spec.size > pv.spec.size, resize_status-node_expansion_inprogress",
-			pvc:                   getTestPVC("test-vol0", "10G", "1G", "3G", v1.PersistentVolumeClaimNodeResizeInProgress),
-			pv:                    createPV(3, "claim01", defaultNS, "test-uid", &fsVolumeMode),
+			pvc:                   makeTestPVC("test-vol0", "10G", "1G", "3G", v1.PersistentVolumeClaimNodeResizeInProgress).Get(),
+			pv:                    createPV(3, "claim01", defaultNS, "test-uid", &fsVolumeMode).Get(),
 			expectedResizeStatus:  v1.PersistentVolumeClaimNodeResizeInProgress,
 			expectedAllocatedSize: resource.MustParse("3G"),
 			expectResizeCall:      false,
@@ -152,12 +152,12 @@ func TestExpandAndRecover(t *testing.T) {
 	}
 }
 
-func getTestPVC(volumeName string, specSize, statusSize, allocatedSize string, resizeStatus v1.ClaimResourceStatus) *v1.PersistentVolumeClaim {
+func makeTestPVC(volumeName string, specSize, statusSize, allocatedSize string, resizeStatus v1.ClaimResourceStatus) *testutil.PVCWrapper {
 	pvc := testutil.MakePVC("claim01").
 		WithNamespace(defaultNS).
 		WithVolumeName(volumeName).
 		WithUID("test-uid").
-		WithAccessModes([]v1.PersistentVolumeAccessMode{v1.ReadWriteOnce}).
+		WithAccessModes(v1.ReadWriteOnce).
 		WithRequest(specSize).
 		WithPhase(v1.ClaimBound)
 	if len(statusSize) > 0 {
@@ -169,5 +169,5 @@ func getTestPVC(volumeName string, specSize, statusSize, allocatedSize string, r
 	if len(resizeStatus) > 0 {
 		pvc = pvc.WithStorageResourceStatus(resizeStatus)
 	}
-	return pvc.Get()
+	return pvc
 }

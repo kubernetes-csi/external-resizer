@@ -3,6 +3,7 @@ package resizer
 import (
 	"errors"
 	"fmt"
+	"github.com/kubernetes-csi/external-resizer/pkg/testutil"
 	"reflect"
 	"testing"
 	"time"
@@ -173,7 +174,7 @@ func TestResizeMigratedPV(t *testing.T) {
 			}
 
 			pv := tc.pv
-			expectedSize := quantityGB(2)
+			expectedSize := testutil.QuantityGB(2)
 			newSize, nodeResizeRequired, err := resizer.Resize(pv, expectedSize)
 
 			if tc.err != nil {
@@ -405,28 +406,28 @@ func TestCanSupport(t *testing.T) {
 			name:       "EBS PV/PVC is supported",
 			driverName: "ebs.csi.aws.com",
 			pv:         createInTreeEBSPV(1),
-			pvc:        createPVC("ebs.csi.aws.com"),
+			pvc:        createPVC("ebs.csi.aws.com").Get(),
 			canSupport: true,
 		},
 		{
 			name:       "EBS PV/PVC is not supported when migartion is disabled",
 			driverName: "ebs.csi.aws.com",
 			pv:         createInTreeEBSPV(1),
-			pvc:        createPVC("kubernetes.io/aws-ebs"),
+			pvc:        createPVC("kubernetes.io/aws-ebs").Get(),
 			canSupport: false,
 		},
 		{
 			name:       "PD PV/PVC is supported",
 			driverName: "pd.csi.storage.gke.io",
 			pv:         createInTreeGCEPDPV(1),
-			pvc:        createPVC("pd.csi.storage.gke.io"),
+			pvc:        createPVC("pd.csi.storage.gke.io").Get(),
 			canSupport: true,
 		},
 		{
 			name:       "unknown PV/PVC is not supported",
 			driverName: "ebs.csi.aws.com",
 			pv:         createInTreeEBSPV(1),
-			pvc:        createPVC("unknown"),
+			pvc:        createPVC("unknown").Get(),
 			canSupport: false,
 		},
 	}
@@ -448,38 +449,14 @@ func TestCanSupport(t *testing.T) {
 	}
 }
 
-func quantityGB(i int) resource.Quantity {
-	q := resource.NewQuantity(int64(i*1024*1024), resource.BinarySI)
-	return *q
-}
-
-func createPVC(resizerName string) *v1.PersistentVolumeClaim {
-	request := quantityGB(2)
-	capacity := quantityGB(1)
-
-	return &v1.PersistentVolumeClaim{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "testPVC",
-			Namespace: "test",
-			Annotations: map[string]string{
-				util.VolumeResizerKey: resizerName,
-			},
-		},
-		Spec: v1.PersistentVolumeClaimSpec{
-			Resources: v1.VolumeResourceRequirements{
-				Requests: map[v1.ResourceName]resource.Quantity{
-					v1.ResourceStorage: request,
-				},
-			},
-			VolumeName: "testPV",
-		},
-		Status: v1.PersistentVolumeClaimStatus{
-			Phase: v1.ClaimBound,
-			Capacity: map[v1.ResourceName]resource.Quantity{
-				v1.ResourceStorage: capacity,
-			},
-		},
-	}
+func createPVC(resizerName string) *testutil.PVCWrapper {
+	return testutil.MakePVC("testPVC").
+		WithNamespace("test").
+		WithAnnotations(map[string]string{util.VolumeResizerKey: resizerName}).
+		WithStorageResource("2Gi").
+		WithVolumeName("testPV").
+		WithCapacity("1Gi").
+		WithPhase(v1.ClaimBound)
 }
 
 func makeTestPV(name string, sizeGig int, driverName, volID string, withSecret bool) *v1.PersistentVolume {
@@ -513,7 +490,7 @@ func makeTestPV(name string, sizeGig int, driverName, volID string, withSecret b
 }
 
 func createInTreeEBSPV(capacityGB int) *v1.PersistentVolume {
-	capacity := quantityGB(capacityGB)
+	capacity := testutil.QuantityGB(capacityGB)
 
 	return &v1.PersistentVolume{
 		ObjectMeta: metav1.ObjectMeta{
@@ -536,7 +513,7 @@ func createInTreeEBSPV(capacityGB int) *v1.PersistentVolume {
 }
 
 func createInTreeGCEPDPV(capacityGB int) *v1.PersistentVolume {
-	capacity := quantityGB(capacityGB)
+	capacity := testutil.QuantityGB(capacityGB)
 
 	return &v1.PersistentVolume{
 		ObjectMeta: metav1.ObjectMeta{

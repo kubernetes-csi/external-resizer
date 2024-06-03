@@ -3,6 +3,9 @@ package controller
 import (
 	"context"
 	"fmt"
+	"github.com/kubernetes-csi/external-resizer/pkg/testutil"
+	"k8s.io/apimachinery/pkg/types"
+	"strconv"
 	"testing"
 	"time"
 
@@ -19,9 +22,7 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
@@ -58,58 +59,58 @@ func TestController(t *testing.T) {
 		},
 		{
 			Name:          "PVC not found",
-			PVC:           createPVC(1, 1),
+			PVC:           createPVC(1, 1).Get(),
 			CallCSIExpand: false,
 		},
 		{
 			Name:          "PVC doesn't need resize",
-			PVC:           createPVC(1, 1),
+			PVC:           createPVC(1, 1).Get(),
 			CreateObjects: true,
 			CallCSIExpand: false,
 		},
 		{
 			Name:          "PV not found",
-			PVC:           createPVC(2, 1),
+			PVC:           createPVC(2, 1).Get(),
 			CreateObjects: true,
 			CallCSIExpand: false,
 		},
 		{
 			Name:          "pv claimref does not have pvc UID",
-			PVC:           createPVC(2, 1),
-			PV:            createPV(1, "testPVC" /*pvcName*/, defaultNS, "foobaz" /*pvcUID*/, &fsVolumeMode),
+			PVC:           createPVC(2, 1).Get(),
+			PV:            createPV(1, "testPVC" /*pvcName*/, defaultNS, "foobaz" /*pvcUID*/, &fsVolumeMode).Get(),
 			CallCSIExpand: false,
 		},
 		{
 			Name:          "pv claimref does not have PVC namespace",
-			PVC:           createPVC(2, 1),
-			PV:            createPV(1, "testPVC" /*pvcName*/, "test1" /*pvcNamespace*/, "foobar" /*pvcUID*/, &fsVolumeMode),
+			PVC:           createPVC(2, 1).Get(),
+			PV:            createPV(1, "testPVC" /*pvcName*/, "test1" /*pvcNamespace*/, "foobar" /*pvcUID*/, &fsVolumeMode).Get(),
 			CallCSIExpand: false,
 		},
 		{
 			Name:          "pv claimref is nil",
-			PVC:           createPVC(2, 1),
-			PV:            createPV(1, "" /*pvcName*/, "test1" /*pvcNamespace*/, "foobar" /*pvcUID*/, &fsVolumeMode),
+			PVC:           createPVC(2, 1).Get(),
+			PV:            createPV(1, "" /*pvcName*/, "test1" /*pvcNamespace*/, "foobar" /*pvcUID*/, &fsVolumeMode).Get(),
 			CallCSIExpand: false,
 		},
 		{
 			Name:          "Resize PVC, no FS resize",
-			PVC:           createPVC(2, 1),
-			PV:            createPV(1, "testPVC", defaultNS, "foobar", &fsVolumeMode),
+			PVC:           createPVC(2, 1).Get(),
+			PV:            createPV(1, "testPVC", defaultNS, "foobar", &fsVolumeMode).Get(),
 			CreateObjects: true,
 			CallCSIExpand: true,
 		},
 		{
 			Name:          "Resize PVC with FS resize",
-			PVC:           createPVC(2, 1),
-			PV:            createPV(1, "testPVC", defaultNS, "foobar", &fsVolumeMode),
+			PVC:           createPVC(2, 1).Get(),
+			PV:            createPV(1, "testPVC", defaultNS, "foobar", &fsVolumeMode).Get(),
 			CreateObjects: true,
 			NodeResize:    true,
 			CallCSIExpand: true,
 		},
 		{
 			Name:                     "PV nodeExpand Complete",
-			PVC:                      createPVC(2, 1),
-			PV:                       createPV(1, "testPVC", defaultNS, "foobar", &fsVolumeMode),
+			PVC:                      createPVC(2, 1).Get(),
+			PV:                       createPV(1, "testPVC", defaultNS, "foobar", &fsVolumeMode).Get(),
 			CreateObjects:            true,
 			NodeResize:               true,
 			CallCSIExpand:            true,
@@ -118,8 +119,8 @@ func TestController(t *testing.T) {
 		},
 		{
 			Name:              "Block Resize PVC with FS resize",
-			PVC:               createPVC(2, 1),
-			PV:                createPV(1, "testPVC", defaultNS, "foobar", &blockVolumeMode),
+			PVC:               createPVC(2, 1).Get(),
+			PV:                createPV(1, "testPVC", defaultNS, "foobar", &blockVolumeMode).Get(),
 			CreateObjects:     true,
 			NodeResize:        true,
 			CallCSIExpand:     true,
@@ -127,8 +128,8 @@ func TestController(t *testing.T) {
 		},
 		{
 			Name:              "Resize PVC, no FS resize, pvc-inuse with failedprecondition",
-			PVC:               createPVC(2, 1),
-			PV:                createPV(1, "testPVC", defaultNS, "foobar", &fsVolumeMode),
+			PVC:               createPVC(2, 1).Get(),
+			PV:                createPV(1, "testPVC", defaultNS, "foobar", &fsVolumeMode).Get(),
 			CreateObjects:     true,
 			CallCSIExpand:     false,
 			pvcHasInUseErrors: true,
@@ -136,8 +137,8 @@ func TestController(t *testing.T) {
 		},
 		{
 			Name:              "Resize PVC, no FS resize, pvc-inuse but no failedprecondition error",
-			PVC:               createPVC(2, 1),
-			PV:                createPV(1, "testPVC", defaultNS, "foobar", &fsVolumeMode),
+			PVC:               createPVC(2, 1).Get(),
+			PV:                createPV(1, "testPVC", defaultNS, "foobar", &fsVolumeMode).Get(),
 			CreateObjects:     true,
 			CallCSIExpand:     true,
 			pvcHasInUseErrors: false,
@@ -145,8 +146,8 @@ func TestController(t *testing.T) {
 		},
 		{
 			Name:              "Resize PVC, no FS resize, pvc not in-use but has failedprecondition error",
-			PVC:               createPVC(2, 1),
-			PV:                createPV(1, "testPVC", defaultNS, "foobar", &fsVolumeMode),
+			PVC:               createPVC(2, 1).Get(),
+			PV:                createPV(1, "testPVC", defaultNS, "foobar", &fsVolumeMode).Get(),
 			CreateObjects:     true,
 			CallCSIExpand:     true,
 			pvcHasInUseErrors: true,
@@ -155,8 +156,8 @@ func TestController(t *testing.T) {
 		// test cases with volume in use error handling disabled.
 		{
 			Name:                           "With volume-in-use error handler disabled, Resize PVC, no FS resize, pvc-inuse with failedprecondition",
-			PVC:                            createPVC(2, 1),
-			PV:                             createPV(1, "testPVC", defaultNS, "foobar", &fsVolumeMode),
+			PVC:                            createPVC(2, 1).Get(),
+			PV:                             createPV(1, "testPVC", defaultNS, "foobar", &fsVolumeMode).Get(),
 			CreateObjects:                  true,
 			CallCSIExpand:                  true,
 			pvcHasInUseErrors:              true,
@@ -165,8 +166,8 @@ func TestController(t *testing.T) {
 		},
 		{
 			Name:                           "With volume-in-use error handler disabled, Resize PVC, no FS resize, pvc-inuse but no failedprecondition error",
-			PVC:                            createPVC(2, 1),
-			PV:                             createPV(1, "testPVC", defaultNS, "foobar", &fsVolumeMode),
+			PVC:                            createPVC(2, 1).Get(),
+			PV:                             createPV(1, "testPVC", defaultNS, "foobar", &fsVolumeMode).Get(),
 			CreateObjects:                  true,
 			CallCSIExpand:                  true,
 			pvcHasInUseErrors:              false,
@@ -175,8 +176,8 @@ func TestController(t *testing.T) {
 		},
 		{
 			Name:                           "With volume-in-use error handler disabled, Resize PVC, no FS resize, pvc not in-use but has failedprecondition error",
-			PVC:                            createPVC(2, 1),
-			PV:                             createPV(1, "testPVC", defaultNS, "foobar", &fsVolumeMode),
+			PVC:                            createPVC(2, 1).Get(),
+			PV:                             createPV(1, "testPVC", defaultNS, "foobar", &fsVolumeMode).Get(),
 			CreateObjects:                  true,
 			CallCSIExpand:                  true,
 			pvcHasInUseErrors:              true,
@@ -185,8 +186,8 @@ func TestController(t *testing.T) {
 		},
 		{
 			Name:                           "With volume-in-use error handler disabled, Block Resize PVC with FS resize",
-			PVC:                            createPVC(2, 1),
-			PV:                             createPV(1, "testPVC", defaultNS, "foobar", &blockVolumeMode),
+			PVC:                            createPVC(2, 1).Get(),
+			PV:                             createPV(1, "testPVC", defaultNS, "foobar", &blockVolumeMode).Get(),
 			CreateObjects:                  true,
 			NodeResize:                     true,
 			CallCSIExpand:                  true,
@@ -195,8 +196,8 @@ func TestController(t *testing.T) {
 		},
 		{
 			Name:                           "With volume-in-use error handler disabled, Resize PVC with FS resize",
-			PVC:                            createPVC(2, 1),
-			PV:                             createPV(1, "testPVC", defaultNS, "foobar", &fsVolumeMode),
+			PVC:                            createPVC(2, 1).Get(),
+			PV:                             createPV(1, "testPVC", defaultNS, "foobar", &fsVolumeMode).Get(),
 			CreateObjects:                  true,
 			NodeResize:                     true,
 			CallCSIExpand:                  true,
@@ -204,8 +205,8 @@ func TestController(t *testing.T) {
 		},
 		{
 			Name:                           "With volume-in-use error handler disabled, Resize PVC, no FS resize",
-			PVC:                            createPVC(2, 1),
-			PV:                             createPV(1, "testPVC", defaultNS, "foobar", &fsVolumeMode),
+			PVC:                            createPVC(2, 1).Get(),
+			PV:                             createPV(1, "testPVC", defaultNS, "foobar", &fsVolumeMode).Get(),
 			CreateObjects:                  true,
 			CallCSIExpand:                  true,
 			disableVolumeInUseErrorHandler: true,
@@ -335,8 +336,8 @@ func TestResizePVC(t *testing.T) {
 	}{
 		{
 			Name:       "Resize PVC with FS resize",
-			PVC:        createPVC(2, 1),
-			PV:         createPV(1, "testPVC", defaultNS, "foobar", &fsVolumeMode),
+			PVC:        createPVC(2, 1).Get(),
+			PV:         createPV(1, "testPVC", defaultNS, "foobar", &fsVolumeMode).Get(),
 			NodeResize: true,
 			expectedEvents: []string{
 				"Normal Resizing External resizer is resizing volume testPV",
@@ -345,8 +346,8 @@ func TestResizePVC(t *testing.T) {
 		},
 		{
 			Name:           "Resize PVC with FS resize failure",
-			PVC:            createPVC(2, 1),
-			PV:             createPV(1, "testPVC", defaultNS, "foobar", &fsVolumeMode),
+			PVC:            createPVC(2, 1).Get(),
+			PV:             createPV(1, "testPVC", defaultNS, "foobar", &fsVolumeMode).Get(),
 			NodeResize:     true,
 			expansionError: fmt.Errorf("expansion failed"),
 			expectFailure:  true,
@@ -357,8 +358,8 @@ func TestResizePVC(t *testing.T) {
 		},
 		{
 			Name:       "Resize PVC with resource version conflict should not emit event",
-			PVC:        createPVC(2, 1),
-			PV:         createPV(1, "testPVC", defaultNS, "foobar", &fsVolumeMode),
+			PVC:        createPVC(2, 1).Get(),
+			PV:         createPV(1, "testPVC", defaultNS, "foobar", &fsVolumeMode).Get(),
 			NodeResize: true,
 			expansionError: errors.NewConflict(
 				schema.GroupResource{
@@ -465,74 +466,33 @@ func checkPreResizeCap(t *testing.T, testName string, pv *v1.PersistentVolume, e
 }
 
 func invalidPVC() *v1.PersistentVolumeClaim {
-	pvc := createPVC(1, 1)
-	pvc.ObjectMeta.Name = ""
-	pvc.ObjectMeta.Namespace = ""
-
-	return pvc
+	return createPVC(1, 1).
+		WithName("").
+		WithNamespace("").
+		Get()
 }
 
-func quantityGB(i int) resource.Quantity {
-	q := resource.NewQuantity(int64(i*1024*1024*1024), resource.BinarySI)
-	return *q
+func createPVC(requestGB, capacityGB int) *testutil.PVCWrapper {
+	return testutil.MakePVC("testPVC").
+		WithNamespace(defaultNS).
+		WithUID("foobar").
+		WithAccessModes(v1.ReadWriteOnce).
+		WithRequest(strconv.Itoa(requestGB) + "Gi").
+		WithVolumeName("testPV").
+		WithCapacity(strconv.Itoa(capacityGB) + "Gi").
+		WithPhase(v1.ClaimBound)
 }
 
-func createPVC(requestGB, capacityGB int) *v1.PersistentVolumeClaim {
-	request := quantityGB(requestGB)
-	capacity := quantityGB(capacityGB)
-
-	return &v1.PersistentVolumeClaim{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "testPVC",
-			Namespace: defaultNS,
-			UID:       "foobar",
-		},
-		Spec: v1.PersistentVolumeClaimSpec{
-			Resources: v1.VolumeResourceRequirements{
-				Requests: map[v1.ResourceName]resource.Quantity{
-					v1.ResourceStorage: request,
-				},
-			},
-			VolumeName: "testPV",
-		},
-		Status: v1.PersistentVolumeClaimStatus{
-			Phase: v1.ClaimBound,
-			Capacity: map[v1.ResourceName]resource.Quantity{
-				v1.ResourceStorage: capacity,
-			},
-		},
-	}
-}
-
-func createPV(capacityGB int, pvcName, pvcNamespace string, pvcUID types.UID, volumeMode *v1.PersistentVolumeMode) *v1.PersistentVolume {
-	capacity := quantityGB(capacityGB)
-
-	pv := &v1.PersistentVolume{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        "testPV",
-			Annotations: make(map[string]string),
-		},
-		Spec: v1.PersistentVolumeSpec{
-			AccessModes: []v1.PersistentVolumeAccessMode{v1.ReadWriteOnce},
-			Capacity: map[v1.ResourceName]resource.Quantity{
-				v1.ResourceStorage: capacity,
-			},
-			PersistentVolumeSource: v1.PersistentVolumeSource{
-				CSI: &v1.CSIPersistentVolumeSource{
-					Driver:       "foo",
-					VolumeHandle: "foo",
-				},
-			},
-			VolumeMode: volumeMode,
-		},
-	}
+func createPV(capacityGB int, pvcName, pvcNamespace string, pvcUID types.UID, volumeMode *v1.PersistentVolumeMode) *testutil.PVWrapper {
+	pv := testutil.MakePV("testPV").
+		WithAnnotations(make(map[string]string)).
+		WithAccessModes(v1.ReadWriteOnce).
+		WithCapacity(strconv.Itoa(capacityGB) + "Gi").
+		WithCSIPersistentVolumeSource(v1.CSIPersistentVolumeSource{Driver: "foo", VolumeHandle: "foo"}).
+		WithVolumeMode(*volumeMode)
 	if len(pvcName) > 0 {
-		pv.Spec.ClaimRef = &v1.ObjectReference{
-			Namespace: pvcNamespace,
-			Name:      pvcName,
-			UID:       pvcUID,
-		}
-		pv.Status.Phase = v1.VolumeBound
+		pv = pv.WithClaimRef(v1.ObjectReference{Namespace: pvcNamespace, Name: pvcName, UID: pvcUID}).
+			WithPhase(v1.VolumeBound)
 	}
 	return pv
 }

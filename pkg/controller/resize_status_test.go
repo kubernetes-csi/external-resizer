@@ -22,7 +22,7 @@ func TestResizeFunctions(t *testing.T) {
 	baseCapacity := "2Gi"
 	basePVC := testutil.MakePVC("foo").
 		WithNamespace("resize").
-		WithAccessModes([]v1.PersistentVolumeAccessMode{v1.ReadWriteOnce, v1.ReadOnlyMany}).
+		WithAccessModes(v1.ReadWriteOnce, v1.ReadOnlyMany).
 		WithRequest(baseCapacity).
 		WithPhase(v1.ClaimBound).
 		WithCapacity(baseCapacity)

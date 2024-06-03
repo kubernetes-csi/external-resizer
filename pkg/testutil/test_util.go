@@ -27,6 +27,11 @@ func (p *PVCWrapper) Get() *v1.PersistentVolumeClaim {
 	return p.pvc.DeepCopy()
 }
 
+// Clone returns a pointer to a clone of the PVCWrapper.
+func (p *PVCWrapper) Clone() *PVCWrapper {
+	return &PVCWrapper{p.pvc.DeepCopy()}
+}
+
 // WithName sets name of inner PVC.
 func (p *PVCWrapper) WithName(name string) *PVCWrapper {
 	p.pvc.ObjectMeta.Name = name
@@ -58,7 +63,7 @@ func (p *PVCWrapper) WithVolumeName(name string) *PVCWrapper {
 }
 
 // WithAccessModes sets `modes` as .Spec.AccessModes of inner PVC.
-func (p *PVCWrapper) WithAccessModes(modes []v1.PersistentVolumeAccessMode) *PVCWrapper {
+func (p *PVCWrapper) WithAccessModes(modes ...v1.PersistentVolumeAccessMode) *PVCWrapper {
 	p.pvc.Spec.AccessModes = modes
 	return p
 }
@@ -190,6 +195,101 @@ func CompareConditions(realConditions, expectedConditions []v1.PersistentVolumeC
 		}
 	}
 	return true
+}
+
+// PVWrapper wraps a PV inside.
+type PVWrapper struct {
+	pv *v1.PersistentVolume
+}
+
+// MakePV builds a PV wrapper.
+func MakePV(name string) *PVWrapper {
+	pv := &v1.PersistentVolume{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+		},
+	}
+	return &PVWrapper{pv}
+}
+
+// Get returns the inner PV.
+func (p *PVWrapper) Get() *v1.PersistentVolume {
+	return p.pv.DeepCopy()
+}
+
+// Clone returns a pointer to a clone of the PVWrapper.
+func (p *PVWrapper) Clone() *PVWrapper {
+	return &PVWrapper{p.pv.DeepCopy()}
+}
+
+// WithName sets name of inner PV.
+func (p *PVWrapper) WithName(name string) *PVWrapper {
+	p.pv.ObjectMeta.Name = name
+	return p
+}
+
+// WithNamespace sets namespace of inner PV.
+func (p *PVWrapper) WithNamespace(namespace string) *PVWrapper {
+	p.pv.ObjectMeta.Namespace = namespace
+	return p
+}
+
+// WithUID sets UID of inner PV.
+func (p *PVWrapper) WithUID(uid string) *PVWrapper {
+	p.pv.ObjectMeta.UID = types.UID(uid)
+	return p
+}
+
+// WithAnnotations sets `annotations` as .Annotations of inner PV.
+func (p *PVWrapper) WithAnnotations(annotations map[string]string) *PVWrapper {
+	p.pv.Annotations = annotations
+	return p
+}
+
+// WithAccessModes sets `modes` as .Spec.AccessModes of inner PV.
+func (p *PVWrapper) WithAccessModes(modes ...v1.PersistentVolumeAccessMode) *PVWrapper {
+	p.pv.Spec.AccessModes = modes
+	return p
+}
+
+// WithCapacity `capacity` of .Status.Capacity of inner PV. Accepts strings like `2Gi`.
+func (p *PVWrapper) WithCapacity(capacity string) *PVWrapper {
+	p.pv.Spec.Capacity = v1.ResourceList{
+		v1.ResourceStorage: resource.MustParse(capacity),
+	}
+	return p
+}
+
+func (p *PVWrapper) WithPersistentVolumeSource(source v1.PersistentVolumeSource) *PVWrapper {
+	p.pv.Spec.PersistentVolumeSource = source
+	return p
+}
+
+func (p *PVWrapper) WithCSIPersistentVolumeSource(source v1.CSIPersistentVolumeSource) *PVWrapper {
+	p.pv.Spec.PersistentVolumeSource.CSI = &source
+	return p
+}
+
+func (p *PVWrapper) WithVolumeMode(volumeMode v1.PersistentVolumeMode) *PVWrapper {
+	p.pv.Spec.VolumeMode = &volumeMode
+	return p
+}
+
+func (p *PVWrapper) WithClaimRef(objectReference v1.ObjectReference) *PVWrapper {
+	p.pv.Spec.ClaimRef = &objectReference
+	return p
+}
+
+// WithPhase sets `phase` as .status.Phase of inner PV.
+func (p *PVWrapper) WithPhase(phase v1.PersistentVolumePhase) *PVWrapper {
+	p.pv.Status.Phase = phase
+	return p
+}
+
+// WithVolumeAttributesClassName sets `vacName` as .Spec.VolumeAttributeClass of inner PV.
+func (p *PVWrapper) WithVolumeAttributesClassName(vacName string) *PVWrapper {
+	p.pv.Spec.VolumeAttributesClassName = &vacName
+	return p
 }
 
 func QuantityGB(i int) resource.Quantity {

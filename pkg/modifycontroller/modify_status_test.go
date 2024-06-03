@@ -3,6 +3,7 @@ package modifycontroller
 import (
 	"context"
 	"reflect"
+	"strconv"
 	"testing"
 	"time"
 
@@ -15,8 +16,6 @@ import (
 	"google.golang.org/grpc/status"
 	v1 "k8s.io/api/core/v1"
 	storagev1alpha1 "k8s.io/api/storage/v1alpha1"
-	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
@@ -198,9 +197,8 @@ func TestUpdateConditionBasedOnError(t *testing.T) {
 func TestMarkControllerModifyVolumeCompleted(t *testing.T) {
 	basePVC := makeTestPVC([]v1.PersistentVolumeClaimCondition{})
 	basePV := createTestPV(1, pvcName, pvcNamespace, "foobaz" /*pvcUID*/, &fsVolumeMode, testVac)
-	expectedPV := basePV.DeepCopy()
-	expectedPV.Spec.VolumeAttributesClassName = &targetVac
-	expectedPVC := basePVC.WithCurrentVolumeAttributesClassName(targetVac).Get()
+	expectedPV := basePV.Clone().WithVolumeAttributesClassName(targetVac)
+	expectedPVC := basePVC.Clone().WithCurrentVolumeAttributesClassName(targetVac)
 
 	tests := []struct {
 		name        string
@@ -213,16 +211,16 @@ func TestMarkControllerModifyVolumeCompleted(t *testing.T) {
 		{
 			name:        "update modify volume status to completed",
 			pvc:         basePVC.Get(),
-			pv:          basePV,
-			expectedPVC: basePVC.WithCurrentVolumeAttributesClassName(targetVac).Get(),
-			expectedPV:  expectedPV,
+			pv:          basePV.Get(),
+			expectedPVC: expectedPVC.Get(),
+			expectedPV:  expectedPV.Get(),
 		},
 		{
 			name:        "update modify volume status to completed, and clear conditions",
 			pvc:         basePVC.WithConditions([]v1.PersistentVolumeClaimCondition{pvcConditionInProgress}).Get(),
-			pv:          basePV,
-			expectedPVC: expectedPVC,
-			expectedPV:  expectedPV,
+			pv:          basePV.Get(),
+			expectedPVC: expectedPVC.Get(),
+			expectedPV:  expectedPV.Get(),
 		},
 	}
 
@@ -277,7 +275,7 @@ func TestRemovePVCFromModifyVolumeUncertainCache(t *testing.T) {
 		WithNamespace("default").
 		WithVolumeName("test-vol0").
 		WithUID("test-uid").
-		WithAccessModes([]v1.PersistentVolumeAccessMode{v1.ReadWriteOnce}).
+		WithAccessModes(v1.ReadWriteOnce).
 		WithRequest("2G").
 		WithPhase(v1.ClaimBound).
 		WithCapacity("1G").
@@ -381,35 +379,29 @@ func TestRemovePVCFromModifyVolumeUncertainCache(t *testing.T) {
 	}
 }
 
-func createTestPV(capacityGB int, pvcName, pvcNamespace string, pvcUID types.UID, volumeMode *v1.PersistentVolumeMode, vacName string) *v1.PersistentVolume {
-	capacity := testutil.QuantityGB(capacityGB)
-
-	pv := &v1.PersistentVolume{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "testPV",
-		},
-		Spec: v1.PersistentVolumeSpec{
-			AccessModes: []v1.PersistentVolumeAccessMode{v1.ReadWriteOnce},
-			Capacity: map[v1.ResourceName]resource.Quantity{
-				v1.ResourceStorage: capacity,
-			},
-			PersistentVolumeSource: v1.PersistentVolumeSource{
-				CSI: &v1.CSIPersistentVolumeSource{
-					Driver:       "foo",
-					VolumeHandle: "foo",
-				},
-			},
-			VolumeMode:                volumeMode,
-			VolumeAttributesClassName: &vacName,
-		},
-	}
+func createPV(capacityGB int, pvcName, pvcNamespace string, pvcUID types.UID, volumeMode *v1.PersistentVolumeMode) *testutil.PVWrapper {
+	pv := testutil.MakePV("testPV").
+		WithAccessModes(v1.ReadWriteOnce).
+		WithCapacity(strconv.Itoa(capacityGB) + "Gi").
+		WithCSIPersistentVolumeSource(v1.CSIPersistentVolumeSource{Driver: "foo", VolumeHandle: "foo"}).
+		WithVolumeMode(*volumeMode)
 	if len(pvcName) > 0 {
-		pv.Spec.ClaimRef = &v1.ObjectReference{
-			Namespace: pvcNamespace,
-			Name:      pvcName,
-			UID:       pvcUID,
-		}
-		pv.Status.Phase = v1.VolumeBound
+		pv = pv.WithClaimRef(v1.ObjectReference{Namespace: pvcNamespace, Name: pvcName, UID: pvcUID}).
+			WithPhase(v1.VolumeBound)
+	}
+	return pv
+}
+
+func createTestPV(capacityGB int, pvcName, pvcNamespace string, pvcUID types.UID, volumeMode *v1.PersistentVolumeMode, vacName string) *testutil.PVWrapper {
+	pv := testutil.MakePV("testPV").
+		WithAccessModes(v1.ReadWriteOnce).
+		WithCapacity(strconv.Itoa(capacityGB) + "Gi").
+		WithCSIPersistentVolumeSource(v1.CSIPersistentVolumeSource{Driver: "foo", VolumeHandle: "foo"}).
+		WithVolumeMode(*volumeMode).
+		WithVolumeAttributesClassName(vacName)
+	if len(pvcName) > 0 {
+		pv = pv.WithClaimRef(v1.ObjectReference{Namespace: pvcNamespace, Name: pvcName, UID: pvcUID}).
+			WithPhase(v1.VolumeBound)
 	}
 	return pv
 }
@@ -419,12 +411,11 @@ func makeTestPVC(conditions []v1.PersistentVolumeClaimCondition) *testutil.PVCWr
 
 	return testutil.MakePVC("foo").
 		WithNamespace("modify").
-		WithAccessModes([]v1.PersistentVolumeAccessMode{v1.ReadWriteOnce, v1.ReadOnlyMany}).
+		WithAccessModes(v1.ReadWriteOnce, v1.ReadOnlyMany).
 		WithRequest(capacity).
 		WithVolumeAttributesClassName(targetVac).
 		WithPhase(v1.ClaimBound).
 		WithCapacity(capacity).
-		WithPhase(v1.ClaimBound).
 		WithConditions(conditions).
 		WithTargetVolumeAttributeClassName(targetVac).
 		WithCurrentVolumeAttributesClassName(testVac)

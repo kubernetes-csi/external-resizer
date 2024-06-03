@@ -2,6 +2,7 @@ package modifycontroller
 
 import (
 	"context"
+	"github.com/kubernetes-csi/external-resizer/pkg/testutil"
 	"testing"
 	"time"
 
@@ -11,7 +12,6 @@ import (
 	"github.com/kubernetes-csi/external-resizer/pkg/modifier"
 	v1 "k8s.io/api/core/v1"
 	storagev1alpha1 "k8s.io/api/storage/v1alpha1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
@@ -38,7 +38,7 @@ var (
 
 func TestModify(t *testing.T) {
 	basePVC := createTestPVC(pvcName, testVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/)
-	basePV := createTestPV(1, pvcName, pvcNamespace, "foobaz" /*pvcUID*/, &fsVolumeMode, testVac)
+	basePV := createTestPV(1, pvcName, pvcNamespace, "foobaz" /*pvcUID*/, &fsVolumeMode, testVac).Get()
 
 	var tests = []struct {
 		name                                     string
@@ -52,16 +52,16 @@ func TestModify(t *testing.T) {
 	}{
 		{
 			name:                                     "nothing to modify",
-			pvc:                                      basePVC,
+			pvc:                                      basePVC.Get(),
 			pv:                                       basePV,
 			expectModifyCall:                         false,
-			expectedModifyVolumeStatus:               basePVC.Status.ModifyVolumeStatus,
+			expectedModifyVolumeStatus:               basePVC.Get().Status.ModifyVolumeStatus,
 			expectedCurrentVolumeAttributesClassName: &testVac,
 			expectedPVVolumeAttributesClassName:      &testVac,
 		},
 		{
 			name:             "vac does not exist, no modification and set ModifyVolumeStatus to pending",
-			pvc:              createTestPVC(pvcName, targetVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/),
+			pvc:              createTestPVC(pvcName, targetVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/).Get(),
 			pv:               basePV,
 			expectModifyCall: false,
 			expectedModifyVolumeStatus: &v1.ModifyVolumeStatus{
@@ -73,7 +73,7 @@ func TestModify(t *testing.T) {
 		},
 		{
 			name:             "modify volume success",
-			pvc:              createTestPVC(pvcName, targetVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/),
+			pvc:              createTestPVC(pvcName, targetVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/).Get(),
 			pv:               basePV,
 			vacExists:        true,
 			expectModifyCall: true,
@@ -165,34 +165,16 @@ func TestModify(t *testing.T) {
 	}
 }
 
-func createTestPVC(pvcName string, vacName string, curVacName string, targetVacName string) *v1.PersistentVolumeClaim {
-	pvc := &v1.PersistentVolumeClaim{
-		ObjectMeta: metav1.ObjectMeta{Name: pvcName, Namespace: "modify"},
-		Spec: v1.PersistentVolumeClaimSpec{
-			AccessModes: []v1.PersistentVolumeAccessMode{
-				v1.ReadWriteOnce,
-				v1.ReadOnlyMany,
-			},
-			Resources: v1.VolumeResourceRequirements{
-				Requests: v1.ResourceList{
-					v1.ResourceName(v1.ResourceStorage): resource.MustParse("2Gi"),
-				},
-			},
-			VolumeAttributesClassName: &vacName,
-		},
-		Status: v1.PersistentVolumeClaimStatus{
-			Phase: v1.ClaimBound,
-			Capacity: v1.ResourceList{
-				v1.ResourceStorage: resource.MustParse("2Gi"),
-			},
-			CurrentVolumeAttributesClassName: &curVacName,
-			ModifyVolumeStatus: &v1.ModifyVolumeStatus{
-				TargetVolumeAttributesClassName: targetVacName,
-				Status:                          "",
-			},
-		},
-	}
-	return pvc
+func createTestPVC(pvcName string, vacName string, curVacName string, targetVacName string) *testutil.PVCWrapper {
+	return testutil.MakePVC(pvcName).
+		WithNamespace("modify").
+		WithAccessModes(v1.ReadWriteOnce, v1.ReadOnlyMany).
+		WithStorageResource("2Gi").
+		WithVolumeAttributesClassName(vacName).
+		WithPhase(v1.ClaimBound).
+		WithCapacity("2Gi").
+		WithCurrentVolumeAttributesClassName(curVacName).
+		WithTargetVolumeAttributeClassName(targetVacName)
 }
 
 func fakeK8s(objs []runtime.Object) (kubernetes.Interface, informers.SharedInformerFactory) {

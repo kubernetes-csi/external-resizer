@@ -20,8 +20,8 @@ import (
 )
 
 func TestController(t *testing.T) {
-	basePVC := createTestPVC(pvcName, testVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/)
-	basePV := createTestPV(1, pvcName, pvcNamespace, "foobaz" /*pvcUID*/, &fsVolumeMode, testVac)
+	basePVC := createTestPVC(pvcName, testVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/).Get()
+	basePV := createTestPV(1, pvcName, pvcNamespace, "foobaz" /*pvcUID*/, &fsVolumeMode, testVac).Get()
 	firstTimePV := basePV.DeepCopy()
 	firstTimePV.Spec.VolumeAttributesClassName = nil
 	firstTimePVC := basePVC.DeepCopy()
@@ -37,7 +37,7 @@ func TestController(t *testing.T) {
 	}{
 		{
 			name:          "Modify called",
-			pvc:           createTestPVC(pvcName, "target-vac" /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/),
+			pvc:           createTestPVC(pvcName, "target-vac" /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/).Get(),
 			pv:            basePV,
 			vacExists:     true,
 			callCSIModify: true,
@@ -127,6 +127,7 @@ func TestController(t *testing.T) {
 }
 
 func TestModifyPVC(t *testing.T) {
+	basePVC := createTestPVC(pvcName, "target-vac" /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/)
 	basePV := createTestPV(1, pvcName, pvcNamespace, "foobaz" /*pvcUID*/, &fsVolumeMode, testVac)
 
 	tests := []struct {
@@ -138,15 +139,15 @@ func TestModifyPVC(t *testing.T) {
 	}{
 		{
 			name:          "Modify succeeded",
-			pvc:           createTestPVC(pvcName, "target-vac" /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/),
-			pv:            basePV,
+			pvc:           basePVC.Get(),
+			pv:            basePV.Get(),
 			modifyFailure: false,
 			expectFailure: false,
 		},
 		{
 			name:          "Modify failed",
-			pvc:           createTestPVC(pvcName, "target-vac" /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/),
-			pv:            basePV,
+			pvc:           basePVC.Get(),
+			pv:            basePV.Get(),
 			modifyFailure: true,
 			expectFailure: true,
 		},
