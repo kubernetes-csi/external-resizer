@@ -25,6 +25,9 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// NOTE: Some of the if-else conditions in following code can be short-circuited, but it hasn't been done so
+// to make it explicit, why we are doing what we are doing. This code is verbose on purpose, and we should
+// keep it that way for easier readability.
 func (ctrl *resizeController) expandAndRecover(pvc *v1.PersistentVolumeClaim, pv *v1.PersistentVolume) (*v1.PersistentVolumeClaim, *v1.PersistentVolume, error, bool) {
 	if !ctrl.pvCanBeExpanded(pv, pvc) {
 		klog.V(4).InfoS("No need to resize", "PV", klog.KObj(pv))
@@ -42,19 +45,25 @@ func (ctrl *resizeController) expandAndRecover(pvc *v1.PersistentVolumeClaim, pv
 	newSize := pvcSpecSize
 	resizeStatus := pvc.Status.AllocatedResourceStatuses[v1.ResourceStorage]
 
+	pvcKey, err := util.GetObjectKey(pvc)
+	if err != nil {
+		return pvc, pv, fmt.Errorf("error getting object key for pvc %s: %v", pvc.Name, err), resizeNotCalled
+	}
+
 	var allocatedSize *resource.Quantity
 	t, ok := pvc.Status.AllocatedResources[v1.ResourceStorage]
 	if ok {
 		allocatedSize = &t
 	}
 
+	updateStatus := true
+
 	if pvSize.Cmp(pvcSpecSize) < 0 {
 		// PV is smaller than user requested size. In general some control-plane volume expansion
 		// is necessary at this point but if we were expanding the PVC before we should let
 		// previous operation finish before starting expansion to new user requested size.
 		switch resizeStatus {
-		case v1.PersistentVolumeClaimControllerResizeInProgress,
-			v1.PersistentVolumeClaimNodeResizeFailed:
+		case v1.PersistentVolumeClaimNodeResizeInfeasible:
 			if allocatedSize != nil {
 				newSize = *allocatedSize
 			}
@@ -70,6 +79,17 @@ func (ctrl *resizeController) expandAndRecover(pvc *v1.PersistentVolumeClaim, pv
 			// but having this check here *avoids* unnecessary RPC calls to plugin.
 			if pvSize.Cmp(newSize) >= 0 {
 				return pvc, pv, nil, resizeNotCalled
+			}
+		case v1.PersistentVolumeClaimControllerResizeInProgress:
+			// There could be two reasons why controller resize was in-progress:
+			//	1. Either previous operation failed with uncertain error.
+			//	2. Or Previous operation failed with final error, but we did not update API object.
+			// For case#1 - Recovery from failure is not immediately possible, and we should let
+			// previous operation succeed or fail.
+			if ctrl.finalErrorPVCs.Has(pvcKey) {
+				newSize = pvcSpecSize
+			} else if allocatedSize != nil {
+				newSize = *allocatedSize
 			}
 		default:
 			newSize = pvcSpecSize
@@ -91,7 +111,7 @@ func (ctrl *resizeController) expandAndRecover(pvc *v1.PersistentVolumeClaim, pv
 			// we don't need to do any work. We could be here because of a spurious update event.
 			// This is case #1
 			return pvc, pv, nil, resizeNotCalled
-		case v1.PersistentVolumeClaimNodeResizeFailed:
+		case v1.PersistentVolumeClaimNodeResizeInfeasible:
 			// This is case#3, we need to reset the pvc status in such a way that kubelet can safely retry volume
 			// expansion.
 			if ctrl.resizer.DriverSupportsControlPlaneExpansion() && allocatedSize != nil {
@@ -100,7 +120,7 @@ func (ctrl *resizeController) expandAndRecover(pvc *v1.PersistentVolumeClaim, pv
 				newSize = pvcSpecSize
 			}
 		case v1.PersistentVolumeClaimControllerResizeInProgress,
-			v1.PersistentVolumeClaimControllerResizeFailed:
+			v1.PersistentVolumeClaimControllerResizeInfeasible:
 			// This is case#2 or it could also be case#4 when user manually shrunk the PVC
 			// after expanding it.
 			if allocatedSize != nil {
@@ -117,8 +137,14 @@ func (ctrl *resizeController) expandAndRecover(pvc *v1.PersistentVolumeClaim, pv
 			}
 		}
 	}
-	var err error
-	pvc, err = ctrl.markControllerResizeInProgress(pvc, newSize)
+	// If we are expanding volume to same size as before, then there is no point in changing
+	// status fields again.
+	if allocatedSize != nil && allocatedSize.Cmp(newSize) == 0 {
+		klog.V(4).Infof("skipping updating status for pvc %s", pvcKey)
+		updateStatus = false
+	}
+
+	pvc, err = ctrl.markControllerResizeInProgress(pvc, newSize, updateStatus)
 	if err != nil {
 		return pvc, pv, fmt.Errorf("marking pvc %q as resizing failed: %v", klog.KObj(pvc), err), resizeNotCalled
 	}
@@ -159,6 +185,11 @@ func (ctrl *resizeController) callResizeOnPlugin(
 	newSize, oldSize resource.Quantity) (*v1.PersistentVolumeClaim, *v1.PersistentVolume, error) {
 	updatedSize, fsResizeRequired, err := ctrl.resizer.Resize(pv, newSize)
 
+	pvcKey, objectKeyError := util.GetObjectKey(pvc)
+	if objectKeyError != nil {
+		return pvc, pv, fmt.Errorf("error getting object key for pvc %s: %v", pvc.Name, err)
+	}
+
 	if err != nil {
 		// if this error was a in-use error then it must be tracked so as we don't retry without
 		// first verifying if volume is in-use
@@ -167,13 +198,26 @@ func (ctrl *resizeController) callResizeOnPlugin(
 		}
 		if util.IsFinalError(err) {
 			var markExpansionFailedError error
-			pvc, markExpansionFailedError = ctrl.markControllerExpansionFailed(pvc)
-			if markExpansionFailedError != nil {
-				return pvc, pv, fmt.Errorf("resizing failed in controller with %v but failed to update PVC %s with: %v", err, klog.KObj(pvc), markExpansionFailedError)
+			ctrl.finalErrorPVCs.Insert(pvcKey)
+			if util.IsInfeasibleError(err) {
+				pvc, markExpansionFailedError = ctrl.markControllerExpansionInfeasible(pvc, err)
+				if markExpansionFailedError != nil {
+					return pvc, pv, fmt.Errorf("resizing failed in controller with %v but failed to update PVC %s with: %v", err, klog.KObj(pvc), markExpansionFailedError)
+				}
+			} else {
+				pvc, markExpansionFailedError = ctrl.markControllerExpansionFailedCondition(pvc, err)
+				if markExpansionFailedError != nil {
+					return pvc, pv, fmt.Errorf("resizing failed in controller with %v but failed to update PVC %s with: %v", err, klog.KObj(pvc), markExpansionFailedError)
+				}
 			}
+		} else {
+			// remove key from finalErrorPVCs
+			ctrl.finalErrorPVCs.Delete(pvcKey)
 		}
 		return pvc, pv, fmt.Errorf("resize volume %q by resizer %q failed: %v", pv.Name, ctrl.name, err)
 	}
+
+	ctrl.finalErrorPVCs.Delete(pvcKey)
 
 	klog.V(4).InfoS("Resize volume succeeded, start to update PV's capacity", "PV", klog.KObj(pv))
 

@@ -33,6 +33,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	"k8s.io/client-go/informers"
@@ -62,7 +63,8 @@ type resizeController struct {
 	pvSynced      cache.InformerSynced
 	pvcSynced     cache.InformerSynced
 
-	usedPVCs *inUsePVCStore
+	usedPVCs       *inUsePVCStore
+	finalErrorPVCs sets.Set[string]
 
 	podLister       corelisters.PodLister
 	podListerSynced cache.InformerSynced
@@ -104,6 +106,7 @@ func NewResizeController(
 		volumes:                pvInformer.Informer().GetStore(),
 		claims:                 pvcInformer.Informer().GetStore(),
 		eventRecorder:          eventRecorder,
+		finalErrorPVCs:         sets.New[string](),
 		usedPVCs:               newUsedPVCStore(),
 		handleVolumeInUseError: handleVolumeInUseError,
 	}
@@ -189,6 +192,22 @@ func (ctrl *resizeController) updatePVC(oldObj, newObj interface{}) {
 	newResizerName := newPVC.Annotations[util.VolumeResizerKey]
 	oldResizerName := oldPVC.Annotations[util.VolumeResizerKey]
 
+	pvcStatusChanged := false
+	pvcRequestSizeChanged := newReq.Cmp(oldReq) > 0
+
+	if utilfeature.DefaultFeatureGate.Enabled(features.RecoverVolumeExpansionFailure) {
+		newResizeStatus := newPVC.Status.AllocatedResourceStatuses[v1.ResourceStorage]
+		oldResizeStatus := oldPVC.Status.AllocatedResourceStatuses[v1.ResourceStorage]
+		if newResizeStatus != oldResizeStatus {
+			pvcStatusChanged = true
+		}
+
+		// if recovery is enabled, then requested size also can be reduced
+		if newReq.Cmp(oldReq) != 0 {
+			pvcRequestSizeChanged = true
+		}
+	}
+
 	// We perform additional checks to avoid double processing of PVCs, as we will also receive Update event when:
 	// 1. Administrator or users may introduce other changes(such as add labels, modify annotations, etc.)
 	//    unrelated to volume resize.
@@ -206,7 +225,7 @@ func (ctrl *resizeController) updatePVC(oldObj, newObj interface{}) {
 	// 3. An already expanded in-tree PVC:
 	// An in-tree PVC is resized with in-tree resizer. And later, CSI migration is turned on and resizer name is updated from
 	// in-tree resizer name to CSI driver name.
-	if newReq.Cmp(oldReq) > 0 || newResizerName != oldResizerName {
+	if pvcRequestSizeChanged || newResizerName != oldResizerName {
 		ctrl.addPVC(newObj)
 	} else {
 		// PVC's size not changed, so this Update event maybe caused by:
@@ -224,6 +243,8 @@ func (ctrl *resizeController) updatePVC(oldObj, newObj interface{}) {
 		} else if newCap.Cmp(oldCap) > 0 {
 			// This is case 3
 			ctrl.addPVC(newObj)
+		} else if pvcStatusChanged {
+			ctrl.addPVC(newObj)
 		}
 	}
 }
@@ -237,8 +258,7 @@ func (ctrl *resizeController) deletePVC(obj interface{}) {
 }
 
 // Run starts the controller.
-func (ctrl *resizeController) Run(
-	workers int, ctx context.Context) {
+func (ctrl *resizeController) Run(workers int, ctx context.Context) {
 	defer ctrl.claimQueue.ShutDown()
 
 	klog.InfoS("Starting external resizer", "controller", ctrl.name)
@@ -310,7 +330,7 @@ func (ctrl *resizeController) syncPVC(key string) error {
 
 	volumeObj, exists, err := ctrl.volumes.GetByKey(pvc.Spec.VolumeName)
 	if err != nil {
-		return fmt.Errorf("Get PV %q of pvc %q failed: %v", pvc.Spec.VolumeName, klog.KObj(pvc), err)
+		return fmt.Errorf("get PV %q of pvc %q failed: %v", pvc.Spec.VolumeName, klog.KObj(pvc), err)
 	}
 	if !exists {
 		klog.InfoS("PV bound to PVC not found", "PV", pvc.Spec.VolumeName, "PVC", klog.KObj(pvc))
@@ -489,11 +509,11 @@ func (ctrl *resizeController) markPVCAsFSResizeRequired(pvc *v1.PersistentVolume
 	}
 	newPVC := pvc.DeepCopy()
 	newPVC.Status.Conditions = util.MergeResizeConditionsOfPVC(newPVC.Status.Conditions,
-		[]v1.PersistentVolumeClaimCondition{pvcCondition})
+		[]v1.PersistentVolumeClaimCondition{pvcCondition}, false /*keepOldResizeCondition*/)
 
 	updatedPVC, err := util.PatchClaim(ctrl.kubeClient, pvc, newPVC, true /* addResourceVersionCheck */)
 	if err != nil {
-		return fmt.Errorf("Mark PVC %q as file system resize required failed: %w", klog.KObj(pvc), err)
+		return fmt.Errorf("mark PVC %q as file system resize required failed: %w", klog.KObj(pvc), err)
 	}
 
 	err = ctrl.claims.Update(updatedPVC)
@@ -518,7 +538,7 @@ func (ctrl *resizeController) markPVCResizeInProgress(pvc *v1.PersistentVolumeCl
 	}
 	newPVC := pvc.DeepCopy()
 	newPVC.Status.Conditions = util.MergeResizeConditionsOfPVC(newPVC.Status.Conditions,
-		[]v1.PersistentVolumeClaimCondition{progressCondition})
+		[]v1.PersistentVolumeClaimCondition{progressCondition}, false /*keepOldResizeCondition*/)
 
 	updatedPVC, err := util.PatchClaim(ctrl.kubeClient, pvc, newPVC, true /* addResourceVersionCheck */)
 	if err != nil {
@@ -536,7 +556,7 @@ func (ctrl *resizeController) markPVCResizeFinished(
 	newSize resource.Quantity) error {
 	newPVC := pvc.DeepCopy()
 	newPVC.Status.Capacity[v1.ResourceStorage] = newSize
-	newPVC.Status.Conditions = util.MergeResizeConditionsOfPVC(pvc.Status.Conditions, []v1.PersistentVolumeClaimCondition{})
+	newPVC.Status.Conditions = util.MergeResizeConditionsOfPVC(pvc.Status.Conditions, []v1.PersistentVolumeClaimCondition{}, false /*keepOldResizeCondition*/)
 
 	updatedPVC, err := util.PatchClaim(ctrl.kubeClient, pvc, newPVC, true /* addResourceVersionCheck */)
 	if err != nil {
