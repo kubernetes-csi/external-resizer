@@ -33,6 +33,7 @@ func NewModifierFromClient(
 	timeout time.Duration,
 	k8sClient kubernetes.Interface,
 	informerFactory informers.SharedInformerFactory,
+	extraModifyMetadata bool,
 	driverName string) (Modifier, error) {
 
 	_, err := supportsControllerModify(csiClient, timeout)
@@ -41,18 +42,20 @@ func NewModifierFromClient(
 	}
 
 	return &csiModifier{
-		name:    driverName,
-		client:  csiClient,
-		timeout: timeout,
+		name:                driverName,
+		client:              csiClient,
+		timeout:             timeout,
+		extraModifyMetadata: extraModifyMetadata,
 
 		k8sClient: k8sClient,
 	}, nil
 }
 
 type csiModifier struct {
-	name    string
-	client  csi.Client
-	timeout time.Duration
+	name                string
+	client              csi.Client
+	timeout             time.Duration
+	extraModifyMetadata bool
 
 	k8sClient kubernetes.Interface
 }
