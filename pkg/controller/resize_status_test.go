@@ -77,7 +77,7 @@ func TestResizeFunctions(t *testing.T) {
 		tc := test
 		t.Run(tc.name, func(t *testing.T) {
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.RecoverVolumeExpansionFailure, true)
-			client := csi.NewMockClient("foo", true, true, false, true, true)
+			client := csi.NewMockClient("foo", true, true, false, true, true, false)
 			driverName, _ := client.GetDriverName(context.TODO())
 
 			pvc := test.pvc

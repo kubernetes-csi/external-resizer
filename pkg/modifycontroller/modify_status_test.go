@@ -102,7 +102,7 @@ func TestMarkControllerModifyVolumeStatus(t *testing.T) {
 		tc := test
 		t.Run(tc.name, func(t *testing.T) {
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.VolumeAttributesClass, true)
-			client := csi.NewMockClient("foo", true, true, true, true, true)
+			client := csi.NewMockClient("foo", true, true, true, true, true, false)
 			driverName, _ := client.GetDriverName(context.TODO())
 
 			pvc := test.pvc
@@ -112,13 +112,13 @@ func TestMarkControllerModifyVolumeStatus(t *testing.T) {
 
 			kubeClient, informerFactory := fakeK8s(initialObjects)
 
-			csiModifier, err := modifier.NewModifierFromClient(client, 15*time.Second, kubeClient, informerFactory, driverName)
+			csiModifier, err := modifier.NewModifierFromClient(client, 15*time.Second, kubeClient, informerFactory, false, driverName)
 			if err != nil {
 				t.Fatalf("Test %s: Unable to create modifier: %v", test.name, err)
 			}
 			controller := NewModifyController(driverName,
 				csiModifier, kubeClient,
-				time.Second, informerFactory,
+				time.Second, false, informerFactory,
 				workqueue.DefaultControllerRateLimiter())
 
 			ctrlInstance, _ := controller.(*modifyController)
@@ -162,7 +162,7 @@ func TestUpdateConditionBasedOnError(t *testing.T) {
 		tc := test
 		t.Run(tc.name, func(t *testing.T) {
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.VolumeAttributesClass, true)
-			client := csi.NewMockClient("foo", true, true, true, true, true)
+			client := csi.NewMockClient("foo", true, true, true, true, true, false)
 			driverName, _ := client.GetDriverName(context.TODO())
 
 			pvc := test.pvc
@@ -172,13 +172,13 @@ func TestUpdateConditionBasedOnError(t *testing.T) {
 
 			kubeClient, informerFactory := fakeK8s(initialObjects)
 
-			csiModifier, err := modifier.NewModifierFromClient(client, 15*time.Second, kubeClient, informerFactory, driverName)
+			csiModifier, err := modifier.NewModifierFromClient(client, 15*time.Second, kubeClient, informerFactory, false, driverName)
 			if err != nil {
 				t.Fatalf("Test %s: Unable to create modifier: %v", test.name, err)
 			}
 			controller := NewModifyController(driverName,
 				csiModifier, kubeClient,
-				time.Second, informerFactory,
+				time.Second, false, informerFactory,
 				workqueue.DefaultControllerRateLimiter())
 
 			ctrlInstance, _ := controller.(*modifyController)
@@ -231,7 +231,7 @@ func TestMarkControllerModifyVolumeCompleted(t *testing.T) {
 		tc := test
 		t.Run(tc.name, func(t *testing.T) {
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.VolumeAttributesClass, true)
-			client := csi.NewMockClient("foo", true, true, true, true, true)
+			client := csi.NewMockClient("foo", true, true, true, true, true, false)
 			driverName, _ := client.GetDriverName(context.TODO())
 
 			var initialObjects []runtime.Object
@@ -240,13 +240,13 @@ func TestMarkControllerModifyVolumeCompleted(t *testing.T) {
 
 			kubeClient, informerFactory := fakeK8s(initialObjects)
 
-			csiModifier, err := modifier.NewModifierFromClient(client, 15*time.Second, kubeClient, informerFactory, driverName)
+			csiModifier, err := modifier.NewModifierFromClient(client, 15*time.Second, kubeClient, informerFactory, false, driverName)
 			if err != nil {
 				t.Fatalf("Test %s: Unable to create modifier: %v", test.name, err)
 			}
 			controller := NewModifyController(driverName,
 				csiModifier, kubeClient,
-				time.Second, informerFactory,
+				time.Second, false, informerFactory,
 				workqueue.DefaultControllerRateLimiter())
 
 			ctrlInstance, _ := controller.(*modifyController)
@@ -293,7 +293,7 @@ func TestRemovePVCFromModifyVolumeUncertainCache(t *testing.T) {
 		tc := test
 		t.Run(tc.name, func(t *testing.T) {
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.VolumeAttributesClass, true)
-			client := csi.NewMockClient("foo", true, true, true, true, true)
+			client := csi.NewMockClient("foo", true, true, true, true, true, false)
 			driverName, _ := client.GetDriverName(context.TODO())
 
 			var initialObjects []runtime.Object
@@ -306,13 +306,13 @@ func TestRemovePVCFromModifyVolumeUncertainCache(t *testing.T) {
 			podInformer := informerFactory.Core().V1().Pods()
 			vacInformer := informerFactory.Storage().V1beta1().VolumeAttributesClasses()
 
-			csiModifier, err := modifier.NewModifierFromClient(client, 15*time.Second, kubeClient, informerFactory, driverName)
+			csiModifier, err := modifier.NewModifierFromClient(client, 15*time.Second, kubeClient, informerFactory, false, driverName)
 			if err != nil {
 				t.Fatalf("Test %s: Unable to create modifier: %v", test.name, err)
 			}
 			controller := NewModifyController(driverName,
 				csiModifier, kubeClient,
-				time.Second, informerFactory,
+				time.Second, false, informerFactory,
 				workqueue.DefaultControllerRateLimiter())
 
 			ctrlInstance, _ := controller.(*modifyController)

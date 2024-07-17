@@ -32,7 +32,12 @@ var (
 	targetVacObject = &storagev1beta1.VolumeAttributesClass{
 		ObjectMeta: metav1.ObjectMeta{Name: targetVac},
 		DriverName: "test-driver",
-		Parameters: map[string]string{"iops": "4567"},
+		Parameters: map[string]string{
+			"iops":                             "4567",
+			"csi.storage.k8s.io/pvc/name":      "foo",
+			"csi.storage.k8s.io/pvc/namespace": "modify",
+			"csi.storage.k8s.io/pv/name":       "testPV",
+		},
 	}
 )
 
@@ -49,6 +54,8 @@ func TestModify(t *testing.T) {
 		expectedModifyVolumeStatus               *v1.ModifyVolumeStatus
 		expectedCurrentVolumeAttributesClassName *string
 		expectedPVVolumeAttributesClassName      *string
+		withExtraMetadata                        bool
+		expectedVacParams                        map[string]string
 	}{
 		{
 			name:                                     "nothing to modify",
@@ -81,6 +88,23 @@ func TestModify(t *testing.T) {
 			expectedCurrentVolumeAttributesClassName: &targetVac,
 			expectedPVVolumeAttributesClassName:      &targetVac,
 		},
+		{
+			name:                                     "modify volume success with extra metadata",
+			pvc:                                      createTestPVC(pvcName, targetVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/),
+			pv:                                       basePV,
+			vacExists:                                true,
+			expectModifyCall:                         true,
+			expectedModifyVolumeStatus:               nil,
+			expectedCurrentVolumeAttributesClassName: &targetVac,
+			expectedPVVolumeAttributesClassName:      &targetVac,
+			withExtraMetadata:                        true,
+			expectedVacParams: map[string]string{
+				"iops":                             "4567",
+				"csi.storage.k8s.io/pvc/name":      basePVC.GetName(),
+				"csi.storage.k8s.io/pvc/namespace": basePVC.GetNamespace(),
+				"csi.storage.k8s.io/pv/name":       "testPV",
+			},
+		},
 	}
 
 	for i := range tests {
@@ -88,7 +112,7 @@ func TestModify(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			// Setup
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.VolumeAttributesClass, true)
-			client := csi.NewMockClient("foo", true, true, true, true, true)
+			client := csi.NewMockClient("foo", true, true, true, true, true, test.withExtraMetadata)
 			driverName, _ := client.GetDriverName(context.TODO())
 
 			var initialObjects []runtime.Object
@@ -105,13 +129,13 @@ func TestModify(t *testing.T) {
 			pvcInformer := informerFactory.Core().V1().PersistentVolumeClaims()
 			vacInformer := informerFactory.Storage().V1beta1().VolumeAttributesClasses()
 
-			csiModifier, err := modifier.NewModifierFromClient(client, 15*time.Second, kubeClient, informerFactory, driverName)
+			csiModifier, err := modifier.NewModifierFromClient(client, 15*time.Second, kubeClient, informerFactory, test.withExtraMetadata, driverName)
 			if err != nil {
 				t.Fatalf("Test %s: Unable to create modifier: %v", test.name, err)
 			}
 			controller := NewModifyController(driverName,
 				csiModifier, kubeClient,
-				time.Second, informerFactory,
+				time.Second, test.withExtraMetadata, informerFactory,
 				workqueue.DefaultControllerRateLimiter())
 
 			ctrlInstance, _ := controller.(*modifyController)
@@ -134,7 +158,6 @@ func TestModify(t *testing.T) {
 			// Action
 			pvc, pv, err, modifyCalled := ctrlInstance.modify(test.pvc, test.pv)
 			// Verify
-
 			if err != nil {
 				t.Errorf("modify failed with %v", err)
 			}
@@ -157,6 +180,18 @@ func TestModify(t *testing.T) {
 			actualPVVolumeAttributesClassName := pv.Spec.VolumeAttributesClassName
 			if diff := cmp.Diff(*test.expectedPVVolumeAttributesClassName, *actualPVVolumeAttributesClassName); diff != "" {
 				t.Errorf("expected VolumeAttributesClassName of pv to be %v, got %v", *test.expectedPVVolumeAttributesClassName, *actualPVVolumeAttributesClassName)
+			}
+
+			if test.withExtraMetadata {
+				vacObj, err := ctrlInstance.vacLister.Get(*test.expectedPVVolumeAttributesClassName)
+				if err != nil {
+					t.Errorf("failed to get VAC: %v", err)
+				} else {
+					vacParams := vacObj.Parameters
+					if diff := cmp.Diff(test.expectedVacParams, vacParams); diff != "" {
+						t.Errorf("expected VAC parameters to be %v, got %v", test.expectedVacParams, vacParams)
+					}
+				}
 			}
 		})
 	}

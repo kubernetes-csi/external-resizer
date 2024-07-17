@@ -28,10 +28,10 @@ func TestNewModifier(t *testing.T) {
 			SupportsControllerModify: false,
 		},
 	} {
-		client := csi.NewMockClient("mock", false, false, c.SupportsControllerModify, false, false)
+		client := csi.NewMockClient("mock", false, false, c.SupportsControllerModify, false, false, false)
 		driverName := "mock-driver"
 		k8sClient, informerFactory := fakeK8s()
-		_, err := NewModifierFromClient(client, 0, k8sClient, informerFactory, driverName)
+		_, err := NewModifierFromClient(client, 0, k8sClient, informerFactory, false, driverName)
 		if err != c.Error {
 			t.Errorf("Case %d: Unexpected error: wanted %v, got %v", i, c.Error, err)
 		}
