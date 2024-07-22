@@ -277,8 +277,9 @@ func (ctrl *modifyController) syncPVC(key string) error {
 	// Only trigger modify volume if the following conditions are met
 	// 1. Non empty vac name
 	// 2. PVC is in Bound state
+	// 3. PV CSI driver name matches local driver
 	vacName := pvc.Spec.VolumeAttributesClassName
-	if vacName != nil && *vacName != "" && pvc.Status.Phase == v1.ClaimBound {
+	if vacName != nil && *vacName != "" && pvc.Status.Phase == v1.ClaimBound && pv.Spec.CSI.Driver == ctrl.name {
 		_, _, err, _ := ctrl.modify(pvc, pv)
 		if err != nil {
 			return err
