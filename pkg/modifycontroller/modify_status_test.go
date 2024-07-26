@@ -201,6 +201,7 @@ func TestMarkControllerModifyVolumeCompleted(t *testing.T) {
 	expectedPV := basePV.DeepCopy()
 	expectedPV.Spec.VolumeAttributesClassName = &targetVac
 	expectedPVC := basePVC.WithCurrentVolumeAttributesClassName(targetVac).Get()
+	expectedPVC.Status.ModifyVolumeStatus = nil
 
 	tests := []struct {
 		name        string
@@ -214,7 +215,7 @@ func TestMarkControllerModifyVolumeCompleted(t *testing.T) {
 			name:        "update modify volume status to completed",
 			pvc:         basePVC.Get(),
 			pv:          basePV,
-			expectedPVC: basePVC.WithCurrentVolumeAttributesClassName(targetVac).Get(),
+			expectedPVC: expectedPVC,
 			expectedPV:  expectedPV,
 		},
 		{

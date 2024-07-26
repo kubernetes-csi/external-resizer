@@ -94,24 +94,23 @@ func (ctrl *modifyController) updateConditionBasedOnError(pvc *v1.PersistentVolu
 // markControllerModifyVolumeStatus will mark ModifyVolumeStatus as completed in the PVC
 // and update CurrentVolumeAttributesClassName, clear the conditions
 func (ctrl *modifyController) markControllerModifyVolumeCompleted(pvc *v1.PersistentVolumeClaim, pv *v1.PersistentVolume) (*v1.PersistentVolumeClaim, *v1.PersistentVolume, error) {
+	modifiedVacName := pvc.Status.ModifyVolumeStatus.TargetVolumeAttributesClassName
+
 	// Update PVC
 	newPVC := pvc.DeepCopy()
+
 	// Update ModifyVolumeStatus to completed
-	var controllerModifyVolumeCompleted v1.PersistentVolumeClaimModifyVolumeStatus
-	if newPVC.Status.ModifyVolumeStatus == nil {
-		newPVC.Status.ModifyVolumeStatus = &v1.ModifyVolumeStatus{}
-	}
-	newPVC.Status.ModifyVolumeStatus.Status = controllerModifyVolumeCompleted
+	newPVC.Status.ModifyVolumeStatus = nil
 
 	// Update CurrentVolumeAttributesClassName
-	newPVC.Status.CurrentVolumeAttributesClassName = &newPVC.Status.ModifyVolumeStatus.TargetVolumeAttributesClassName
+	newPVC.Status.CurrentVolumeAttributesClassName = &modifiedVacName
 
-	// Clear all the conditions
+	// Clear all the conditions related to modify volume
 	newPVC.Status.Conditions = clearModifyVolumeConditions(newPVC.Status.Conditions)
 
 	// Update PV
 	newPV := pv.DeepCopy()
-	newPV.Spec.VolumeAttributesClassName = &newPVC.Status.ModifyVolumeStatus.TargetVolumeAttributesClassName
+	newPV.Spec.VolumeAttributesClassName = &modifiedVacName
 
 	// Update PV before PVC to avoid PV not getting updated but PVC did
 	updatedPV, err := util.PatchPersistentVolume(ctrl.kubeClient, pv, newPV)
