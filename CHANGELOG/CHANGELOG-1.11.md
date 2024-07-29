@@ -1,3 +1,25 @@
+# Release notes for v1.11.2
+
+[Documentation](https://kubernetes-csi.github.io)
+
+## Changes by Kind
+
+### Bug or Regression
+
+- Clear modify status of a pvc when the modification operation is completed ([#423](https://github.com/kubernetes-csi/external-resizer/pull/423), [@k8s-infra-cherrypick-robot](https://github.com/k8s-infra-cherrypick-robot))
+- Ensure external-resizer does not modify volumes owned by other CSI drivers ([#422](https://github.com/kubernetes-csi/external-resizer/pull/422), [@k8s-infra-cherrypick-robot](https://github.com/k8s-infra-cherrypick-robot))
+
+## Dependencies
+
+### Added
+_Nothing has changed._
+
+### Changed
+_Nothing has changed._
+
+### Removed
+_Nothing has changed._
+
 # Release notes for v1.11.1
 
 [Documentation](https://kubernetes-csi.github.io)
