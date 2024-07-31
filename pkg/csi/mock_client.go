@@ -15,7 +15,9 @@ func NewMockClient(
 	supportsControllerResize bool,
 	supportsControllerModify bool,
 	supportsPluginControllerService bool,
-	supportsControllerSingleNodeMultiWriter bool) *MockClient {
+	supportsControllerSingleNodeMultiWriter bool,
+	supportsExtraModifyMetada bool,
+) *MockClient {
 	return &MockClient{
 		name:                                    name,
 		supportsNodeResize:                      supportsNodeResize,
@@ -23,6 +25,7 @@ func NewMockClient(
 		supportsControllerModify:                supportsControllerModify,
 		supportsPluginControllerService:         supportsPluginControllerService,
 		supportsControllerSingleNodeMultiWriter: supportsControllerSingleNodeMultiWriter,
+		extraModifyMetadata:                     supportsExtraModifyMetada,
 	}
 }
 
@@ -40,6 +43,7 @@ type MockClient struct {
 	checkMigratedLabel                      bool
 	usedSecrets                             atomic.Pointer[map[string]string]
 	usedCapability                          atomic.Pointer[csi.VolumeCapability]
+	extraModifyMetadata                     bool
 }
 
 func (c *MockClient) GetDriverName(context.Context) (string, error) {
