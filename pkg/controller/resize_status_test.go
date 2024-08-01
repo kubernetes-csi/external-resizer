@@ -37,8 +37,8 @@ func TestResizeFunctions(t *testing.T) {
 		},
 		{
 			name: "mark fs resize, when other resource statuses are present",
-			pvc:  basePVC.WithResourceStatus(v1.ResourceCPU, v1.PersistentVolumeClaimControllerResizeFailed).Get(),
-			expectedPVC: basePVC.WithResourceStatus(v1.ResourceCPU, v1.PersistentVolumeClaimControllerResizeFailed).
+			pvc:  basePVC.WithResourceStatus(v1.ResourceCPU, v1.PersistentVolumeClaimControllerResizeInfeasible).Get(),
+			expectedPVC: basePVC.WithResourceStatus(v1.ResourceCPU, v1.PersistentVolumeClaimControllerResizeInfeasible).
 				WithStorageResourceStatus(v1.PersistentVolumeClaimNodeResizePending).Get(),
 			testFunc: func(pvc *v1.PersistentVolumeClaim, ctrl *resizeController, _ resource.Quantity) (*v1.PersistentVolumeClaim, error) {
 				return ctrl.markForPendingNodeExpansion(pvc)
@@ -55,16 +55,16 @@ func TestResizeFunctions(t *testing.T) {
 		{
 			name:        "mark controller resize failed",
 			pvc:         basePVC.Get(),
-			expectedPVC: basePVC.WithStorageResourceStatus(v1.PersistentVolumeClaimControllerResizeFailed).Get(),
+			expectedPVC: basePVC.WithStorageResourceStatus(v1.PersistentVolumeClaimControllerResizeInfeasible).Get(),
 			testFunc: func(pvc *v1.PersistentVolumeClaim, ctrl *resizeController, q resource.Quantity) (*v1.PersistentVolumeClaim, error) {
 				return ctrl.markControllerExpansionFailed(pvc)
 			},
 		},
 		{
 			name: "mark resize finished",
-			pvc: basePVC.WithResourceStatus(v1.ResourceCPU, v1.PersistentVolumeClaimControllerResizeFailed).
+			pvc: basePVC.WithResourceStatus(v1.ResourceCPU, v1.PersistentVolumeClaimControllerResizeInfeasible).
 				WithStorageResourceStatus(v1.PersistentVolumeClaimNodeResizePending).Get(),
-			expectedPVC: basePVC.WithResourceStatus(v1.ResourceCPU, v1.PersistentVolumeClaimControllerResizeFailed).
+			expectedPVC: basePVC.WithResourceStatus(v1.ResourceCPU, v1.PersistentVolumeClaimControllerResizeInfeasible).
 				WithStorageResourceStatus("").Get(),
 			testFunc: func(pvc *v1.PersistentVolumeClaim, ctrl *resizeController, q resource.Quantity) (*v1.PersistentVolumeClaim, error) {
 				return ctrl.markOverallExpansionAsFinished(pvc, q)
@@ -75,7 +75,7 @@ func TestResizeFunctions(t *testing.T) {
 	for _, test := range tests {
 		tc := test
 		t.Run(tc.name, func(t *testing.T) {
-			defer featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.RecoverVolumeExpansionFailure, true)()
+			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.RecoverVolumeExpansionFailure, true)
 			client := csi.NewMockClient("foo", true, true, false, true, true)
 			driverName, _ := client.GetDriverName(context.TODO())
 

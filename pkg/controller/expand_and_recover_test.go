@@ -48,7 +48,7 @@ func TestExpandAndRecover(t *testing.T) {
 		},
 		{
 			name:                  "pvc.spec.size > pv.spec.size, resize_status=controller_expansion_failed",
-			pvc:                   testutil.GetTestPVC("test-vol0", "5G" /*specSize*/, "3G" /*statusSize*/, "10G" /*allocatedSize*/, v1.PersistentVolumeClaimControllerResizeFailed),
+			pvc:                   testutil.GetTestPVC("test-vol0", "5G" /*specSize*/, "3G" /*statusSize*/, "10G" /*allocatedSize*/, v1.PersistentVolumeClaimControllerResizeInfeasible),
 			pv:                    createPV(3, "claim01", defaultNS, "test-uid", &fsVolumeMode),
 			expectedResizeStatus:  v1.PersistentVolumeClaimNodeResizePending,
 			expectedAllocatedSize: resource.MustParse("5G"),
@@ -56,7 +56,7 @@ func TestExpandAndRecover(t *testing.T) {
 		},
 		{
 			name:                       "pvc.spec.size = pv.spec.size, resize_status=node_expansion_failed, disable_controller_expansion=true",
-			pvc:                        testutil.GetTestPVC("test-vol0", "5G" /*specSize*/, "3G" /*statusSize*/, "10G" /*allocatedSize*/, v1.PersistentVolumeClaimNodeResizeFailed),
+			pvc:                        testutil.GetTestPVC("test-vol0", "5G" /*specSize*/, "3G" /*statusSize*/, "10G" /*allocatedSize*/, v1.PersistentVolumeClaimControllerResizeInfeasible),
 			pv:                         createPV(10, "claim01", defaultNS, "test-uid", &fsVolumeMode),
 			disableControllerExpansion: true,
 			expectedResizeStatus:       v1.PersistentVolumeClaimNodeResizePending,
@@ -82,7 +82,7 @@ func TestExpandAndRecover(t *testing.T) {
 		},
 		{
 			name:                  "pv.spec.size >= pvc.spec.size, resize_status=node_expansion_failed",
-			pvc:                   testutil.GetTestPVC("test-vol0", "2G", "1G", "2G", v1.PersistentVolumeClaimNodeResizeFailed),
+			pvc:                   testutil.GetTestPVC("test-vol0", "2G", "1G", "2G", v1.PersistentVolumeClaimControllerResizeInfeasible),
 			pv:                    createPV(2, "claim01", defaultNS, "test-uid", &fsVolumeMode),
 			expectedResizeStatus:  v1.PersistentVolumeClaimNodeResizePending,
 			expectedAllocatedSize: resource.MustParse("2G"),
@@ -108,7 +108,7 @@ func TestExpandAndRecover(t *testing.T) {
 	for i := range tests {
 		test := tests[i]
 		t.Run(test.name, func(t *testing.T) {
-			defer featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.RecoverVolumeExpansionFailure, true)()
+			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.RecoverVolumeExpansionFailure, true)
 			client := csi.NewMockClient("foo", !test.disableNodeExpansion, !test.disableControllerExpansion, false, true, true)
 			driverName, _ := client.GetDriverName(context.TODO())
 

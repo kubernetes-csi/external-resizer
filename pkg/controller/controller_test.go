@@ -242,7 +242,7 @@ func TestController(t *testing.T) {
 			t.Fatalf("Test %s: Unable to create resizer: %v", test.Name, err)
 		}
 
-		defer featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.AnnotateFsResize, true)()
+		featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.AnnotateFsResize, true)
 		controller := NewResizeController(driverName, csiResizer, kubeClient, time.Second, informerFactory, workqueue.DefaultControllerRateLimiter(), !test.disableVolumeInUseErrorHandler)
 
 		ctrlInstance, _ := controller.(*resizeController)
@@ -403,7 +403,7 @@ func TestResizePVC(t *testing.T) {
 				t.Fatalf("Unable to create resizer: %v", err)
 			}
 
-			defer featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.AnnotateFsResize, true)()
+			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.AnnotateFsResize, true)
 			controller := NewResizeController(driverName, csiResizer, kubeClient, time.Second, informerFactory, workqueue.DefaultControllerRateLimiter(), true /* disableVolumeInUseErrorHandler*/)
 
 			ctrlInstance, _ := controller.(*resizeController)

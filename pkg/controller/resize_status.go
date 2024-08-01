@@ -89,7 +89,7 @@ func (ctrl *resizeController) markForPendingNodeExpansion(pvc *v1.PersistentVolu
 
 func (ctrl *resizeController) markControllerExpansionFailed(pvc *v1.PersistentVolumeClaim) (*v1.PersistentVolumeClaim, error) {
 	newPVC := pvc.DeepCopy()
-	newPVC = mergeStorageResourceStatus(newPVC, v1.PersistentVolumeClaimControllerResizeFailed)
+	newPVC = mergeStorageResourceStatus(newPVC, v1.PersistentVolumeClaimControllerResizeInfeasible)
 
 	// We are setting addResourceVersionCheck as false as an optimization
 	// because if expansion fails on controller and somehow we can't update PVC
