@@ -39,7 +39,14 @@ func (ctrl *resizeController) markControllerResizeInProgress(
 	conditions := []v1.PersistentVolumeClaimCondition{progressCondition}
 
 	newPVC := pvc.DeepCopy()
-	newPVC.Status.Conditions = util.MergeResizeConditionsOfPVC(newPVC.Status.Conditions, conditions, false /*keepOldResizeConditions*/)
+
+	// if we are not updating status then we should preserve older conditions
+	if updateStatus {
+		newPVC.Status.Conditions = util.MergeResizeConditionsOfPVC(newPVC.Status.Conditions, conditions, false /*keepOldResizeConditions*/)
+	} else {
+		newPVC.Status.Conditions = util.MergeResizeConditionsOfPVC(newPVC.Status.Conditions, conditions, true /*keepOldResizeConditions*/)
+	}
+
 	if updateStatus {
 		newPVC = mergeStorageResourceStatus(newPVC, v1.PersistentVolumeClaimControllerResizeInProgress)
 	}

@@ -243,7 +243,11 @@ func TestController(t *testing.T) {
 		}
 
 		featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.AnnotateFsResize, true)
-		controller := NewResizeController(driverName, csiResizer, kubeClient, time.Second, informerFactory, workqueue.DefaultControllerRateLimiter(), !test.disableVolumeInUseErrorHandler)
+		controller := NewResizeController(driverName, csiResizer,
+			kubeClient, time.Second,
+			informerFactory, workqueue.DefaultControllerRateLimiter(),
+			!test.disableVolumeInUseErrorHandler,
+			2*time.Minute /* maxRetryInterval */)
 
 		ctrlInstance, _ := controller.(*resizeController)
 
@@ -404,7 +408,11 @@ func TestResizePVC(t *testing.T) {
 			}
 
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.AnnotateFsResize, true)
-			controller := NewResizeController(driverName, csiResizer, kubeClient, time.Second, informerFactory, workqueue.DefaultControllerRateLimiter(), true /* disableVolumeInUseErrorHandler*/)
+			controller := NewResizeController(driverName, csiResizer,
+				kubeClient, time.Second,
+				informerFactory, workqueue.DefaultControllerRateLimiter(),
+				true, /* disableVolumeInUseErrorHandler*/
+				2*time.Minute /* maxRetryInterval */)
 
 			ctrlInstance, _ := controller.(*resizeController)
 
