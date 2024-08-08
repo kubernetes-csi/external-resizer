@@ -46,6 +46,10 @@ func GetTestPVC(volumeName string, specSize, statusSize, allocatedSize string, r
 	return pvc
 }
 
+func GetObjectKey(pvcName string) string {
+	return defaultNS + "/" + pvcName
+}
+
 type pvcModifier struct {
 	pvc *v1.PersistentVolumeClaim
 }

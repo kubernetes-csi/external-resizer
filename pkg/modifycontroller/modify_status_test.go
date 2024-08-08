@@ -101,7 +101,7 @@ func TestMarkControllerModifyVolumeStatus(t *testing.T) {
 	for _, test := range tests {
 		tc := test
 		t.Run(tc.name, func(t *testing.T) {
-			defer featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.VolumeAttributesClass, true)()
+			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.VolumeAttributesClass, true)
 			client := csi.NewMockClient("foo", true, true, true, true, true)
 			driverName, _ := client.GetDriverName(context.TODO())
 
@@ -161,7 +161,7 @@ func TestUpdateConditionBasedOnError(t *testing.T) {
 	for _, test := range tests {
 		tc := test
 		t.Run(tc.name, func(t *testing.T) {
-			defer featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.VolumeAttributesClass, true)()
+			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.VolumeAttributesClass, true)
 			client := csi.NewMockClient("foo", true, true, true, true, true)
 			driverName, _ := client.GetDriverName(context.TODO())
 
@@ -230,7 +230,7 @@ func TestMarkControllerModifyVolumeCompleted(t *testing.T) {
 	for _, test := range tests {
 		tc := test
 		t.Run(tc.name, func(t *testing.T) {
-			defer featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.VolumeAttributesClass, true)()
+			defer featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.VolumeAttributesClass, true)
 			client := csi.NewMockClient("foo", true, true, true, true, true)
 			driverName, _ := client.GetDriverName(context.TODO())
 
@@ -292,7 +292,7 @@ func TestRemovePVCFromModifyVolumeUncertainCache(t *testing.T) {
 	for _, test := range tests {
 		tc := test
 		t.Run(tc.name, func(t *testing.T) {
-			defer featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.VolumeAttributesClass, true)()
+			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.VolumeAttributesClass, true)
 			client := csi.NewMockClient("foo", true, true, true, true, true)
 			driverName, _ := client.GetDriverName(context.TODO())
 

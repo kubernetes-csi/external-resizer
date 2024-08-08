@@ -83,7 +83,7 @@ func TestController(t *testing.T) {
 				t.Fatalf("Test %s: Unable to create modifier: %v", test.name, err)
 			}
 
-			defer featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.VolumeAttributesClass, true)()
+			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.VolumeAttributesClass, true)
 			controller := NewModifyController(driverName,
 				csiModifier, kubeClient,
 				time.Second, informerFactory,
@@ -184,7 +184,7 @@ func TestModifyPVC(t *testing.T) {
 				t.Fatalf("Test %s: Unable to create modifier: %v", test.name, err)
 			}
 
-			defer featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.VolumeAttributesClass, true)()
+			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.VolumeAttributesClass, true)
 			controller := NewModifyController(driverName,
 				csiModifier, kubeClient,
 				time.Second, informerFactory,

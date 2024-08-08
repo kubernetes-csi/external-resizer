@@ -39,6 +39,8 @@ var (
 	knownResizeConditions = map[v1.PersistentVolumeClaimConditionType]bool{
 		v1.PersistentVolumeClaimResizing:                true,
 		v1.PersistentVolumeClaimFileSystemResizePending: true,
+		v1.PersistentVolumeClaimControllerResizeError:   true,
+		v1.PersistentVolumeClaimNodeResizeError:         true,
 	}
 
 	knownModifyVolumeConditions = map[v1.PersistentVolumeClaimConditionType]bool{
@@ -55,7 +57,7 @@ var (
 
 // MergeResizeConditionsOfPVC updates pvc with requested resize conditions
 // leaving other conditions untouched.
-func MergeResizeConditionsOfPVC(oldConditions, newConditions []v1.PersistentVolumeClaimCondition) []v1.PersistentVolumeClaimCondition {
+func MergeResizeConditionsOfPVC(oldConditions, newConditions []v1.PersistentVolumeClaimCondition, keepOldResizeConditions bool) []v1.PersistentVolumeClaimCondition {
 	newConditionSet := make(map[v1.PersistentVolumeClaimConditionType]v1.PersistentVolumeClaimCondition, len(newConditions))
 	for _, condition := range newConditions {
 		newConditionSet[condition.Type] = condition
@@ -65,19 +67,22 @@ func MergeResizeConditionsOfPVC(oldConditions, newConditions []v1.PersistentVolu
 	for _, condition := range oldConditions {
 		// If Condition is of not resize type, we keep it.
 		if _, ok := knownResizeConditions[condition.Type]; !ok {
-			newConditions = append(newConditions, condition)
+			resultConditions = append(resultConditions, condition)
 			continue
 		}
 		if newCondition, ok := newConditionSet[condition.Type]; ok {
 			// Use the new condition to replace old condition with same type.
 			resultConditions = append(resultConditions, newCondition)
 			delete(newConditionSet, condition.Type)
+		} else {
+			if keepOldResizeConditions {
+				resultConditions = append(resultConditions, condition)
+			}
+			// Drop old conditions whose type not exist in new conditions.
 		}
-
-		// Drop old conditions whose type not exist in new conditions.
 	}
 
-	// Append remains resize conditions.
+	// Append remaining resize conditions.
 	for _, condition := range newConditionSet {
 		resultConditions = append(resultConditions, condition)
 	}
@@ -251,4 +256,26 @@ func IsFinalError(err error) bool {
 	// All other errors mean that operation either did not
 	// even start or failed. It is for sure not in progress.
 	return true
+}
+
+// IsInfeasibleError returns true for grpc errors that are considered terminal in a way
+// that they indicate CSI operation as infeasible.
+// This function is a subset of final errors. All infeasible errors are also final errors
+func IsInfeasibleError(err error) bool {
+	st, ok := status.FromError(err)
+	if !ok {
+		// This is not gRPC error. The operation must have failed before gRPC
+		// method was called, otherwise we would get gRPC error.
+		// We don't know if any previous volume operation is in progress, be on the safe side.
+		return false
+	}
+	switch st.Code() {
+	case codes.InvalidArgument,
+		codes.OutOfRange,
+		codes.NotFound:
+		return true
+	}
+	// All other errors mean that operation either did not
+	// even start or failed. It is for sure not in progress.
+	return false
 }

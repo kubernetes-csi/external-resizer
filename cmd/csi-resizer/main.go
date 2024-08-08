@@ -211,7 +211,8 @@ func main() {
 	resizerName := csiResizer.Name()
 	rc := controller.NewResizeController(resizerName, csiResizer, kubeClient, *resyncPeriod, informerFactory,
 		workqueue.NewItemExponentialFailureRateLimiter(*retryIntervalStart, *retryIntervalMax),
-		*handleVolumeInUseError)
+		*handleVolumeInUseError, *retryIntervalMax)
+
 	modifierName := csiModifier.Name()
 	var mc modifycontroller.ModifyController
 	// Add modify controller only if the feature gate is enabled

@@ -87,7 +87,7 @@ func TestModify(t *testing.T) {
 		test := tests[i]
 		t.Run(test.name, func(t *testing.T) {
 			// Setup
-			defer featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.VolumeAttributesClass, true)()
+			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.VolumeAttributesClass, true)
 			client := csi.NewMockClient("foo", true, true, true, true, true)
 			driverName, _ := client.GetDriverName(context.TODO())
 

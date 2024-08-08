@@ -42,6 +42,8 @@ func (ctrl *modifyController) modify(pvc *v1.PersistentVolumeClaim, pv *v1.Persi
 			targetVacName = pvc.Status.ModifyVolumeStatus.TargetVolumeAttributesClassName
 		}
 		if *curVacName == targetVacName {
+			// if somehow both curVacName and targetVacName is same, what does this mean??
+			// I am not sure about this.
 			return ctrl.validateVACAndModifyVolumeWithTarget(pvc, pv)
 		} else {
 			// Check if the PVC is in uncertain State
