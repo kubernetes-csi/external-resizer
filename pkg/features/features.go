@@ -35,6 +35,7 @@ const (
 	// owner: @sunnylovestiramisu
 	// kep: https://kep.k8s.io/3751
 	// alpha: v1.29
+	// beta: v1.31
 	//
 	// Pass VolumeAttributesClass parameters to supporting CSI drivers during ModifyVolume
 	VolumeAttributesClass featuregate.Feature = "VolumeAttributesClass"
@@ -47,5 +48,5 @@ func init() {
 var defaultResizerFeatureGates = map[featuregate.Feature]featuregate.FeatureSpec{
 	AnnotateFsResize:              {Default: false, PreRelease: featuregate.Alpha},
 	RecoverVolumeExpansionFailure: {Default: false, PreRelease: featuregate.Alpha},
-	VolumeAttributesClass:         {Default: false, PreRelease: featuregate.Alpha},
+	VolumeAttributesClass:         {Default: false, PreRelease: featuregate.Beta},
 }
