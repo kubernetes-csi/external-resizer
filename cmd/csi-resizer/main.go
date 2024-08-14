@@ -31,18 +31,11 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
-	"k8s.io/client-go/util/workqueue"
-
 	"github.com/kubernetes-csi/csi-lib-utils/leaderelection"
-	"github.com/kubernetes-csi/external-resizer/pkg/controller"
-	"github.com/kubernetes-csi/external-resizer/pkg/features"
-	"github.com/kubernetes-csi/external-resizer/pkg/modifier"
-	"github.com/kubernetes-csi/external-resizer/pkg/modifycontroller"
-	"github.com/kubernetes-csi/external-resizer/pkg/resizer"
+	"github.com/kubernetes-csi/external-resizer/pkg/aioresizer"
 	"github.com/kubernetes-csi/external-resizer/pkg/util"
 	csitrans "k8s.io/csi-translation-lib"
 
-	"k8s.io/apimachinery/pkg/util/wait"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	"k8s.io/client-go/informers"
 	cflag "k8s.io/component-base/cli/flag"
@@ -141,13 +134,13 @@ func main() {
 		klog.FlushAndExit(klog.ExitFlushTimeout, 1)
 	}
 
+	// TODO: Confirm it is safe to share MetricsManager and CSITranslator instances across sidecars
 	informerFactory := informers.NewSharedInformerFactory(kubeClient, *resyncPeriod)
-
-	mux := http.NewServeMux()
-
 	metricsManager := metrics.NewCSIMetricsManager("" /* driverName */)
 
 	ctx := context.Background()
+	// TODO: Resizer has its own CSI-wrapping library, figure out how to deal with that in a way that can be shared
+	// (maybe change the constructor to take the GRPC connection?)
 	csiClient, err := csi.New(ctx, *csiAddress, *timeout, metricsManager)
 	if err != nil {
 		klog.ErrorS(err, "Failed to create CSI client")
@@ -173,28 +166,8 @@ func main() {
 		csiClient = migratedCsiClient
 	}
 
-	csiResizer, err := resizer.NewResizerFromClient(
-		csiClient,
-		*timeout,
-		kubeClient,
-		driverName)
-	if err != nil {
-		klog.ErrorS(err, "Failed to create CSI resizer")
-		klog.FlushAndExit(klog.ExitFlushTimeout, 1)
-	}
-
-	csiModifier, err := modifier.NewModifierFromClient(
-		csiClient,
-		*timeout,
-		kubeClient,
-		informerFactory,
-		driverName)
-	if err != nil {
-		klog.ErrorS(err, "Failed to create CSI modifier")
-		klog.FlushAndExit(klog.ExitFlushTimeout, 1)
-	}
-
 	// Start HTTP server for metrics + leader election healthz
+	mux := http.NewServeMux()
 	if addr != "" {
 		metricsManager.RegisterToServer(mux, *metricsPath)
 		metricsManager.SetDriverName(driverName)
@@ -208,29 +181,27 @@ func main() {
 		}()
 	}
 
-	resizerName := csiResizer.Name()
-	rc := controller.NewResizeController(resizerName, csiResizer, kubeClient, *resyncPeriod, informerFactory,
-		workqueue.NewItemExponentialFailureRateLimiter(*retryIntervalStart, *retryIntervalMax),
-		*handleVolumeInUseError)
-	modifierName := csiModifier.Name()
-	var mc modifycontroller.ModifyController
-	// Add modify controller only if the feature gate is enabled
-	if utilfeature.DefaultFeatureGate.Enabled(features.VolumeAttributesClass) {
-		mc = modifycontroller.NewModifyController(modifierName, csiModifier, kubeClient, *resyncPeriod, informerFactory,
-			workqueue.NewItemExponentialFailureRateLimiter(*retryIntervalStart, *retryIntervalMax))
-	}
+	aioResizer, resizerName := aioresizer.NewAIOResizer(aioresizer.ResizerOptions{
+		// CLI options
+		OperationTimeout:       *timeout,
+		RetryIntervalStart:     *retryIntervalStart,
+		RetryIntervalMax:       *retryIntervalMax,
+		ResyncPeriod:           *resyncPeriod,
+		HandleVolumeInUseError: *handleVolumeInUseError,
+		Workers:                *workers,
 
-	run := func(ctx context.Context) {
-		informerFactory.Start(wait.NeverStop)
-		go rc.Run(*workers, ctx)
-		if utilfeature.DefaultFeatureGate.Enabled(features.VolumeAttributesClass) {
-			go mc.Run(*workers, ctx)
-		}
-		<-ctx.Done()
-	}
+		// Derived options (Kubernetes config, etc)
+		DriverName: driverName,
+
+		// Shared objects (clients, informers, etc)
+		Client:     kubeClient,
+		Factory:    informerFactory,
+		CSIClient:  csiClient,
+		Translator: translator,
+	})
 
 	if !*enableLeaderElection {
-		run(ctx)
+		aioResizer.Run(ctx)
 	} else {
 		lockName := "external-resizer-" + util.SanitizeName(resizerName)
 		leKubeClient, err := kubernetes.NewForConfig(config)
@@ -238,7 +209,7 @@ func main() {
 			klog.ErrorS(err, "Failed to create leKubeClient")
 			klog.FlushAndExit(klog.ExitFlushTimeout, 1)
 		}
-		le := leaderelection.NewLeaderElection(leKubeClient, lockName, run)
+		le := leaderelection.NewLeaderElection(leKubeClient, lockName, aioResizer.Run)
 		if *httpEndpoint != "" {
 			le.PrepareHealthCheck(mux, leaderelection.DefaultHealthCheckTimeout)
 		}
