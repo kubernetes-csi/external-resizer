@@ -22,11 +22,11 @@ Various external-resizer releases come with different alpha / beta features.
 
 The following table reflects the head of this branch.
 
-| Feature                | Status  | Default | Description                                                                                                                   |
-| ---------------------- | ------- | ------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| VolumeExpansion        | Stable  | On      | [Support for expanding CSI volumes](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#csi-volume-expansion).    |
-| ReadWriteOncePod       | Stable  | On      | [Single pod access mode for PersistentVolumes](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#access-modes). |
-| VolumeAttributesClass  | Alpha   | Off     | [Volume Attributes Classes](https://kubernetes.io/docs/concepts/storage/volume-attributes-classes).                           |
+| Feature                | Status | Default | Description                                                                                                                   |
+| ---------------------- |--------| ------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| VolumeExpansion        | Stable | On      | [Support for expanding CSI volumes](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#csi-volume-expansion).    |
+| ReadWriteOncePod       | Stable | On      | [Single pod access mode for PersistentVolumes](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#access-modes). |
+| VolumeAttributesClass  | Beta   | Off     | [Volume Attributes Classes](https://kubernetes.io/docs/concepts/storage/volume-attributes-classes).                           |
 
 ## Usage
 
