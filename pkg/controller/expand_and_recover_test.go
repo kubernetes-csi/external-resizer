@@ -9,10 +9,14 @@ import (
 	"github.com/kubernetes-csi/external-resizer/pkg/features"
 	"github.com/kubernetes-csi/external-resizer/pkg/resizer"
 	"github.com/kubernetes-csi/external-resizer/pkg/testutil"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/sets"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
+	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
 	featuregatetesting "k8s.io/component-base/featuregate/testing"
 )
@@ -28,7 +32,10 @@ func TestExpandAndRecover(t *testing.T) {
 		// expectations of test
 		expectedResizeStatus  v1.ClaimResourceStatus
 		expectedAllocatedSize resource.Quantity
+		pvcWithFinalErrors    sets.Set[string]
+		expansionError        error
 		expectResizeCall      bool
+		expectedConditions    []v1.PersistentVolumeClaimConditionType
 	}{
 		{
 			name:                  "pvc.spec.size > pv.spec.size, resize_status=node_expansion_inprogress",
@@ -47,16 +54,53 @@ func TestExpandAndRecover(t *testing.T) {
 			expectResizeCall:      true,
 		},
 		{
-			name:                  "pvc.spec.size > pv.spec.size, resize_status=controller_expansion_failed",
-			pvc:                   testutil.GetTestPVC("test-vol0", "5G" /*specSize*/, "3G" /*statusSize*/, "10G" /*allocatedSize*/, v1.PersistentVolumeClaimControllerResizeFailed),
+			name:                  "pvc.spec.size > pv.spec.size, resize_status=controller_expansion_infeasible",
+			pvc:                   testutil.GetTestPVC("test-vol0", "5G" /*specSize*/, "3G" /*statusSize*/, "10G" /*allocatedSize*/, v1.PersistentVolumeClaimControllerResizeInfeasible),
 			pv:                    createPV(3, "claim01", defaultNS, "test-uid", &fsVolumeMode),
 			expectedResizeStatus:  v1.PersistentVolumeClaimNodeResizePending,
 			expectedAllocatedSize: resource.MustParse("5G"),
 			expectResizeCall:      true,
 		},
 		{
-			name:                       "pvc.spec.size = pv.spec.size, resize_status=node_expansion_failed, disable_controller_expansion=true",
-			pvc:                        testutil.GetTestPVC("test-vol0", "5G" /*specSize*/, "3G" /*statusSize*/, "10G" /*allocatedSize*/, v1.PersistentVolumeClaimNodeResizeFailed),
+			name:                  "pvc.spec.size > pv.spec.size, resize_status=controller_expansion_fail(final, but feasible)",
+			pvc:                   testutil.GetTestPVC("test-vol0", "5G" /*specSize*/, "3G" /*statusSize*/, "10G" /*allocatedSize*/, v1.PersistentVolumeClaimControllerResizeInProgress),
+			pv:                    createPV(3, "claim01", defaultNS, "test-uid", &fsVolumeMode),
+			pvcWithFinalErrors:    sets.New(testutil.GetObjectKey("claim01")),
+			expectedResizeStatus:  v1.PersistentVolumeClaimNodeResizePending,
+			expectedAllocatedSize: resource.MustParse("5G"),
+			expectResizeCall:      true,
+		},
+		{
+			name:                  "pvc.spec.size > pv.spec.size, resize_status=controller_expansion_fail(final, but feasible), retry fail with final error",
+			pvc:                   testutil.GetTestPVC("test-vol0", "5G" /*specSize*/, "3G" /*statusSize*/, "10G" /*allocatedSize*/, v1.PersistentVolumeClaimControllerResizeInProgress),
+			pv:                    createPV(3, "claim01", defaultNS, "test-uid", &fsVolumeMode),
+			pvcWithFinalErrors:    sets.New(testutil.GetObjectKey("claim01")),
+			expansionError:        status.Errorf(codes.FailedPrecondition, "something broke"),
+			expectedResizeStatus:  v1.PersistentVolumeClaimControllerResizeInProgress,
+			expectedAllocatedSize: resource.MustParse("5G"),
+			expectResizeCall:      true,
+		},
+		{
+			name:                  "pvc.spec.size > pv.spec.size, resize_status=controller_expansion_fail(final, but feasible), retry fail with infeasible error",
+			pvc:                   testutil.GetTestPVC("test-vol0", "5G" /*specSize*/, "3G" /*statusSize*/, "10G" /*allocatedSize*/, v1.PersistentVolumeClaimControllerResizeInProgress),
+			pv:                    createPV(3, "claim01", defaultNS, "test-uid", &fsVolumeMode),
+			pvcWithFinalErrors:    sets.New(testutil.GetObjectKey("claim01")),
+			expansionError:        status.Errorf(codes.InvalidArgument, "something broke"),
+			expectedResizeStatus:  v1.PersistentVolumeClaimControllerResizeInfeasible,
+			expectedAllocatedSize: resource.MustParse("5G"),
+			expectResizeCall:      true,
+		},
+		{
+			name:                  "pvc.spec.size > pv.spec.size, resize_status=controller_expansion_inprogress",
+			pvc:                   testutil.GetTestPVC("test-vol0", "5G" /*specSize*/, "3G" /*statusSize*/, "10G" /*allocatedSize*/, v1.PersistentVolumeClaimControllerResizeInProgress),
+			pv:                    createPV(3, "claim01", defaultNS, "test-uid", &fsVolumeMode),
+			expectedResizeStatus:  v1.PersistentVolumeClaimNodeResizePending,
+			expectedAllocatedSize: resource.MustParse("10G"),
+			expectResizeCall:      true,
+		},
+		{
+			name:                       "pvc.spec.size = pv.spec.size, resize_status=node_expansion_infeasible, disable_controller_expansion=true",
+			pvc:                        testutil.GetTestPVC("test-vol0", "5G" /*specSize*/, "3G" /*statusSize*/, "10G" /*allocatedSize*/, v1.PersistentVolumeClaimNodeResizeInfeasible),
 			pv:                         createPV(10, "claim01", defaultNS, "test-uid", &fsVolumeMode),
 			disableControllerExpansion: true,
 			expectedResizeStatus:       v1.PersistentVolumeClaimNodeResizePending,
@@ -82,7 +126,7 @@ func TestExpandAndRecover(t *testing.T) {
 		},
 		{
 			name:                  "pv.spec.size >= pvc.spec.size, resize_status=node_expansion_failed",
-			pvc:                   testutil.GetTestPVC("test-vol0", "2G", "1G", "2G", v1.PersistentVolumeClaimNodeResizeFailed),
+			pvc:                   testutil.GetTestPVC("test-vol0", "2G", "1G", "2G", v1.PersistentVolumeClaimNodeResizeInfeasible),
 			pv:                    createPV(2, "claim01", defaultNS, "test-uid", &fsVolumeMode),
 			expectedResizeStatus:  v1.PersistentVolumeClaimNodeResizePending,
 			expectedAllocatedSize: resource.MustParse("2G"),
@@ -108,9 +152,12 @@ func TestExpandAndRecover(t *testing.T) {
 	for i := range tests {
 		test := tests[i]
 		t.Run(test.name, func(t *testing.T) {
-			defer featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.RecoverVolumeExpansionFailure, true)()
+			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.RecoverVolumeExpansionFailure, true)
 			client := csi.NewMockClient("foo", !test.disableNodeExpansion, !test.disableControllerExpansion, false, true, true)
 			driverName, _ := client.GetDriverName(context.TODO())
+			if test.expansionError != nil {
+				client.SetExpansionError(test.expansionError)
+			}
 
 			var initialObjects []runtime.Object
 			initialObjects = append(initialObjects, test.pvc)
@@ -122,14 +169,18 @@ func TestExpandAndRecover(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Test %s: Unable to create resizer: %v", test.name, err)
 			}
+
 			controller := NewResizeController(driverName,
 				csiResizer, kubeClient,
 				time.Second, informerFactory,
-				workqueue.DefaultControllerRateLimiter(), true /*handleVolumeInUseError*/)
+				workqueue.DefaultControllerRateLimiter(), true /*handleVolumeInUseError*/, 2*time.Minute /*maxRetryInterval*/)
 
 			ctrlInstance, _ := controller.(*resizeController)
+			recorder := record.NewFakeRecorder(10)
+			ctrlInstance.eventRecorder = recorder
+			ctrlInstance.finalErrorPVCs = test.pvcWithFinalErrors
 			pvc, _, err, resizeCalled := ctrlInstance.expandAndRecover(test.pvc, test.pv)
-			if err != nil {
+			if test.expansionError == nil && err != nil {
 				t.Fatalf("expansion failed with %v", err)
 			}
 			if test.expectResizeCall != resizeCalled {

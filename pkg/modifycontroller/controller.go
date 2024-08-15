@@ -95,7 +95,6 @@ func NewModifyController(
 		claimQueue:      claimQueue,
 		eventRecorder:   eventRecorder,
 	}
-
 	// Add a resync period as the PVC's request modify can be modified again when we handling
 	// a previous modify request of the same PVC.
 	pvcInformer.Informer().AddEventHandlerWithResyncPeriod(cache.ResourceEventHandlerFuncs{

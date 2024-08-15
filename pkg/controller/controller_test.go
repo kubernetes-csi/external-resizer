@@ -7,10 +7,10 @@ import (
 	"time"
 
 	"github.com/kubernetes-csi/external-resizer/pkg/features"
-	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/tools/record"
 
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/util/workqueue"
 
 	"github.com/kubernetes-csi/external-resizer/pkg/csi"
@@ -242,8 +242,12 @@ func TestController(t *testing.T) {
 			t.Fatalf("Test %s: Unable to create resizer: %v", test.Name, err)
 		}
 
-		defer featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.AnnotateFsResize, true)()
-		controller := NewResizeController(driverName, csiResizer, kubeClient, time.Second, informerFactory, workqueue.DefaultControllerRateLimiter(), !test.disableVolumeInUseErrorHandler)
+		featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.AnnotateFsResize, true)
+		controller := NewResizeController(driverName, csiResizer,
+			kubeClient, time.Second,
+			informerFactory, workqueue.DefaultControllerRateLimiter(),
+			!test.disableVolumeInUseErrorHandler,
+			2*time.Minute /* maxRetryInterval */)
 
 		ctrlInstance, _ := controller.(*resizeController)
 
@@ -403,8 +407,12 @@ func TestResizePVC(t *testing.T) {
 				t.Fatalf("Unable to create resizer: %v", err)
 			}
 
-			defer featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.AnnotateFsResize, true)()
-			controller := NewResizeController(driverName, csiResizer, kubeClient, time.Second, informerFactory, workqueue.DefaultControllerRateLimiter(), true /* disableVolumeInUseErrorHandler*/)
+			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.AnnotateFsResize, true)
+			controller := NewResizeController(driverName, csiResizer,
+				kubeClient, time.Second,
+				informerFactory, workqueue.DefaultControllerRateLimiter(),
+				true, /* disableVolumeInUseErrorHandler*/
+				2*time.Minute /* maxRetryInterval */)
 
 			ctrlInstance, _ := controller.(*resizeController)
 

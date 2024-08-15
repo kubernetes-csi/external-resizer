@@ -33,6 +33,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	"k8s.io/client-go/informers"
@@ -62,10 +63,15 @@ type resizeController struct {
 	pvSynced      cache.InformerSynced
 	pvcSynced     cache.InformerSynced
 
-	usedPVCs *inUsePVCStore
+	usedPVCs       *inUsePVCStore
+	finalErrorPVCs sets.Set[string]
 
 	podLister       corelisters.PodLister
 	podListerSynced cache.InformerSynced
+
+	// slowSet is used to track PVCs for which expansion failed with infeasible error
+	// and should be retried at slower rate.
+	slowSet *util.SlowSet
 
 	// a cache to store PersistentVolume objects
 	volumes cache.Store
@@ -82,7 +88,8 @@ func NewResizeController(
 	resyncPeriod time.Duration,
 	informerFactory informers.SharedInformerFactory,
 	pvcRateLimiter workqueue.RateLimiter,
-	handleVolumeInUseError bool) ResizeController {
+	handleVolumeInUseError bool,
+	maxRetryInterval time.Duration) ResizeController {
 	pvInformer := informerFactory.Core().V1().PersistentVolumes()
 	pvcInformer := informerFactory.Core().V1().PersistentVolumeClaims()
 	eventBroadcaster := record.NewBroadcaster()
@@ -104,6 +111,8 @@ func NewResizeController(
 		volumes:                pvInformer.Informer().GetStore(),
 		claims:                 pvcInformer.Informer().GetStore(),
 		eventRecorder:          eventRecorder,
+		slowSet:                util.NewSlowSet(maxRetryInterval),
+		finalErrorPVCs:         sets.New[string](),
 		usedPVCs:               newUsedPVCStore(),
 		handleVolumeInUseError: handleVolumeInUseError,
 	}
@@ -189,6 +198,22 @@ func (ctrl *resizeController) updatePVC(oldObj, newObj interface{}) {
 	newResizerName := newPVC.Annotations[util.VolumeResizerKey]
 	oldResizerName := oldPVC.Annotations[util.VolumeResizerKey]
 
+	pvcStatusChanged := false
+	pvcRequestSizeChanged := newReq.Cmp(oldReq) > 0
+
+	if utilfeature.DefaultFeatureGate.Enabled(features.RecoverVolumeExpansionFailure) {
+		newResizeStatus := newPVC.Status.AllocatedResourceStatuses[v1.ResourceStorage]
+		oldResizeStatus := oldPVC.Status.AllocatedResourceStatuses[v1.ResourceStorage]
+		if newResizeStatus != oldResizeStatus {
+			pvcStatusChanged = true
+		}
+
+		// if recovery is enabled, then requested size also can be reduced
+		if newReq.Cmp(oldReq) != 0 {
+			pvcRequestSizeChanged = true
+		}
+	}
+
 	// We perform additional checks to avoid double processing of PVCs, as we will also receive Update event when:
 	// 1. Administrator or users may introduce other changes(such as add labels, modify annotations, etc.)
 	//    unrelated to volume resize.
@@ -206,7 +231,7 @@ func (ctrl *resizeController) updatePVC(oldObj, newObj interface{}) {
 	// 3. An already expanded in-tree PVC:
 	// An in-tree PVC is resized with in-tree resizer. And later, CSI migration is turned on and resizer name is updated from
 	// in-tree resizer name to CSI driver name.
-	if newReq.Cmp(oldReq) > 0 || newResizerName != oldResizerName {
+	if pvcRequestSizeChanged || newResizerName != oldResizerName {
 		ctrl.addPVC(newObj)
 	} else {
 		// PVC's size not changed, so this Update event maybe caused by:
@@ -215,6 +240,8 @@ func (ctrl *resizeController) updatePVC(oldObj, newObj interface{}) {
 		//    unrelated to volume resize.
 		// 2. Informer resynced the PVC and send this Update event without any changes.
 		// 3. PV's filesystem has recently been resized and requires removal of its resize annotation
+		// 4. Though the size is same, the resize status has changed. This can happen when the resize operation failed
+		//    on the node.
 		//
 		// If it is case 1, we can just discard this event. If case 2 or 3, we need to put it into the queue to
 		// perform a resync operation.
@@ -223,6 +250,8 @@ func (ctrl *resizeController) updatePVC(oldObj, newObj interface{}) {
 			ctrl.addPVC(newObj)
 		} else if newCap.Cmp(oldCap) > 0 {
 			// This is case 3
+			ctrl.addPVC(newObj)
+		} else if pvcStatusChanged {
 			ctrl.addPVC(newObj)
 		}
 	}
@@ -237,8 +266,7 @@ func (ctrl *resizeController) deletePVC(obj interface{}) {
 }
 
 // Run starts the controller.
-func (ctrl *resizeController) Run(
-	workers int, ctx context.Context) {
+func (ctrl *resizeController) Run(workers int, ctx context.Context) {
 	defer ctrl.claimQueue.ShutDown()
 
 	klog.InfoS("Starting external resizer", "controller", ctrl.name)
@@ -253,6 +281,10 @@ func (ctrl *resizeController) Run(
 	if !cache.WaitForCacheSync(stopCh, informersSyncd...) {
 		klog.ErrorS(nil, "Cannot sync pod, pv or pvc caches")
 		return
+	}
+
+	if utilfeature.DefaultFeatureGate.Enabled(features.RecoverVolumeExpansionFailure) {
+		go ctrl.slowSet.Run(stopCh)
 	}
 
 	for i := 0; i < workers; i++ {
@@ -270,10 +302,18 @@ func (ctrl *resizeController) syncPVCs() {
 	}
 	defer ctrl.claimQueue.Done(key)
 
-	if err := ctrl.syncPVC(key.(string)); err != nil {
-		// Put PVC back to the queue so that we can retry later.
-		klog.ErrorS(err, "Error syncing PVC")
-		ctrl.claimQueue.AddRateLimited(key)
+	err := ctrl.syncPVC(key.(string))
+
+	if err != nil {
+		if utilfeature.DefaultFeatureGate.Enabled(features.RecoverVolumeExpansionFailure) && util.IsDelayRetryError(err) {
+			// If the error is a DelayRetryError, we should requeue the PVC with a delay.
+			delayRetryError := err.(*util.DelayRetryError)
+			ctrl.claimQueue.AddAfter(key, delayRetryError.TryAfter())
+		} else {
+			// Put PVC back to the queue so that we can retry later.
+			klog.ErrorS(err, "Error syncing PVC")
+			ctrl.claimQueue.AddRateLimited(key)
+		}
 	} else {
 		ctrl.claimQueue.Forget(key)
 	}
@@ -310,7 +350,7 @@ func (ctrl *resizeController) syncPVC(key string) error {
 
 	volumeObj, exists, err := ctrl.volumes.GetByKey(pvc.Spec.VolumeName)
 	if err != nil {
-		return fmt.Errorf("Get PV %q of pvc %q failed: %v", pvc.Spec.VolumeName, klog.KObj(pvc), err)
+		return fmt.Errorf("get PV %q of pvc %q failed: %v", pvc.Spec.VolumeName, klog.KObj(pvc), err)
 	}
 	if !exists {
 		klog.InfoS("PV bound to PVC not found", "PV", pvc.Spec.VolumeName, "PVC", klog.KObj(pvc))
@@ -489,11 +529,11 @@ func (ctrl *resizeController) markPVCAsFSResizeRequired(pvc *v1.PersistentVolume
 	}
 	newPVC := pvc.DeepCopy()
 	newPVC.Status.Conditions = util.MergeResizeConditionsOfPVC(newPVC.Status.Conditions,
-		[]v1.PersistentVolumeClaimCondition{pvcCondition})
+		[]v1.PersistentVolumeClaimCondition{pvcCondition}, false /*keepOldResizeCondition*/)
 
 	updatedPVC, err := util.PatchClaim(ctrl.kubeClient, pvc, newPVC, true /* addResourceVersionCheck */)
 	if err != nil {
-		return fmt.Errorf("Mark PVC %q as file system resize required failed: %w", klog.KObj(pvc), err)
+		return fmt.Errorf("mark PVC %q as file system resize required failed: %w", klog.KObj(pvc), err)
 	}
 
 	err = ctrl.claims.Update(updatedPVC)
@@ -518,7 +558,7 @@ func (ctrl *resizeController) markPVCResizeInProgress(pvc *v1.PersistentVolumeCl
 	}
 	newPVC := pvc.DeepCopy()
 	newPVC.Status.Conditions = util.MergeResizeConditionsOfPVC(newPVC.Status.Conditions,
-		[]v1.PersistentVolumeClaimCondition{progressCondition})
+		[]v1.PersistentVolumeClaimCondition{progressCondition}, false /*keepOldResizeCondition*/)
 
 	updatedPVC, err := util.PatchClaim(ctrl.kubeClient, pvc, newPVC, true /* addResourceVersionCheck */)
 	if err != nil {
@@ -536,7 +576,7 @@ func (ctrl *resizeController) markPVCResizeFinished(
 	newSize resource.Quantity) error {
 	newPVC := pvc.DeepCopy()
 	newPVC.Status.Capacity[v1.ResourceStorage] = newSize
-	newPVC.Status.Conditions = util.MergeResizeConditionsOfPVC(pvc.Status.Conditions, []v1.PersistentVolumeClaimCondition{})
+	newPVC.Status.Conditions = util.MergeResizeConditionsOfPVC(pvc.Status.Conditions, []v1.PersistentVolumeClaimCondition{}, false /*keepOldResizeCondition*/)
 
 	updatedPVC, err := util.PatchClaim(ctrl.kubeClient, pvc, newPVC, true /* addResourceVersionCheck */)
 	if err != nil {
