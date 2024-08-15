@@ -25,10 +25,12 @@ func TestSlowSet(t *testing.T) {
 	tests := []struct {
 		name          string
 		retentionTime time.Duration
+		resyncPeriod  time.Duration
 		testFunc      func(*SlowSet) bool
 	}{
 		{
-			name: "Should not change time of a key if added multiple times",
+			name:         "Should not change time of a key if added multiple times",
+			resyncPeriod: 100 * time.Millisecond,
 			testFunc: func(s *SlowSet) bool {
 				key := "key"
 				s.Add(key)
@@ -41,6 +43,7 @@ func TestSlowSet(t *testing.T) {
 		{
 			name:          "Should remove key after retention time",
 			retentionTime: 200 * time.Millisecond,
+			resyncPeriod:  100 * time.Millisecond,
 			testFunc: func(s *SlowSet) bool {
 				key := "key"
 				s.Add(key)
@@ -51,6 +54,7 @@ func TestSlowSet(t *testing.T) {
 		{
 			name:          "Should not remove key before retention time",
 			retentionTime: 200 * time.Millisecond,
+			resyncPeriod:  100 * time.Millisecond,
 			testFunc: func(s *SlowSet) bool {
 				key := "key"
 				s.Add(key)
@@ -61,6 +65,7 @@ func TestSlowSet(t *testing.T) {
 		{
 			name:          "Should return time remaining for added keys",
 			retentionTime: 300 * time.Millisecond,
+			resyncPeriod:  100 * time.Millisecond,
 			testFunc: func(s *SlowSet) bool {
 				key := "key"
 				s.Add(key)
@@ -69,12 +74,24 @@ func TestSlowSet(t *testing.T) {
 				return timeRemaining > 0 && timeRemaining < 300*time.Millisecond
 			},
 		},
+		{
+			name:          "should return false for Contains if key is present but expired",
+			resyncPeriod:  200 * time.Millisecond,
+			retentionTime: 300 * time.Millisecond,
+			testFunc: func(s *SlowSet) bool {
+				key := "key"
+				s.Add(key)
+				time.Sleep(301 * time.Millisecond)
+				return !s.Contains(key)
+			},
+		},
 	}
 
 	for i := range tests {
 		test := tests[i]
 		t.Run(test.name, func(t *testing.T) {
 			s := NewSlowSet(test.retentionTime)
+			s.resyncPeriod = test.resyncPeriod
 			stopCh := make(chan struct{}, 1)
 			go s.Run(stopCh)
 			defer close(stopCh)

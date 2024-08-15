@@ -21,10 +21,6 @@ import (
 	"time"
 )
 
-const (
-	slowSetSleepDelay = 100 * time.Millisecond
-)
-
 // SlowSet is a set of API objects that should be synced at slower rate. Key is typically the object
 // namespace + name and value is timestamp when the object was added to the set.
 type SlowSet struct {
@@ -32,12 +28,15 @@ type SlowSet struct {
 	// retentionTime is the time after which an item will be removed from the set
 	// this indicates, how long before an operation on pvc can be retried.
 	retentionTime time.Duration
-	workSet       map[string]time.Time
+
+	resyncPeriod time.Duration
+	workSet      map[string]time.Time
 }
 
 func NewSlowSet(retTime time.Duration) *SlowSet {
 	return &SlowSet{
 		retentionTime: retTime,
+		resyncPeriod:  100 * time.Millisecond,
 		workSet:       make(map[string]time.Time),
 	}
 }
@@ -58,8 +57,11 @@ func (s *SlowSet) Contains(key string) bool {
 	s.RLock()
 	defer s.RUnlock()
 
-	_, ok := s.workSet[key]
-	return ok
+	startTime, ok := s.workSet[key]
+	if ok && time.Since(startTime) < s.retentionTime {
+		return true
+	}
+	return false
 }
 
 func (s *SlowSet) Remove(key string) {
@@ -85,7 +87,7 @@ func (s *SlowSet) Run(stopCh <-chan struct{}) {
 		case <-stopCh:
 			return
 		default:
-			time.Sleep(slowSetSleepDelay)
+			time.Sleep(s.resyncPeriod)
 			for key, t := range s.workSet {
 				if time.Since(t) > s.retentionTime {
 					s.Remove(key)

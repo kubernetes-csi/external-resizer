@@ -1,13 +1,13 @@
 module github.com/kubernetes-csi/external-resizer
 
-go 1.22.3
+go 1.22.5
 
 require (
 	github.com/container-storage-interface/spec v1.10.0
 	github.com/google/go-cmp v0.6.0
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/imdario/mergo v0.3.16 // indirect
-	github.com/kubernetes-csi/csi-lib-utils v0.19.0-beta.0
+	github.com/kubernetes-csi/csi-lib-utils v0.19.0
 	golang.org/x/oauth2 v0.22.0 // indirect
 	golang.org/x/term v0.23.0 // indirect
 	google.golang.org/grpc v1.65.0
