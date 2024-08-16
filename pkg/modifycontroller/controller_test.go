@@ -13,7 +13,7 @@ import (
 	"github.com/kubernetes-csi/external-resizer/pkg/modifier"
 
 	v1 "k8s.io/api/core/v1"
-	storagev1alpha1 "k8s.io/api/storage/v1alpha1"
+	storagev1beta1 "k8s.io/api/storage/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	featuregatetesting "k8s.io/component-base/featuregate/testing"
@@ -76,7 +76,7 @@ func TestController(t *testing.T) {
 			kubeClient, informerFactory := fakeK8s(initialObjects)
 			pvInformer := informerFactory.Core().V1().PersistentVolumes()
 			pvcInformer := informerFactory.Core().V1().PersistentVolumeClaims()
-			vacInformer := informerFactory.Storage().V1alpha1().VolumeAttributesClasses()
+			vacInformer := informerFactory.Storage().V1beta1().VolumeAttributesClasses()
 
 			csiModifier, err := modifier.NewModifierFromClient(client, 15*time.Second, kubeClient, informerFactory, driverName)
 			if err != nil {
@@ -104,7 +104,7 @@ func TestController(t *testing.T) {
 					pvInformer.Informer().GetStore().Add(obj)
 				case *v1.PersistentVolumeClaim:
 					pvcInformer.Informer().GetStore().Add(obj)
-				case *storagev1alpha1.VolumeAttributesClass:
+				case *storagev1beta1.VolumeAttributesClass:
 					vacInformer.Informer().GetStore().Add(obj)
 				default:
 					t.Fatalf("Test %s: Unknown initalObject type: %+v", test.name, obj)
@@ -177,7 +177,7 @@ func TestModifyPVC(t *testing.T) {
 			kubeClient, informerFactory := fakeK8s(initialObjects)
 			pvInformer := informerFactory.Core().V1().PersistentVolumes()
 			pvcInformer := informerFactory.Core().V1().PersistentVolumeClaims()
-			vacInformer := informerFactory.Storage().V1alpha1().VolumeAttributesClasses()
+			vacInformer := informerFactory.Storage().V1beta1().VolumeAttributesClasses()
 
 			csiModifier, err := modifier.NewModifierFromClient(client, 15*time.Second, kubeClient, informerFactory, driverName)
 			if err != nil {
@@ -205,7 +205,7 @@ func TestModifyPVC(t *testing.T) {
 					pvInformer.Informer().GetStore().Add(obj)
 				case *v1.PersistentVolumeClaim:
 					pvcInformer.Informer().GetStore().Add(obj)
-				case *storagev1alpha1.VolumeAttributesClass:
+				case *storagev1beta1.VolumeAttributesClass:
 					vacInformer.Informer().GetStore().Add(obj)
 				default:
 					t.Fatalf("Test %s: Unknown initalObject type: %+v", test.name, obj)
