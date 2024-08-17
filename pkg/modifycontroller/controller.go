@@ -32,7 +32,7 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	corev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	corelisters "k8s.io/client-go/listers/core/v1"
-	storagev1alpha1listers "k8s.io/client-go/listers/storage/v1alpha1"
+	storagev1beta1listers "k8s.io/client-go/listers/storage/v1beta1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
@@ -56,7 +56,7 @@ type modifyController struct {
 	pvListerSynced  cache.InformerSynced
 	pvcLister       corelisters.PersistentVolumeClaimLister
 	pvcListerSynced cache.InformerSynced
-	vacLister       storagev1alpha1listers.VolumeAttributesClassLister
+	vacLister       storagev1beta1listers.VolumeAttributesClassLister
 	vacListerSynced cache.InformerSynced
 	// the key of the map is {PVC_NAMESPACE}/{PVC_NAME}
 	uncertainPVCs map[string]v1.PersistentVolumeClaim
@@ -72,7 +72,7 @@ func NewModifyController(
 	pvcRateLimiter workqueue.RateLimiter) ModifyController {
 	pvInformer := informerFactory.Core().V1().PersistentVolumes()
 	pvcInformer := informerFactory.Core().V1().PersistentVolumeClaims()
-	vacInformer := informerFactory.Storage().V1alpha1().VolumeAttributesClasses()
+	vacInformer := informerFactory.Storage().V1beta1().VolumeAttributesClasses()
 	eventBroadcaster := record.NewBroadcaster()
 	eventBroadcaster.StartStructuredLogging(0)
 	eventBroadcaster.StartRecordingToSink(&corev1.EventSinkImpl{Interface: kubeClient.CoreV1().Events(v1.NamespaceAll)})
