@@ -81,18 +81,25 @@ func (s *SlowSet) TimeRemaining(key string) time.Duration {
 	return 0
 }
 
+func (s *SlowSet) removeAllExpired() {
+	s.Lock()
+	defer s.Unlock()
+	for key, t := range s.workSet {
+		if time.Since(t) > s.retentionTime {
+			delete(s.workSet, key)
+		}
+	}
+}
+
 func (s *SlowSet) Run(stopCh <-chan struct{}) {
+	ticker := time.NewTicker(s.resyncPeriod)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-stopCh:
 			return
-		default:
-			time.Sleep(s.resyncPeriod)
-			for key, t := range s.workSet {
-				if time.Since(t) > s.retentionTime {
-					s.Remove(key)
-				}
-			}
+		case <-ticker.C:
+			s.removeAllExpired()
 		}
 	}
 }
