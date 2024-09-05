@@ -61,7 +61,7 @@ func TestController(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			// Setup
-			client := csi.NewMockClient("foo", true, true, true, true, true)
+			client := csi.NewMockClient("foo", true, true, true, true, true, false)
 			driverName, _ := client.GetDriverName(context.TODO())
 
 			var initialObjects []runtime.Object
@@ -78,7 +78,7 @@ func TestController(t *testing.T) {
 			pvcInformer := informerFactory.Core().V1().PersistentVolumeClaims()
 			vacInformer := informerFactory.Storage().V1beta1().VolumeAttributesClasses()
 
-			csiModifier, err := modifier.NewModifierFromClient(client, 15*time.Second, kubeClient, informerFactory, driverName)
+			csiModifier, err := modifier.NewModifierFromClient(client, 15*time.Second, kubeClient, informerFactory, false, driverName)
 			if err != nil {
 				t.Fatalf("Test %s: Unable to create modifier: %v", test.name, err)
 			}
@@ -86,7 +86,7 @@ func TestController(t *testing.T) {
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.VolumeAttributesClass, true)
 			controller := NewModifyController(driverName,
 				csiModifier, kubeClient,
-				time.Second, informerFactory,
+				time.Second, false, informerFactory,
 				workqueue.DefaultControllerRateLimiter())
 
 			ctrlInstance, _ := controller.(*modifyController)
@@ -154,7 +154,7 @@ func TestModifyPVC(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			client := csi.NewMockClient("mock", true, true, true, true, true)
+			client := csi.NewMockClient("mock", true, true, true, true, true, false)
 			if test.modifyFailure {
 				client.SetModifyFailed()
 			}
@@ -179,7 +179,7 @@ func TestModifyPVC(t *testing.T) {
 			pvcInformer := informerFactory.Core().V1().PersistentVolumeClaims()
 			vacInformer := informerFactory.Storage().V1beta1().VolumeAttributesClasses()
 
-			csiModifier, err := modifier.NewModifierFromClient(client, 15*time.Second, kubeClient, informerFactory, driverName)
+			csiModifier, err := modifier.NewModifierFromClient(client, 15*time.Second, kubeClient, informerFactory, false, driverName)
 			if err != nil {
 				t.Fatalf("Test %s: Unable to create modifier: %v", test.name, err)
 			}
@@ -187,7 +187,7 @@ func TestModifyPVC(t *testing.T) {
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.VolumeAttributesClass, true)
 			controller := NewModifyController(driverName,
 				csiModifier, kubeClient,
-				time.Second, informerFactory,
+				time.Second, false, informerFactory,
 				workqueue.DefaultControllerRateLimiter())
 
 			ctrlInstance, _ := controller.(*modifyController)

@@ -28,6 +28,12 @@ import (
 	"k8s.io/klog/v2"
 )
 
+const (
+	pvcNameKey      = "csi.storage.k8s.io/pvc/name"
+	pvcNamespaceKey = "csi.storage.k8s.io/pvc/namespace"
+	pvNameKey       = "csi.storage.k8s.io/pv/name"
+)
+
 // The return value bool is only used as a sentinel value when function returns without actually performing modification
 func (ctrl *modifyController) modify(pvc *v1.PersistentVolumeClaim, pv *v1.PersistentVolume) (*v1.PersistentVolumeClaim, *v1.PersistentVolume, error, bool) {
 	pvcSpecVacName := pvc.Spec.VolumeAttributesClassName
@@ -148,6 +154,11 @@ func (ctrl *modifyController) callModifyVolumeOnPlugin(
 	pvc *v1.PersistentVolumeClaim,
 	pv *v1.PersistentVolume,
 	vac *storagev1beta1.VolumeAttributesClass) (*v1.PersistentVolumeClaim, *v1.PersistentVolume, error) {
+	if ctrl.extraModifyMetadata {
+		vac.Parameters[pvcNameKey] = pvc.GetName()
+		vac.Parameters[pvcNamespaceKey] = pvc.GetNamespace()
+		vac.Parameters[pvNameKey] = pv.GetName()
+	}
 	err := ctrl.modifier.Modify(pv, vac.Parameters)
 
 	if err != nil {

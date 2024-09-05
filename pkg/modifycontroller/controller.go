@@ -47,17 +47,18 @@ type ModifyController interface {
 }
 
 type modifyController struct {
-	name            string
-	modifier        modifier.Modifier
-	kubeClient      kubernetes.Interface
-	claimQueue      workqueue.RateLimitingInterface
-	eventRecorder   record.EventRecorder
-	pvLister        corelisters.PersistentVolumeLister
-	pvListerSynced  cache.InformerSynced
-	pvcLister       corelisters.PersistentVolumeClaimLister
-	pvcListerSynced cache.InformerSynced
-	vacLister       storagev1beta1listers.VolumeAttributesClassLister
-	vacListerSynced cache.InformerSynced
+	name                string
+	modifier            modifier.Modifier
+	kubeClient          kubernetes.Interface
+	claimQueue          workqueue.RateLimitingInterface
+	eventRecorder       record.EventRecorder
+	pvLister            corelisters.PersistentVolumeLister
+	pvListerSynced      cache.InformerSynced
+	pvcLister           corelisters.PersistentVolumeClaimLister
+	pvcListerSynced     cache.InformerSynced
+	vacLister           storagev1beta1listers.VolumeAttributesClassLister
+	vacListerSynced     cache.InformerSynced
+	extraModifyMetadata bool
 	// the key of the map is {PVC_NAMESPACE}/{PVC_NAME}
 	uncertainPVCs map[string]v1.PersistentVolumeClaim
 }
@@ -68,6 +69,7 @@ func NewModifyController(
 	modifier modifier.Modifier,
 	kubeClient kubernetes.Interface,
 	resyncPeriod time.Duration,
+	extraModifyMetadata bool,
 	informerFactory informers.SharedInformerFactory,
 	pvcRateLimiter workqueue.RateLimiter) ModifyController {
 	pvInformer := informerFactory.Core().V1().PersistentVolumes()
@@ -83,17 +85,18 @@ func NewModifyController(
 		pvcRateLimiter, fmt.Sprintf("%s-pvc", name))
 
 	ctrl := &modifyController{
-		name:            name,
-		modifier:        modifier,
-		kubeClient:      kubeClient,
-		pvListerSynced:  pvInformer.Informer().HasSynced,
-		pvLister:        pvInformer.Lister(),
-		pvcListerSynced: pvcInformer.Informer().HasSynced,
-		pvcLister:       pvcInformer.Lister(),
-		vacListerSynced: vacInformer.Informer().HasSynced,
-		vacLister:       vacInformer.Lister(),
-		claimQueue:      claimQueue,
-		eventRecorder:   eventRecorder,
+		name:                name,
+		modifier:            modifier,
+		kubeClient:          kubeClient,
+		pvListerSynced:      pvInformer.Informer().HasSynced,
+		pvLister:            pvInformer.Lister(),
+		pvcListerSynced:     pvcInformer.Informer().HasSynced,
+		pvcLister:           pvcInformer.Lister(),
+		vacListerSynced:     vacInformer.Informer().HasSynced,
+		vacLister:           vacInformer.Lister(),
+		claimQueue:          claimQueue,
+		eventRecorder:       eventRecorder,
+		extraModifyMetadata: extraModifyMetadata,
 	}
 	// Add a resync period as the PVC's request modify can be modified again when we handling
 	// a previous modify request of the same PVC.

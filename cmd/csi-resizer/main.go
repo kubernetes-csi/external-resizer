@@ -60,6 +60,8 @@ var (
 	resyncPeriod = flag.Duration("resync-period", time.Minute*10, "Resync period for cache")
 	workers      = flag.Int("workers", 10, "Concurrency to process multiple resize requests")
 
+	extraModifyMetadata = flag.Bool("extra-modify-metadata", false, "If set, add pv/pvc metadata to plugin modify requests as parameters.")
+
 	csiAddress = flag.String("csi-address", "/run/csi/socket", "Address of the CSI driver socket.")
 	timeout    = flag.Duration("timeout", 10*time.Second, "Timeout for waiting for CSI driver socket.")
 
@@ -188,6 +190,7 @@ func main() {
 		*timeout,
 		kubeClient,
 		informerFactory,
+		*extraModifyMetadata,
 		driverName)
 	if err != nil {
 		klog.ErrorS(err, "Failed to create CSI modifier")
@@ -217,7 +220,7 @@ func main() {
 	var mc modifycontroller.ModifyController
 	// Add modify controller only if the feature gate is enabled
 	if utilfeature.DefaultFeatureGate.Enabled(features.VolumeAttributesClass) {
-		mc = modifycontroller.NewModifyController(modifierName, csiModifier, kubeClient, *resyncPeriod, informerFactory,
+		mc = modifycontroller.NewModifyController(modifierName, csiModifier, kubeClient, *resyncPeriod, *extraModifyMetadata, informerFactory,
 			workqueue.NewItemExponentialFailureRateLimiter(*retryIntervalStart, *retryIntervalMax))
 	}
 
