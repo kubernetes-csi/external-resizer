@@ -42,6 +42,7 @@ import (
 	"github.com/kubernetes-csi/external-resizer/pkg/util"
 	csitrans "k8s.io/csi-translation-lib"
 
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	"k8s.io/client-go/informers"
@@ -136,6 +137,7 @@ func main() {
 
 	config.QPS = float32(*kubeAPIQPS)
 	config.Burst = *kubeAPIBurst
+	config.ContentType = runtime.ContentTypeProtobuf
 
 	kubeClient, err := kubernetes.NewForConfig(config)
 	if err != nil {
