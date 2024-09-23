@@ -11,12 +11,12 @@ require (
 	golang.org/x/oauth2 v0.22.0 // indirect
 	golang.org/x/term v0.23.0 // indirect
 	google.golang.org/grpc v1.65.0
-	k8s.io/api v0.31.0
-	k8s.io/apimachinery v0.31.0
-	k8s.io/apiserver v0.31.0
-	k8s.io/client-go v0.31.0
-	k8s.io/component-base v0.31.0
-	k8s.io/csi-translation-lib v0.31.0
+	k8s.io/api v0.31.1
+	k8s.io/apimachinery v0.31.1
+	k8s.io/apiserver v0.31.1
+	k8s.io/client-go v0.31.1
+	k8s.io/component-base v0.31.1
+	k8s.io/csi-translation-lib v0.31.1
 	k8s.io/klog/v2 v2.130.1
 )
 
