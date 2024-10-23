@@ -25,18 +25,18 @@ import (
 var (
 	testVacObject = &storagev1beta1.VolumeAttributesClass{
 		ObjectMeta: metav1.ObjectMeta{Name: testVac},
-		DriverName: "test-driver",
+		DriverName: testDriverName,
 		Parameters: map[string]string{"iops": "3000"},
 	}
 
 	targetVacObject = &storagev1beta1.VolumeAttributesClass{
 		ObjectMeta: metav1.ObjectMeta{Name: targetVac},
-		DriverName: "test-driver",
+		DriverName: testDriverName,
 		Parameters: map[string]string{
 			"iops":                             "4567",
-			"csi.storage.k8s.io/pvc/name":      "foo",
-			"csi.storage.k8s.io/pvc/namespace": "modify",
-			"csi.storage.k8s.io/pv/name":       "testPV",
+			"csi.storage.k8s.io/pvc/name":      pvcName,
+			"csi.storage.k8s.io/pvc/namespace": pvcNamespace,
+			"csi.storage.k8s.io/pv/name":       pvName,
 		},
 	}
 )
@@ -112,7 +112,7 @@ func TestModify(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			// Setup
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.VolumeAttributesClass, true)
-			client := csi.NewMockClient("foo", true, true, true, true, true, test.withExtraMetadata)
+			client := csi.NewMockClient(testDriverName, true, true, true, true, true, test.withExtraMetadata)
 			driverName, _ := client.GetDriverName(context.TODO())
 
 			var initialObjects []runtime.Object
@@ -199,7 +199,7 @@ func TestModify(t *testing.T) {
 
 func createTestPVC(pvcName string, vacName string, curVacName string, targetVacName string) *v1.PersistentVolumeClaim {
 	pvc := &v1.PersistentVolumeClaim{
-		ObjectMeta: metav1.ObjectMeta{Name: pvcName, Namespace: "modify"},
+		ObjectMeta: metav1.ObjectMeta{Name: pvcName, Namespace: pvcNamespace},
 		Spec: v1.PersistentVolumeClaimSpec{
 			AccessModes: []v1.PersistentVolumeAccessMode{
 				v1.ReadWriteOnce,
@@ -211,6 +211,7 @@ func createTestPVC(pvcName string, vacName string, curVacName string, targetVacN
 				},
 			},
 			VolumeAttributesClassName: &vacName,
+			VolumeName:                pvName,
 		},
 		Status: v1.PersistentVolumeClaimStatus{
 			Phase: v1.ClaimBound,

@@ -37,7 +37,7 @@ func TestController(t *testing.T) {
 	}{
 		{
 			name:          "Modify called",
-			pvc:           createTestPVC(pvcName, "target-vac" /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/),
+			pvc:           createTestPVC(pvcName, targetVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/),
 			pv:            basePV,
 			vacExists:     true,
 			callCSIModify: true,
@@ -61,57 +61,12 @@ func TestController(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			// Setup
-			client := csi.NewMockClient("foo", true, true, true, true, true, false)
-			driverName, _ := client.GetDriverName(context.TODO())
+			client := csi.NewMockClient(testDriverName, true, true, true, true, true, false)
 
-			var initialObjects []runtime.Object
-			initialObjects = append(initialObjects, test.pvc)
-			initialObjects = append(initialObjects, test.pv)
-			// existing vac set in the pvc and pv
-			initialObjects = append(initialObjects, testVacObject)
-			if test.vacExists {
-				initialObjects = append(initialObjects, targetVacObject)
-			}
+			initialObjects := []runtime.Object{test.pvc, test.pv, testVacObject, targetVacObject}
+			ctrlInstance := setupFakeK8sEnvironment(t, client, initialObjects)
 
-			kubeClient, informerFactory := fakeK8s(initialObjects)
-			pvInformer := informerFactory.Core().V1().PersistentVolumes()
-			pvcInformer := informerFactory.Core().V1().PersistentVolumeClaims()
-			vacInformer := informerFactory.Storage().V1beta1().VolumeAttributesClasses()
-
-			csiModifier, err := modifier.NewModifierFromClient(client, 15*time.Second, kubeClient, informerFactory, false, driverName)
-			if err != nil {
-				t.Fatalf("Test %s: Unable to create modifier: %v", test.name, err)
-			}
-
-			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.VolumeAttributesClass, true)
-			controller := NewModifyController(driverName,
-				csiModifier, kubeClient,
-				time.Second, false, informerFactory,
-				workqueue.DefaultControllerRateLimiter())
-
-			ctrlInstance, _ := controller.(*modifyController)
-
-			stopCh := make(chan struct{})
-			informerFactory.Start(stopCh)
-
-			ctx := context.TODO()
-			defer ctx.Done()
-			go controller.Run(1, ctx)
-
-			for _, obj := range initialObjects {
-				switch obj.(type) {
-				case *v1.PersistentVolume:
-					pvInformer.Informer().GetStore().Add(obj)
-				case *v1.PersistentVolumeClaim:
-					pvcInformer.Informer().GetStore().Add(obj)
-				case *storagev1beta1.VolumeAttributesClass:
-					vacInformer.Informer().GetStore().Add(obj)
-				default:
-					t.Fatalf("Test %s: Unknown initalObject type: %+v", test.name, obj)
-				}
-			}
-			time.Sleep(time.Second * 2)
-			err = ctrlInstance.modifyPVC(test.pvc, test.pv)
+			_ = ctrlInstance.modifyPVC(test.pvc, test.pv)
 
 			modifyCallCount := client.GetModifyCount()
 			if test.callCSIModify && modifyCallCount == 0 {
@@ -138,14 +93,14 @@ func TestModifyPVC(t *testing.T) {
 	}{
 		{
 			name:          "Modify succeeded",
-			pvc:           createTestPVC(pvcName, "target-vac" /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/),
+			pvc:           createTestPVC(pvcName, targetVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/),
 			pv:            basePV,
 			modifyFailure: false,
 			expectFailure: false,
 		},
 		{
 			name:          "Modify failed",
-			pvc:           createTestPVC(pvcName, "target-vac" /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/),
+			pvc:           createTestPVC(pvcName, targetVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/),
 			pv:            basePV,
 			modifyFailure: true,
 			expectFailure: true,
@@ -154,67 +109,15 @@ func TestModifyPVC(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			client := csi.NewMockClient("mock", true, true, true, true, true, false)
+			client := csi.NewMockClient(testDriverName, true, true, true, true, true, false)
 			if test.modifyFailure {
 				client.SetModifyFailed()
 			}
-			driverName, _ := client.GetDriverName(context.TODO())
 
-			initialObjects := []runtime.Object{}
-			if test.pvc != nil {
-				initialObjects = append(initialObjects, test.pvc)
-			}
-			if test.pv != nil {
-				test.pv.Spec.PersistentVolumeSource.CSI.Driver = driverName
-				initialObjects = append(initialObjects, test.pv)
-			}
+			initialObjects := []runtime.Object{test.pvc, test.pv, testVacObject, targetVacObject}
+			ctrlInstance := setupFakeK8sEnvironment(t, client, initialObjects)
 
-			// existing vac set in the pvc and pv
-			initialObjects = append(initialObjects, testVacObject)
-			// new vac used in modify volume
-			initialObjects = append(initialObjects, targetVacObject)
-
-			kubeClient, informerFactory := fakeK8s(initialObjects)
-			pvInformer := informerFactory.Core().V1().PersistentVolumes()
-			pvcInformer := informerFactory.Core().V1().PersistentVolumeClaims()
-			vacInformer := informerFactory.Storage().V1beta1().VolumeAttributesClasses()
-
-			csiModifier, err := modifier.NewModifierFromClient(client, 15*time.Second, kubeClient, informerFactory, false, driverName)
-			if err != nil {
-				t.Fatalf("Test %s: Unable to create modifier: %v", test.name, err)
-			}
-
-			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.VolumeAttributesClass, true)
-			controller := NewModifyController(driverName,
-				csiModifier, kubeClient,
-				time.Second, false, informerFactory,
-				workqueue.DefaultControllerRateLimiter())
-
-			ctrlInstance, _ := controller.(*modifyController)
-
-			stopCh := make(chan struct{})
-			informerFactory.Start(stopCh)
-
-			ctx := context.TODO()
-			defer ctx.Done()
-			go controller.Run(1, ctx)
-
-			for _, obj := range initialObjects {
-				switch obj.(type) {
-				case *v1.PersistentVolume:
-					pvInformer.Informer().GetStore().Add(obj)
-				case *v1.PersistentVolumeClaim:
-					pvcInformer.Informer().GetStore().Add(obj)
-				case *storagev1beta1.VolumeAttributesClass:
-					vacInformer.Informer().GetStore().Add(obj)
-				default:
-					t.Fatalf("Test %s: Unknown initalObject type: %+v", test.name, obj)
-				}
-			}
-
-			time.Sleep(time.Second * 2)
-
-			_, _, err, _ = ctrlInstance.modify(test.pvc, test.pv)
+			_, _, err, _ := ctrlInstance.modify(test.pvc, test.pv)
 
 			if test.expectFailure && err == nil {
 				t.Errorf("for %s expected error got nothing", test.name)
@@ -227,4 +130,55 @@ func TestModifyPVC(t *testing.T) {
 			}
 		})
 	}
+}
+
+// setupFakeK8sEnvironment
+func setupFakeK8sEnvironment(t *testing.T, client *csi.MockClient, initialObjects []runtime.Object) *modifyController {
+	t.Helper()
+
+	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.VolumeAttributesClass, true)
+
+	/* Create fake kubeClient, Informers, and ModifyController */
+	kubeClient, informerFactory := fakeK8s(initialObjects)
+	pvInformer := informerFactory.Core().V1().PersistentVolumes()
+	pvcInformer := informerFactory.Core().V1().PersistentVolumeClaims()
+	vacInformer := informerFactory.Storage().V1beta1().VolumeAttributesClasses()
+
+	driverName, _ := client.GetDriverName(context.TODO())
+
+	csiModifier, err := modifier.NewModifierFromClient(client, 15*time.Second, kubeClient, informerFactory, false, driverName)
+	if err != nil {
+		t.Fatalf("Test %s: Unable to create modifier: %v", t.Name(), err)
+	}
+
+	controller := NewModifyController(driverName,
+		csiModifier, kubeClient,
+		0, false, informerFactory,
+		workqueue.DefaultControllerRateLimiter())
+
+	/* Start informers and ModifyController*/
+	stopCh := make(chan struct{})
+	informerFactory.Start(stopCh)
+
+	ctx := context.TODO()
+	defer ctx.Done()
+	go controller.Run(1, ctx)
+
+	/* Add initial objects to informer caches (TODO Q confirm this is true/needed?) */
+	for _, obj := range initialObjects {
+		switch obj.(type) {
+		case *v1.PersistentVolume:
+			pvInformer.Informer().GetStore().Add(obj)
+		case *v1.PersistentVolumeClaim:
+			pvcInformer.Informer().GetStore().Add(obj)
+		case *storagev1beta1.VolumeAttributesClass:
+			vacInformer.Informer().GetStore().Add(obj)
+		default:
+			t.Fatalf("Test %s: Unknown initalObject type: %+v", t.Name(), obj)
+		}
+	}
+
+	ctrlInstance, _ := controller.(*modifyController)
+
+	return ctrlInstance
 }
