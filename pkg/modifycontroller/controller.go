@@ -235,7 +235,7 @@ func (ctrl *modifyController) sync() {
 	}
 }
 
-// syncPVC checks if a pvc requests resizing, and execute the resize operation if requested.
+// syncPVC checks if a pvc requests modification, and execute the ModifyVolume operation if requested.
 func (ctrl *modifyController) syncPVC(key string) error {
 	klog.V(4).InfoS("Started PVC processing for modify controller", "key", key)
 
@@ -260,7 +260,7 @@ func (ctrl *modifyController) syncPVC(key string) error {
 	}
 
 	// Only trigger modify volume if the following conditions are met
-	// 1. Non empty vac name
+	// 1. Non-empty vac name
 	// 2. PVC is in Bound state
 	// 3. PV CSI driver name matches local driver
 	vacName := pvc.Spec.VolumeAttributesClassName
