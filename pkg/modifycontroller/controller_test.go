@@ -64,7 +64,8 @@ func TestController(t *testing.T) {
 			client := csi.NewMockClient(testDriverName, true, true, true, true, true, false)
 
 			initialObjects := []runtime.Object{test.pvc, test.pv, testVacObject, targetVacObject}
-			ctrlInstance := setupFakeK8sEnvironment(t, client, initialObjects)
+			ctrlInstance, ctx := setupFakeK8sEnvironment(t, client, initialObjects)
+			defer ctx.Done()
 
 			_ = ctrlInstance.modifyPVC(test.pvc, test.pv)
 
@@ -115,7 +116,8 @@ func TestModifyPVC(t *testing.T) {
 			}
 
 			initialObjects := []runtime.Object{test.pvc, test.pv, testVacObject, targetVacObject}
-			ctrlInstance := setupFakeK8sEnvironment(t, client, initialObjects)
+			ctrlInstance, ctx := setupFakeK8sEnvironment(t, client, initialObjects)
+			defer ctx.Done()
 
 			_, _, err, _ := ctrlInstance.modify(test.pvc, test.pv)
 
@@ -132,8 +134,84 @@ func TestModifyPVC(t *testing.T) {
 	}
 }
 
-// setupFakeK8sEnvironment
-func setupFakeK8sEnvironment(t *testing.T, client *csi.MockClient, initialObjects []runtime.Object) *modifyController {
+func TestSyncPVC(t *testing.T) {
+	basePVC := createTestPVC(pvcName, targetVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/)
+	basePV := createTestPV(1, pvcName, pvcNamespace, "foobaz" /*pvcUID*/, &fsVolumeMode, testVac)
+
+	otherDriverPV := createTestPV(1, pvcName, pvcNamespace, "foobaz" /*pvcUID*/, &fsVolumeMode, testVac)
+	otherDriverPV.Spec.PersistentVolumeSource.CSI.Driver = "some-other-driver"
+
+	unboundPVC := createTestPVC(pvcName, targetVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/)
+	unboundPVC.Status.Phase = v1.ClaimPending
+
+	pvcWithUncreatedPV := createTestPVC(pvcName, targetVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/)
+	pvcWithUncreatedPV.Spec.VolumeName = ""
+
+	tests := []struct {
+		name          string
+		pvc           *v1.PersistentVolumeClaim
+		pv            *v1.PersistentVolume
+		callCSIModify bool
+	}{
+		{
+			name:          "Should execute ModifyVolume operation when PVC's VAC changes",
+			pvc:           basePVC,
+			pv:            basePV,
+			callCSIModify: true,
+		},
+		{
+			name:          "Should NOT modify if PVC managed by another CSI Driver",
+			pvc:           basePVC,
+			pv:            otherDriverPV,
+			callCSIModify: false,
+		},
+		{
+			name:          "Should NOT modify if PVC has empty Spec.VACName",
+			pvc:           createTestPVC(pvcName, "" /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/),
+			pv:            basePV,
+			callCSIModify: false,
+		},
+		{
+			name:          "Should NOT modify if PVC not in bound state",
+			pvc:           unboundPVC,
+			pv:            basePV,
+			callCSIModify: false,
+		},
+		{
+			name:          "Should NOT modify if PVC's PV not created yet",
+			pvc:           pvcWithUncreatedPV,
+			pv:            basePV,
+			callCSIModify: false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			client := csi.NewMockClient(testDriverName, true, true, true, true, true, false)
+
+			initialObjects := []runtime.Object{test.pvc, test.pv, testVacObject, targetVacObject}
+			ctrlInstance, ctx := setupFakeK8sEnvironment(t, client, initialObjects)
+			defer ctx.Done()
+
+			err := ctrlInstance.syncPVC(pvcNamespace + "/" + pvcName)
+			if err != nil {
+				t.Errorf("for %s, unexpected error: %v", test.name, err)
+			}
+
+			modifyCallCount := client.GetModifyCount()
+			if test.callCSIModify && modifyCallCount == 0 {
+				t.Fatalf("for %s: expected csi modify call, no csi modify call was made", test.name)
+			}
+
+			if !test.callCSIModify && modifyCallCount > 0 {
+				t.Fatalf("for %s: expected no csi modify call, received csi modify request", test.name)
+			}
+		})
+	}
+}
+
+// setupFakeK8sEnvironment creates fake K8s environment and starts Informers and ModifyController
+func setupFakeK8sEnvironment(t *testing.T, client *csi.MockClient, initialObjects []runtime.Object) (*modifyController, context.Context) {
 	t.Helper()
 
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.VolumeAttributesClass, true)
@@ -161,7 +239,6 @@ func setupFakeK8sEnvironment(t *testing.T, client *csi.MockClient, initialObject
 	informerFactory.Start(stopCh)
 
 	ctx := context.TODO()
-	defer ctx.Done()
 	go controller.Run(1, ctx)
 
 	/* Add initial objects to informer caches (TODO Q confirm this is true/needed?) */
@@ -180,5 +257,5 @@ func setupFakeK8sEnvironment(t *testing.T, client *csi.MockClient, initialObject
 
 	ctrlInstance, _ := controller.(*modifyController)
 
-	return ctrlInstance
+	return ctrlInstance, ctx
 }
