@@ -1,25 +1,17 @@
 package modifycontroller
 
 import (
-	"context"
-	"testing"
-	"time"
-
 	"github.com/google/go-cmp/cmp"
 	"github.com/kubernetes-csi/external-resizer/pkg/csi"
-	"github.com/kubernetes-csi/external-resizer/pkg/features"
-	"github.com/kubernetes-csi/external-resizer/pkg/modifier"
 	v1 "k8s.io/api/core/v1"
 	storagev1beta1 "k8s.io/api/storage/v1beta1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
-	"k8s.io/client-go/util/workqueue"
-	featuregatetesting "k8s.io/component-base/featuregate/testing"
+	"testing"
 )
 
 var (
@@ -111,50 +103,14 @@ func TestModify(t *testing.T) {
 		test := tests[i]
 		t.Run(test.name, func(t *testing.T) {
 			// Setup
-			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.VolumeAttributesClass, true)
 			client := csi.NewMockClient(testDriverName, true, true, true, true, true, test.withExtraMetadata)
-			driverName, _ := client.GetDriverName(context.TODO())
-
-			var initialObjects []runtime.Object
-			initialObjects = append(initialObjects, test.pvc)
-			initialObjects = append(initialObjects, test.pv)
-			// existing vac set in the pvc and pv
-			initialObjects = append(initialObjects, testVacObject)
+			initialObjects := []runtime.Object{test.pvc, test.pv, testVacObject}
 			if test.vacExists {
 				initialObjects = append(initialObjects, targetVacObject)
 			}
+			ctrlInstance, ctx := setupFakeK8sEnvironment(t, client, initialObjects)
+			defer ctx.Done()
 
-			kubeClient, informerFactory := fakeK8s(initialObjects)
-			pvInformer := informerFactory.Core().V1().PersistentVolumes()
-			pvcInformer := informerFactory.Core().V1().PersistentVolumeClaims()
-			vacInformer := informerFactory.Storage().V1beta1().VolumeAttributesClasses()
-
-			csiModifier, err := modifier.NewModifierFromClient(client, 15*time.Second, kubeClient, informerFactory, test.withExtraMetadata, driverName)
-			if err != nil {
-				t.Fatalf("Test %s: Unable to create modifier: %v", test.name, err)
-			}
-			controller := NewModifyController(driverName,
-				csiModifier, kubeClient,
-				time.Second, test.withExtraMetadata, informerFactory,
-				workqueue.DefaultControllerRateLimiter())
-
-			ctrlInstance, _ := controller.(*modifyController)
-
-			stopCh := make(chan struct{})
-			informerFactory.Start(stopCh)
-
-			for _, obj := range initialObjects {
-				switch obj.(type) {
-				case *v1.PersistentVolume:
-					pvInformer.Informer().GetStore().Add(obj)
-				case *v1.PersistentVolumeClaim:
-					pvcInformer.Informer().GetStore().Add(obj)
-				case *storagev1beta1.VolumeAttributesClass:
-					vacInformer.Informer().GetStore().Add(obj)
-				default:
-					t.Fatalf("Test %s: Unknown initalObject type: %+v", test.name, obj)
-				}
-			}
 			// Action
 			pvc, pv, err, modifyCalled := ctrlInstance.modify(test.pvc, test.pv)
 			// Verify
