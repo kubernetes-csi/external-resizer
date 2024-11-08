@@ -28,12 +28,14 @@ import (
 const (
 	pvcName      = "foo"
 	pvcNamespace = "modify"
+	pvName       = "testPV"
 )
 
 var (
 	fsVolumeMode           = v1.PersistentVolumeFilesystem
 	testVac                = "test-vac"
 	targetVac              = "target-vac"
+	testDriverName         = "mock"
 	infeasibleErr          = status.Errorf(codes.InvalidArgument, "Parameters in VolumeAttributesClass is invalid")
 	finalErr               = status.Errorf(codes.Internal, "Final error")
 	pvcConditionInProgress = v1.PersistentVolumeClaimCondition{
@@ -390,7 +392,7 @@ func createTestPV(capacityGB int, pvcName, pvcNamespace string, pvcUID types.UID
 			},
 			PersistentVolumeSource: v1.PersistentVolumeSource{
 				CSI: &v1.CSIPersistentVolumeSource{
-					Driver:       "foo",
+					Driver:       testDriverName,
 					VolumeHandle: "foo",
 				},
 			},
