@@ -58,7 +58,7 @@ type resizeController struct {
 	name          string
 	resizer       resizer.Resizer
 	kubeClient    kubernetes.Interface
-	claimQueue    workqueue.RateLimitingInterface
+	claimQueue    workqueue.TypedRateLimitingInterface[string]
 	eventRecorder record.EventRecorder
 	pvSynced      cache.InformerSynced
 	pvcSynced     cache.InformerSynced
@@ -87,7 +87,7 @@ func NewResizeController(
 	kubeClient kubernetes.Interface,
 	resyncPeriod time.Duration,
 	informerFactory informers.SharedInformerFactory,
-	pvcRateLimiter workqueue.RateLimiter,
+	pvcRateLimiter workqueue.TypedRateLimiter[string],
 	handleVolumeInUseError bool,
 	maxRetryInterval time.Duration) ResizeController {
 	pvInformer := informerFactory.Core().V1().PersistentVolumes()
@@ -98,8 +98,10 @@ func NewResizeController(
 	eventRecorder := eventBroadcaster.NewRecorder(scheme.Scheme,
 		v1.EventSource{Component: fmt.Sprintf("external-resizer %s", name)})
 
-	claimQueue := workqueue.NewNamedRateLimitingQueue(
-		pvcRateLimiter, fmt.Sprintf("%s-pvc", name))
+	claimQueue := workqueue.NewTypedRateLimitingQueueWithConfig(
+		pvcRateLimiter, workqueue.TypedRateLimitingQueueConfig[string]{
+			Name: fmt.Sprintf("%s-pvc", name),
+		})
 
 	ctrl := &resizeController{
 		name:                   name,
@@ -302,7 +304,7 @@ func (ctrl *resizeController) syncPVCs() {
 	}
 	defer ctrl.claimQueue.Done(key)
 
-	err := ctrl.syncPVC(key.(string))
+	err := ctrl.syncPVC(key)
 
 	if err != nil {
 		if utilfeature.DefaultFeatureGate.Enabled(features.RecoverVolumeExpansionFailure) && util.IsDelayRetryError(err) {

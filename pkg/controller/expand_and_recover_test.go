@@ -173,7 +173,7 @@ func TestExpandAndRecover(t *testing.T) {
 			controller := NewResizeController(driverName,
 				csiResizer, kubeClient,
 				time.Second, informerFactory,
-				workqueue.DefaultControllerRateLimiter(), true /*handleVolumeInUseError*/, 2*time.Minute /*maxRetryInterval*/)
+				workqueue.DefaultTypedControllerRateLimiter[string](), true /*handleVolumeInUseError*/, 2*time.Minute /*maxRetryInterval*/)
 
 			ctrlInstance, _ := controller.(*resizeController)
 			recorder := record.NewFakeRecorder(10)
