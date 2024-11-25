@@ -111,7 +111,10 @@ func TestController(t *testing.T) {
 				}
 			}
 			time.Sleep(time.Second * 2)
-			err = ctrlInstance.modifyPVC(test.pvc, test.pv)
+			_, _, err, _ = ctrlInstance.modify(test.pvc, test.pv)
+			if err != nil {
+				t.Fatalf("for %s: unexpected error: %v", test.name, err)
+			}
 
 			modifyCallCount := client.GetModifyCount()
 			if test.callCSIModify && modifyCallCount == 0 {
