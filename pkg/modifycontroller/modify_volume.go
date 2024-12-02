@@ -55,7 +55,6 @@ func (ctrl *modifyController) modify(pvc *v1.PersistentVolumeClaim, pv *v1.Persi
 
 			// Skip retry for now if modification recently failed for an infeasible reason. Else retry.
 			inSlowSet := ctrl.slowSet.Contains(pvcKey)
-			klog.V(1).Infof("WOOHOO")
 			if err := ctrl.markForSlowRetry(pvc); err != nil {
 				return pvc, pv, err, false
 			}
