@@ -61,6 +61,8 @@ type modifyController struct {
 	extraModifyMetadata bool
 	// the key of the map is {PVC_NAMESPACE}/{PVC_NAME}
 	uncertainPVCs map[string]v1.PersistentVolumeClaim
+	// slowSet tracks PVCs for which modification failed with infeasible error and should be retried at slower rate.
+	slowSet *util.SlowSet
 }
 
 // NewModifyController returns a ModifyController.
@@ -69,6 +71,7 @@ func NewModifyController(
 	modifier modifier.Modifier,
 	kubeClient kubernetes.Interface,
 	resyncPeriod time.Duration,
+	maxRetryInterval time.Duration,
 	extraModifyMetadata bool,
 	informerFactory informers.SharedInformerFactory,
 	pvcRateLimiter workqueue.RateLimiter) ModifyController {
@@ -97,8 +100,9 @@ func NewModifyController(
 		claimQueue:          claimQueue,
 		eventRecorder:       eventRecorder,
 		extraModifyMetadata: extraModifyMetadata,
+		slowSet:             util.NewSlowSet(maxRetryInterval),
 	}
-	// Add a resync period as the PVC's request modify can be modified again when we handling
+	// Add a resync period as the PVC's request modify can be modified again when we are handling
 	// a previous modify request of the same PVC.
 	pvcInformer.Informer().AddEventHandlerWithResyncPeriod(cache.ResourceEventHandlerFuncs{
 		AddFunc:    ctrl.addPVC,
@@ -252,7 +256,7 @@ func (ctrl *modifyController) sync() {
 	}
 }
 
-// syncPVC checks if a pvc requests resizing, and execute the resize operation if requested.
+// syncPVC checks if a pvc requests modification, and execute the ModifyVolume operation if requested.
 func (ctrl *modifyController) syncPVC(key string) error {
 	klog.V(4).InfoS("Started PVC processing for modify controller", "key", key)
 
@@ -277,7 +281,7 @@ func (ctrl *modifyController) syncPVC(key string) error {
 	}
 
 	// Only trigger modify volume if the following conditions are met
-	// 1. Non empty vac name
+	// 1. Non-empty vac name
 	// 2. PVC is in Bound state
 	// 3. PV CSI driver name matches local driver
 	vacName := pvc.Spec.VolumeAttributesClassName

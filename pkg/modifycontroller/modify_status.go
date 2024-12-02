@@ -18,7 +18,6 @@ package modifycontroller
 
 import (
 	"fmt"
-
 	"github.com/kubernetes-csi/external-resizer/pkg/util"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -57,13 +56,14 @@ func (ctrl *modifyController) markControllerModifyVolumeStatus(
 			[]v1.PersistentVolumeClaimCondition{pvcCondition})
 	}
 
-	updatedPVC, err := util.PatchClaim(ctrl.kubeClient, pvc, newPVC, true)
+	updatedPVC, err := util.PatchClaim(ctrl.kubeClient, pvc, newPVC, false)
 	if err != nil {
 		return pvc, fmt.Errorf("mark PVC %q as modify volume failed, errored with: %v", pvc.Name, err)
 	}
 	// Remove this PVC from the uncertain cache since the status is known now
 	if modifyVolumeStatus == v1.PersistentVolumeClaimModifyVolumeInfeasible {
 		ctrl.removePVCFromModifyVolumeUncertainCache(pvc)
+		ctrl.markForSlowRetry(pvc)
 	}
 	return updatedPVC, nil
 }
@@ -154,8 +154,20 @@ func (ctrl *modifyController) removePVCFromModifyVolumeUncertainCache(pvc *v1.Pe
 		delete(ctrl.uncertainPVCs, pvcKey)
 	}
 
+	return nil
+}
+
+// markForSlowRetry adds PVC to controller's slowSet IF PVC's ModifyVolumeStatus is Infeasible
+func (ctrl *modifyController) markForSlowRetry(pvc *v1.PersistentVolumeClaim) error {
+	pvcKey, err := cache.MetaNamespaceKeyFunc(pvc)
 	if err != nil {
 		return err
 	}
+
+	s := pvc.Status.ModifyVolumeStatus
+	if s != nil && s.Status == v1.PersistentVolumeClaimModifyVolumeInfeasible {
+		ctrl.slowSet.Add(pvcKey)
+	}
+
 	return nil
 }

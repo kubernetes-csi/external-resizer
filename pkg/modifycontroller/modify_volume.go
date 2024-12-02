@@ -43,35 +43,39 @@ func (ctrl *modifyController) modify(pvc *v1.PersistentVolumeClaim, pv *v1.Persi
 		// First time adding VAC to a PVC
 		return ctrl.validateVACAndModifyVolumeWithTarget(pvc, pv)
 	} else if pvcSpecVacName != nil && curVacName != nil && *pvcSpecVacName != *curVacName {
-		targetVacName := *pvcSpecVacName
-		if pvc.Status.ModifyVolumeStatus != nil {
-			targetVacName = pvc.Status.ModifyVolumeStatus.TargetVolumeAttributesClassName
+
+		// Check if the PVC is in uncertain State
+		pvcKey, err := cache.MetaNamespaceKeyFunc(pvc)
+		if err != nil {
+			return pvc, pv, err, false
 		}
-		if *curVacName == targetVacName {
-			// if somehow both curVacName and targetVacName is same, what does this mean??
-			// I am not sure about this.
+		_, ok := ctrl.uncertainPVCs[pvcKey]
+		if !ok {
+			// PVC is not in uncertain state. TODO self-document if statement
+
+			// Skip retry for now if modification recently failed for an infeasible reason. Else retry.
+			inSlowSet := ctrl.slowSet.Contains(pvcKey)
+			if err := ctrl.markForSlowRetry(pvc); err != nil {
+				return pvc, pv, err, false
+			}
+			if inSlowSet {
+				msg := fmt.Sprintf("skipping volume modification for pvc %s, because modification previously failed with infeasible error", pvcKey)
+				klog.V(4).Infof(msg)
+				delayRetryError := util.NewDelayRetryError(msg, ctrl.slowSet.TimeRemaining(pvcKey))
+				return pvc, pv, delayRetryError, false
+			}
+
+			klog.V(3).InfoS("previous operation on the PVC failed with a final error, retrying")
 			return ctrl.validateVACAndModifyVolumeWithTarget(pvc, pv)
 		} else {
-			// Check if the PVC is in uncertain State
-			pvcKey, err := cache.MetaNamespaceKeyFunc(pvc)
+			vac, err := ctrl.vacLister.Get(*pvcSpecVacName)
 			if err != nil {
 				return pvc, pv, err, false
 			}
-			_, ok := ctrl.uncertainPVCs[pvcKey]
-			if !ok {
-				// PVC is not in uncertain state
-				klog.V(3).InfoS("previous operation on the PVC failed with a final error, retrying")
-				return ctrl.validateVACAndModifyVolumeWithTarget(pvc, pv)
-			} else {
-				vac, err := ctrl.vacLister.Get(*pvcSpecVacName)
-				if err != nil {
-					return pvc, pv, err, false
-				}
-				return ctrl.controllerModifyVolumeWithTarget(pvc, pv, vac, pvcSpecVacName)
-			}
+			return ctrl.controllerModifyVolumeWithTarget(pvc, pv, vac, pvcSpecVacName)
 		}
-
 	}
+
 	// No modification required
 	return pvc, pv, nil, false
 }
@@ -120,7 +124,10 @@ func (ctrl *modifyController) controllerModifyVolumeWithTarget(
 	} else {
 		status, ok := status.FromError(err)
 		if ok {
-			ctrl.updateConditionBasedOnError(pvc, err)
+			pvc, updateConditionErr := ctrl.updateConditionBasedOnError(pvc, err)
+			if updateConditionErr != nil {
+				return nil, nil, err, false
+			}
 			if !util.IsFinalError(err) {
 				// update conditions and cache pvc as uncertain
 				pvcKey, err := cache.MetaNamespaceKeyFunc(pvc)
@@ -128,15 +135,18 @@ func (ctrl *modifyController) controllerModifyVolumeWithTarget(
 					return pvc, pv, err, false
 				}
 				ctrl.uncertainPVCs[pvcKey] = *pvc
-
 			} else {
 				// Only InvalidArgument can be set to Infeasible state
 				// Final errors other than InvalidArgument will still be in InProgress state
+				// TODO Q, should NotFound be considered Infeasible for modifycontroller (like it is for resizer)? Then we'd use util.IsInfeasibleError
 				if status.Code() == codes.InvalidArgument {
 					// Mark pvc.Status.ModifyVolumeStatus as infeasible
 					pvc, markModifyVolumeInfeasibleError := ctrl.markControllerModifyVolumeStatus(pvc, v1.PersistentVolumeClaimModifyVolumeInfeasible, err)
 					if markModifyVolumeInfeasibleError != nil {
 						return pvc, pv, markModifyVolumeInfeasibleError, false
+					}
+					if err := ctrl.markForSlowRetry(pvc); err != nil {
+						return pvc, pv, err, false
 					}
 				}
 				ctrl.removePVCFromModifyVolumeUncertainCache(pvc)
