@@ -136,7 +136,7 @@ func TestModify(t *testing.T) {
 			controller := NewModifyController(driverName,
 				csiModifier, kubeClient,
 				time.Second, test.withExtraMetadata, informerFactory,
-				workqueue.DefaultControllerRateLimiter())
+				workqueue.DefaultTypedControllerRateLimiter[string]())
 
 			ctrlInstance, _ := controller.(*modifyController)
 

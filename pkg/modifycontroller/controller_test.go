@@ -87,7 +87,7 @@ func TestController(t *testing.T) {
 			controller := NewModifyController(driverName,
 				csiModifier, kubeClient,
 				time.Second, false, informerFactory,
-				workqueue.DefaultControllerRateLimiter())
+				workqueue.DefaultTypedControllerRateLimiter[string]())
 
 			ctrlInstance, _ := controller.(*modifyController)
 
@@ -188,7 +188,7 @@ func TestModifyPVC(t *testing.T) {
 			controller := NewModifyController(driverName,
 				csiModifier, kubeClient,
 				time.Second, false, informerFactory,
-				workqueue.DefaultControllerRateLimiter())
+				workqueue.DefaultTypedControllerRateLimiter[string]())
 
 			ctrlInstance, _ := controller.(*modifyController)
 

@@ -119,7 +119,7 @@ func TestMarkControllerModifyVolumeStatus(t *testing.T) {
 			controller := NewModifyController(driverName,
 				csiModifier, kubeClient,
 				time.Second, false, informerFactory,
-				workqueue.DefaultControllerRateLimiter())
+				workqueue.DefaultTypedControllerRateLimiter[string]())
 
 			ctrlInstance, _ := controller.(*modifyController)
 
@@ -179,7 +179,7 @@ func TestUpdateConditionBasedOnError(t *testing.T) {
 			controller := NewModifyController(driverName,
 				csiModifier, kubeClient,
 				time.Second, false, informerFactory,
-				workqueue.DefaultControllerRateLimiter())
+				workqueue.DefaultTypedControllerRateLimiter[string]())
 
 			ctrlInstance, _ := controller.(*modifyController)
 
@@ -247,7 +247,7 @@ func TestMarkControllerModifyVolumeCompleted(t *testing.T) {
 			controller := NewModifyController(driverName,
 				csiModifier, kubeClient,
 				time.Second, false, informerFactory,
-				workqueue.DefaultControllerRateLimiter())
+				workqueue.DefaultTypedControllerRateLimiter[string]())
 
 			ctrlInstance, _ := controller.(*modifyController)
 
@@ -313,7 +313,7 @@ func TestRemovePVCFromModifyVolumeUncertainCache(t *testing.T) {
 			controller := NewModifyController(driverName,
 				csiModifier, kubeClient,
 				time.Second, false, informerFactory,
-				workqueue.DefaultControllerRateLimiter())
+				workqueue.DefaultTypedControllerRateLimiter[string]())
 
 			ctrlInstance, _ := controller.(*modifyController)
 

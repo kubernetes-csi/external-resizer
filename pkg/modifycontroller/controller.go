@@ -50,7 +50,7 @@ type modifyController struct {
 	name                string
 	modifier            modifier.Modifier
 	kubeClient          kubernetes.Interface
-	claimQueue          workqueue.RateLimitingInterface
+	claimQueue          workqueue.TypedRateLimitingInterface[string]
 	eventRecorder       record.EventRecorder
 	pvLister            corelisters.PersistentVolumeLister
 	pvListerSynced      cache.InformerSynced
@@ -71,7 +71,7 @@ func NewModifyController(
 	resyncPeriod time.Duration,
 	extraModifyMetadata bool,
 	informerFactory informers.SharedInformerFactory,
-	pvcRateLimiter workqueue.RateLimiter) ModifyController {
+	pvcRateLimiter workqueue.TypedRateLimiter[string]) ModifyController {
 	pvInformer := informerFactory.Core().V1().PersistentVolumes()
 	pvcInformer := informerFactory.Core().V1().PersistentVolumeClaims()
 	vacInformer := informerFactory.Storage().V1beta1().VolumeAttributesClasses()
@@ -81,8 +81,10 @@ func NewModifyController(
 	eventRecorder := eventBroadcaster.NewRecorder(scheme.Scheme,
 		v1.EventSource{Component: fmt.Sprintf("external-resizer %s", name)})
 
-	claimQueue := workqueue.NewNamedRateLimitingQueue(
-		pvcRateLimiter, fmt.Sprintf("%s-pvc", name))
+	claimQueue := workqueue.NewTypedRateLimitingQueueWithConfig(
+		pvcRateLimiter, workqueue.TypedRateLimitingQueueConfig[string]{
+			Name: fmt.Sprintf("%s-pvc", name),
+		})
 
 	ctrl := &modifyController{
 		name:                name,
@@ -243,7 +245,7 @@ func (ctrl *modifyController) sync() {
 	}
 	defer ctrl.claimQueue.Done(key)
 
-	if err := ctrl.syncPVC(key.(string)); err != nil {
+	if err := ctrl.syncPVC(key); err != nil {
 		// Put PVC back to the queue so that we can retry later.
 		klog.ErrorS(err, "Error syncing PVC")
 		ctrl.claimQueue.AddRateLimited(key)
