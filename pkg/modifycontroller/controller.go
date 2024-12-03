@@ -181,25 +181,6 @@ func (ctrl *modifyController) deletePVC(obj interface{}) {
 	ctrl.claimQueue.Forget(objKey)
 }
 
-// modifyPVC modifies the PVC and PV based on VAC
-func (ctrl *modifyController) modifyPVC(pvc *v1.PersistentVolumeClaim, pv *v1.PersistentVolume) error {
-	var err error
-	if isFirstTimeModifyVolumeWithPVC(pvc, pv) {
-		// If it is first time adding a vac, always validate and then call modify volume
-		_, _, err, _ = ctrl.validateVACAndModifyVolumeWithTarget(pvc, pv)
-	} else {
-		_, _, err, _ = ctrl.modify(pvc, pv)
-	}
-	return err
-}
-
-func isFirstTimeModifyVolumeWithPVC(pvc *v1.PersistentVolumeClaim, pv *v1.PersistentVolume) bool {
-	if pv.Spec.VolumeAttributesClassName == nil && pvc.Spec.VolumeAttributesClassName != nil {
-		return true
-	}
-	return false
-}
-
 func (ctrl *modifyController) init(ctx context.Context) bool {
 	informersSyncd := []cache.InformerSynced{ctrl.pvListerSynced, ctrl.pvcListerSynced}
 	informersSyncd = append(informersSyncd, ctrl.vacListerSynced)

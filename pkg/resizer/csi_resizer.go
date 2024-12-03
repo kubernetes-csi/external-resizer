@@ -281,11 +281,3 @@ func getCredentials(k8sClient kubernetes.Interface, ref *v1.SecretReference) (ma
 	}
 	return credentials, nil
 }
-
-func uniqueAccessModes(pvSpec v1.PersistentVolumeSpec) map[v1.PersistentVolumeAccessMode]bool {
-	m := map[v1.PersistentVolumeAccessMode]bool{}
-	for _, mode := range pvSpec.AccessModes {
-		m[mode] = true
-	}
-	return m
-}
