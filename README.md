@@ -1,123 +1,177 @@
-# CSI Resizer
+# [csi-release-tools](https://github.com/kubernetes-csi/csi-release-tools)
 
-The CSI `external-resizer` is a sidecar container that watches the Kubernetes API server for `PersistentVolumeClaim` updates and
-triggers `ControllerExpandVolume` operations against a CSI endpoint if user requested more storage on `PersistentVolumeClaim` object.
+These build and test rules can be shared between different Go projects
+without modifications. Customization for the different projects happen
+in the top-level Makefile.
 
-## Overview
+The rules include support for building and pushing Docker images, with
+the following features:
+ - one or more command and image per project
+ - push canary and/or tagged release images
+ - automatically derive the image tag(s) from repo tags
+ - the source code revision is stored in a "revision" image label
+ - never overwrites an existing release image
 
-A storage provider that allows volume expansion after creation, may choose to implement volume expansion either via a
-control-plane CSI RPC call or via node CSI RPC call or both as a two step process. The external-resizer is an external-controller that watches Kubernetes API server for `PersistentVolumeClaim` modifications and triggers CSI calls for control-plane volume-expansion. More details can be found on - [CSI Volume expansion](https://kubernetes-csi.github.io/docs/volume-expansion.html)
+Usage
+-----
 
-## Compatibility
+The expected repository layout is:
+ - `cmd/*/*.go` - source code for each command
+ - `cmd/*/Dockerfile` - docker file for each command or
+   Dockerfile in the root when only building a single command
+ - `Makefile` - includes `release-tools/build.make` and sets
+   configuration variables
+ - `.prow.sh` script which imports `release-tools/prow.sh`
+   and may contain further customization
+ - `.cloudbuild.sh` and `cloudbuild.yaml` as symlinks to
+   the corresponding files in `release-tools` or (if necessary)
+   as custom files
 
-This information reflects the head of this branch.
+To create a release, tag a certain revision with a name that
+starts with `v`, for example `v1.0.0`, then `make push`
+while that commit is checked out.
 
-| Compatible with CSI Version | Container Image | [Min K8s Version](https://kubernetes-csi.github.io/docs/kubernetes-compatibility.html#minimum-version) | [Recommended K8s Version](https://kubernetes-csi.github.io/docs/kubernetes-compatibility.html#recommended-version) |
-| ------------------------------------------------------------------------------------------ | -------------------------------| --------------- | ------------- |
-| [CSI Spec v1.10.0](https://github.com/container-storage-interface/spec/releases/tag/v1.5.0) | k8s.gcr.io/sig-storage/csi-resizer | 1.16 | 1.31 |
+It does not matter on which branch that revision exists, i.e. it is
+possible to create releases directly from master. A release branch can
+still be created for maintenance releases later if needed.
 
-## Feature status
+Release branches are expected to be named `release-x.y` for releases
+`x.y.z`. Building from such a branch creates `x.y-canary`
+images. Building from master creates the main `canary` image.
 
-Various external-resizer releases come with different alpha / beta features.
+Sharing and updating
+--------------------
 
-The following table reflects the head of this branch.
+[`git subtree`](https://github.com/git/git/blob/HEAD/contrib/subtree/git-subtree.txt)
+is the recommended way of maintaining a copy of the rules inside the
+`release-tools` directory of a project. This way, it is possible to make
+changes also locally, test them and then push them back to the shared
+repository at a later time.
 
-| Feature                | Status | Default | Description                                                                                                                   |
-| ---------------------- |--------| ------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| VolumeExpansion        | Stable | On      | [Support for expanding CSI volumes](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#csi-volume-expansion).    |
-| ReadWriteOncePod       | Stable | On      | [Single pod access mode for PersistentVolumes](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#access-modes). |
-| VolumeAttributesClass  | Beta   | Off     | [Volume Attributes Classes](https://kubernetes.io/docs/concepts/storage/volume-attributes-classes).                           |
+We no longer care about importing the full commit history, so `--squash` should be used
+when submitting a `release-tools` update. Also make sure that the PR for that
+contains the automatically generated commit message in the PR description.
+It contains the list of individual commits that were squashed. The script from
+https://github.com/kubernetes-csi/csi-release-tools/issues/7 can create such
+PRs automatically.
 
-## Usage
+Cheat sheet:
 
-It is necessary to create a new service account and give it enough privileges to run the external-resizer, see `deploy/kubernetes/rbac.yaml`. The resizer is then deployed as single Deployment as illustrated below:
+- `git subtree add --squash --prefix=release-tools https://github.com/kubernetes-csi/csi-release-tools.git master` - add release tools to a repo which does not have them yet (only once)
+- `git subtree pull --squash --prefix=release-tools https://github.com/kubernetes-csi/csi-release-tools.git master` - update local copy to latest upstream (whenever upstream changes)
+- edit, `git commit`, `git subtree push --prefix=release-tools git@github.com:<user>/csi-release-tools.git <my-new-or-existing-branch>` - push to a new branch before submitting a PR
 
-```sh
-kubectl create deploy/kubernetes/deployment.yaml
+verify-shellcheck.sh
+--------------------
+
+The [verify-shellcheck.sh](./verify-shellcheck.sh) script in this repo
+is a stripped down copy of the [corresponding
+script](https://github.com/kubernetes/kubernetes/blob/release-1.14/hack/verify-shellcheck.sh)
+in the Kubernetes repository. It can be used to check for certain
+errors shell scripts, like missing quotation marks. The default
+`test-shellcheck` target in [build.make](./build.make) only checks the
+scripts in this directory. Components can add more directories to
+`TEST_SHELLCHECK_DIRS` to check also other scripts.
+
+End-to-end testing
+------------------
+
+A repo that wants to opt into testing via Prow must set up a top-level
+`.prow.sh`. Typically that will source `prow.sh` and then transfer
+control to it:
+
+``` bash
+#! /bin/bash -e
+
+. release-tools/prow.sh
+main
 ```
 
-The external-resizer may run in the same pod with other external CSI controllers such as the external-attacher, external-snapshotter and/or external-provisioner.
+All Kubernetes-CSI repos are expected to switch to Prow. For details
+on what is enabled in Prow, see
+https://github.com/kubernetes/test-infra/tree/HEAD/config/jobs/kubernetes-csi
 
-Note that the external-resizer does not scale with more replicas. Only one external-resizer is elected as leader and running. The others are waiting for the leader to die. They re-elect a new active leader in ~15 seconds after death of the old leader.
+Test results for periodic jobs are visible in
+https://testgrid.k8s.io/sig-storage-csi-ci
 
-### Command line options
+It is possible to reproduce the Prow testing locally on a suitable machine:
+- Linux host
+- Docker installed
+- code to be tested checkout out in `$GOPATH/src/<import path>`
+- `cd $GOPATH/src/<import path> && ./.prow.sh`
 
-#### Recommended optional arguments
+Beware that the script intentionally doesn't clean up after itself and
+modifies the content of `$GOPATH`, in particular the `kubernetes` and
+`kind` repositories there. Better run it in an empty, disposable
+`$GOPATH`.
 
-* `--csi-address <path to CSI socket>`: This is the path to the CSI driver socket inside the pod that the external-resizer container will use to issue CSI operations (`/run/csi/socket` is used by default).
+When it terminates, the following command can be used to get access to
+the Kubernetes cluster that was brought up for testing (assuming that
+this step succeeded):
 
-* `--leader-election`: Enables leader election. This is mandatory when there are multiple replicas of the same external-resizer running for one CSI driver. Only one of them may be active (=leader). A new leader will be re-elected when current leader dies or becomes unresponsive for ~15 seconds.
+    export KUBECONFIG="$(kind get kubeconfig-path --name="csi-prow")"
 
-* `--leader-election-namespace`: Namespace where the leader election resource lives. Defaults to the pod namespace if not set.
+It is possible to control the execution via environment variables. See
+`prow.sh` for details. Particularly useful is testing against different
+Kubernetes releases:
 
-* `--leader-election-lease-duration <duration>`: Duration, in seconds, that non-leader candidates will wait to force acquire leadership. Defaults to 15 seconds.
+    CSI_PROW_KUBERNETES_VERSION=1.13.3 ./.prow.sh
+    CSI_PROW_KUBERNETES_VERSION=latest ./.prow.sh
 
-* `--leader-election-renew-deadline <duration>`: Duration, in seconds, that the acting leader will retry refreshing leadership before giving up. Defaults to 10 seconds.
+Dependencies and vendoring
+--------------------------
 
-* `--leader-election-retry-period <duration>`: Duration, in seconds, the LeaderElector clients should wait between tries of actions. Defaults to 5 seconds.
+Most projects will (eventually) use `go mod` to manage
+dependencies. `dep` is also still supported by `csi-release-tools`,
+but not documented here because it's not recommended anymore.
 
-* `--timeout <duration>`: Timeout of all calls to CSI driver. It should be set to value that accommodates majority of `ControllerExpandVolume` calls. 10 seconds is used by default.
+The usual instructions for using [go
+modules](https://github.com/golang/go/wiki/Modules) apply. Here's a cheat sheet
+for some of the relevant commands:
+- list available updates: `GO111MODULE=on go list -u -m all`
+- update or add a single dependency: `GO111MODULE=on go get <package>`
+- update all dependencies to their next minor or patch release:
+  `GO111MODULE=on go get ./...` (add `-u=patch` to limit to patch
+  releases)
+- lock onto a specific version: `GO111MODULE=on go get <package>@<version>`
+- clean up `go.mod`: `GO111MODULE=on go mod tidy`
+- update vendor directory: `GO111MODULE=on go mod vendor`
 
-* `-kube-api-burst <int>` : Burst to use while communicating with the kubernetes apiserver. Defaults to 10. (default 10).
+`GO111MODULE=on` can be left out when using Go >= 1.13 or when the
+source is checked out outside of `$GOPATH`.
 
-* `-kube-api-qps <float>` : QPS to use while communicating with the kubernetes apiserver. Defaults to 5.0. (default 5).
+`go mod tidy` must be used to ensure that the listed dependencies are
+really still needed. Changing import statements or a tentative `go
+get` can result in stale dependencies.
 
-* `--retry-interval-start`: The starting value of the exponential backoff for failures. 1 second is used by default.
+The `test-vendor` verifies that it was used when run locally or in a
+pre-merge CI job. If a `vendor` directory is present, it will also
+verify that it's content is up-to-date.
 
-* `--retry-interval-max`: The exponential backoff maximum value. 5 minutes is used by default.
+The `vendor` directory is optional. It is still present in projects
+because it avoids downloading sources during CI builds. If this is no
+longer deemed necessary, then a project can also remove the directory.
 
-* `--workers <num>`: Number of simultaneously running `ControllerExpandVolume` operations. Default value is `10`.
+Conversion of a repository that uses `dep` to `go mod` can be done with:
 
-* `--http-endpoint`: The TCP network address where the HTTP server for diagnostics, including metrics and leader election health check, will listen (example: `:8080` which corresponds to port 8080 on local host). The default is empty string, which means the server is disabled.
+    GO111MODULE=on go mod init
+    release-tools/go-get-kubernetes.sh <current Kubernetes version from Gopkg.toml>
+    GO111MODULE=on go mod tidy
+    GO111MODULE=on go mod vendor
+    git rm -f Gopkg.toml Gopkg.lock
+    git add go.mod go.sum vendor
 
-* `--metrics-path`: The HTTP path where prometheus metrics will be exposed. Default is `/metrics`.
+### Updating Kubernetes dependencies
 
-* `--handle-volume-inuse-error <true/false>`: Enable or disable volume-in-use error handling in external-resizer. Defaults to `true` and resize-controller will watch for all pods in all namespaces to check if PVC being expanded is in-use by a pod or not before retrying volume expansion if CSI driver throws volume-in-use error. Setting this to `false` will cause external-resizer to ignore volume-in-use error and resize-controller will retry volume expansion even if volume is already in use by a pod and CSI driver does not support expansion of in-use volumes. If CSI driver being used supports online expansion, it might be desirable to set `handle-volume-inuse-error` to `false` - to save costs associated with watching all pods in the cluster.
-
-* `-feature-gates**: A set of key/value pairs that describe alpha/experimental features of external-resizer.
-  * `AnnotateFsResize=true|false` (ALPHA - default=false): Store current size of pvc in pv's annotation, so as if pvc is deleted while expansion was pending on the node, the size of pvc can be restored to old value. This permits
-    expansion on the node in case pvc was deleted while expansion was pending on the node (but completed in the controller). Use of this feature depends on Kubernetes version 1.21.
-
-  * `RecoverVolumeExpansionFailure=true|false` (ALPHA - default=false): Allow users to reduce size of PVC if expansion to current size is failing. If the feature gate `RecoverVolumeExpansionFailure` is enabled
-    and expansion has failed for a PVC, you can retry expansion with a smaller size than the previously requested value. To request a new expansion attempt with a
-    smaller proposed size, edit `.spec.resources` for that PVC and choose a value that is less than the value you previously tried.
-    This is useful if expansion to a higher value did not succeed because of capacity constraint.
-    If that has happened, or you suspect that it might have, you can retry expansion by specifying a
-    size that is within the capacity limits of underlying storage provider. You can monitor status of resize operation by watching `.status.resizeStatus` and events on the PVC. Use of this feature-gate requires Kubernetes 1.31.
-
-
-#### Other recognized arguments
-
-* `--kubeconfig <path>`: Path to Kubernetes client configuration that the external-resizer uses to connect to Kubernetes API server. When omitted, default token provided by Kubernetes will be used. This option is useful only when the external-resizer does not run as a Kubernetes pod, e.g. for debugging. Either this or `--master` needs to be set if the external-resizer is being run out of cluster.
-
-* `--master <url>`: Master URL to build a client config from. When omitted, default token provided by Kubernetes will be used. This option is useful only when the external-resizer does not run as a Kubernetes pod, e.g. for debugging. Either this or `--kubeconfig` needs to be set if the external-resizer is being run out of cluster.
-
-* `--metrics-address`: (deprecated) The TCP network address where the prometheus metrics endpoint will run (example: `:8080` which corresponds to port 8080 on local host). The default is empty string, which means metrics endpoint is disabled.
-
-* `--version`: Prints current external-resizer version and quits.
-
-* All glog / klog arguments are supported, such as `-v <log level>` or `-alsologtostderr`.
-
-### HTTP endpoint
-
-The external-resizer optionally exposes an HTTP endpoint at address:port specified by `--http-endpoint` argument. When set, these two paths are exposed:
-
-* Metrics path, as set by `--metrics-path` argument (default is `/metrics`).
-* Leader election health check at `/healthz/leader-election`. It is recommended to run a liveness probe against this endpoint when leader election is used to kill external-resizer leader that fails to connect to the API server to renew its leadership. See https://github.com/kubernetes-csi/csi-lib-utils/issues/66 for details.
-
-
-## Community, discussion, contribution, and support
-
-Learn how to engage with the Kubernetes community on the [community page](http://kubernetes.io/community/).
-
-You can reach the maintainers of this project at:
-
-* [Slack](http://slack.k8s.io/)
-* [Mailing List](https://groups.google.com/forum/#!forum/kubernetes-dev)
-
-### Code of conduct
-
-Participation in the Kubernetes community is governed by the [Kubernetes Code of Conduct](code-of-conduct.md).
-
-[owners]: https://git.k8s.io/community/contributors/guide/owners.md
-[Creative Commons 4.0]: https://git.k8s.io/website/LICENSE
+When using packages that are part of the Kubernetes source code, the
+commands above are not enough because the [lack of semantic
+versioning](https://github.com/kubernetes/kubernetes/issues/72638)
+prevents `go mod` from finding newer releases. Importing directly from
+`kubernetes/kubernetes` also needs `replace` statements to override
+the fake `v0.0.0` versions
+(https://github.com/kubernetes/kubernetes/issues/79384). The
+`go-get-kubernetes.sh` script can be used to update all packages in
+lockstep to a different Kubernetes version. Example usage:
+```
+$ ./release-tools/go-get-kubernetes.sh 1.16.4
+```
