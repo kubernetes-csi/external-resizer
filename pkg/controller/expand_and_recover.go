@@ -130,12 +130,20 @@ func (ctrl *resizeController) expandAndRecover(pvc *v1.PersistentVolumeClaim, pv
 				newSize = *allocatedSize
 			}
 		default:
-			// It is impossible for ResizeStatus to be empty and allocatedSize to be not nil but somehow
+			// Usually it is impossible for ResizeStatus to be empty and allocatedSize to be not nil but somehow
 			// if we do end up in this state, it is safest to resume expansion to last recorded size in
 			// allocatedSize variable.
+			// This can also happen if external-resizer is running with a version of api-server
+			// which has volume recovery feature disabled.
 			if resizeStatus == "" && allocatedSize != nil {
 				newSize = *allocatedSize
 			} else {
+				klog.Warningf("external-resizer may be running with older version of kubernetes api-server, please upgrade to k8s version 1.32")
+				// Usually resize operations are idempotent and it should be safe to reque resize here, but skipping expansion of already
+				// expanded volumes saves some CPU cycles and helps in keeping e2es happy when running against older versions of kube-apiserver
+				if util.HasFileSystemResizePendingCondition(pvc) {
+					return pvc, pv, nil, false
+				}
 				newSize = pvcSpecSize
 			}
 		}
