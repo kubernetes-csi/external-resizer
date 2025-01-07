@@ -18,7 +18,6 @@ package modifycontroller
 
 import (
 	"fmt"
-
 	"github.com/kubernetes-csi/external-resizer/pkg/util"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -57,13 +56,19 @@ func (ctrl *modifyController) markControllerModifyVolumeStatus(
 			[]v1.PersistentVolumeClaimCondition{pvcCondition})
 	}
 
-	updatedPVC, err := util.PatchClaim(ctrl.kubeClient, pvc, newPVC, true)
+	updatedPVC, err := util.PatchClaim(ctrl.kubeClient, pvc, newPVC, true /* addResourceVersionCheck */)
 	if err != nil {
 		return pvc, fmt.Errorf("mark PVC %q as modify volume failed, errored with: %v", pvc.Name, err)
 	}
 	// Remove this PVC from the uncertain cache since the status is known now
 	if modifyVolumeStatus == v1.PersistentVolumeClaimModifyVolumeInfeasible {
-		ctrl.removePVCFromModifyVolumeUncertainCache(pvc)
+		pvcKey, err := cache.MetaNamespaceKeyFunc(pvc)
+		if err != nil {
+			return pvc, err
+		}
+
+		ctrl.removePVCFromModifyVolumeUncertainCache(pvcKey)
+		ctrl.markForSlowRetry(pvc, pvcKey)
 	}
 	return updatedPVC, nil
 }
@@ -84,7 +89,7 @@ func (ctrl *modifyController) updateConditionBasedOnError(pvc *v1.PersistentVolu
 	newPVC.Status.Conditions = util.MergeModifyVolumeConditionsOfPVC(newPVC.Status.Conditions,
 		[]v1.PersistentVolumeClaimCondition{pvcCondition})
 
-	updatedPVC, err := util.PatchClaim(ctrl.kubeClient, pvc, newPVC, false)
+	updatedPVC, err := util.PatchClaim(ctrl.kubeClient, pvc, newPVC, false /* addResourceVersionCheck */)
 	if err != nil {
 		return pvc, fmt.Errorf("mark PVC %q as controller expansion failed, errored with: %v", pvc.Name, err)
 	}
@@ -117,7 +122,7 @@ func (ctrl *modifyController) markControllerModifyVolumeCompleted(pvc *v1.Persis
 	if err != nil {
 		return pvc, pv, fmt.Errorf("update pv.Spec.VolumeAttributesClassName for PVC %q failed, errored with: %v", pvc.Name, err)
 	}
-	updatedPVC, err := util.PatchClaim(ctrl.kubeClient, pvc, newPVC, false)
+	updatedPVC, err := util.PatchClaim(ctrl.kubeClient, pvc, newPVC, false /* addResourceVersionCheck */)
 
 	if err != nil {
 		return pvc, pv, fmt.Errorf("mark PVC %q as ModifyVolumeCompleted failed, errored with: %v", pvc.Name, err)
@@ -140,22 +145,13 @@ func clearModifyVolumeConditions(conditions []v1.PersistentVolumeClaimCondition)
 }
 
 // removePVCFromModifyVolumeUncertainCache removes the pvc from the uncertain cache
-func (ctrl *modifyController) removePVCFromModifyVolumeUncertainCache(pvc *v1.PersistentVolumeClaim) error {
+func (ctrl *modifyController) removePVCFromModifyVolumeUncertainCache(pvcKey string) {
 	if ctrl.uncertainPVCs == nil {
-		return nil
+		return
 	}
 	// Format of the key of the uncertainPVCs is NAMESPACE/NAME of the pvc
-	pvcKey, err := cache.MetaNamespaceKeyFunc(pvc)
-	if err != nil {
-		return err
-	}
 	_, ok := ctrl.uncertainPVCs[pvcKey]
 	if ok {
 		delete(ctrl.uncertainPVCs, pvcKey)
 	}
-
-	if err != nil {
-		return err
-	}
-	return nil
 }

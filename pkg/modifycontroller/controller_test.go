@@ -2,6 +2,12 @@ package modifycontroller
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"github.com/kubernetes-csi/external-resizer/pkg/util"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"k8s.io/client-go/tools/cache"
 	"testing"
 	"time"
 
@@ -115,7 +121,7 @@ func TestModifyPVC(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			client := csi.NewMockClient(testDriverName, true, true, true, true, true, false)
 			if test.modifyFailure {
-				client.SetModifyFailed()
+				client.SetModifyError(fmt.Errorf("fake modification error"))
 			}
 
 			initialObjects := []runtime.Object{test.pvc, test.pv, testVacObject, targetVacObject}
@@ -213,6 +219,89 @@ func TestSyncPVC(t *testing.T) {
 	}
 }
 
+// TestInfeasibleRetry tests that sidecar doesn't spam plugin upon infeasible error code (e.g. invalid VAC parameter)
+func TestInfeasibleRetry(t *testing.T) {
+	basePVC := createTestPVC(pvcName, targetVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/)
+	basePV := createTestPV(1, pvcName, pvcNamespace, "foobaz" /*pvcUID*/, &fsVolumeMode, testVac)
+
+	tests := []struct {
+		name                        string
+		pvc                         *v1.PersistentVolumeClaim
+		expectedModifyCallCount     int
+		csiModifyError              error
+		eventuallyRemoveFromSlowSet bool
+	}{
+		{
+			name:                        "Should retry non-infeasible error normally",
+			pvc:                         basePVC,
+			expectedModifyCallCount:     2,
+			csiModifyError:              status.Errorf(codes.Internal, "fake non-infeasible error"),
+			eventuallyRemoveFromSlowSet: false,
+		},
+		{
+			name:                        "Should NOT retry infeasible error normally",
+			pvc:                         basePVC,
+			expectedModifyCallCount:     1,
+			csiModifyError:              status.Errorf(codes.InvalidArgument, "fake infeasible error"),
+			eventuallyRemoveFromSlowSet: false,
+		},
+		{
+			name:                        "Should EVENTUALLY retry infeasible error",
+			pvc:                         basePVC,
+			expectedModifyCallCount:     2,
+			csiModifyError:              status.Errorf(codes.InvalidArgument, "fake infeasible error"),
+			eventuallyRemoveFromSlowSet: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			// Setup
+			client := csi.NewMockClient(testDriverName, true, true, true, true, true, false)
+			if test.csiModifyError != nil {
+				client.SetModifyError(test.csiModifyError)
+			}
+
+			initialObjects := []runtime.Object{test.pvc, basePV, testVacObject, targetVacObject}
+			ctrlInstance, ctx := setupFakeK8sEnvironment(t, client, initialObjects)
+			defer ctx.Done()
+
+			// Attempt modification first time
+			err := ctrlInstance.syncPVC(pvcNamespace + "/" + pvcName)
+			if !errors.Is(err, test.csiModifyError) {
+				t.Errorf("for %s, unexpected first syncPVC error: %v", test.name, err)
+			}
+
+			// Fake time passing by removing from SlowSet
+			if test.eventuallyRemoveFromSlowSet {
+				pvcKey, _ := cache.MetaNamespaceKeyFunc(test.pvc)
+				ctrlInstance.slowSet.Remove(pvcKey)
+			}
+
+			// Attempt modification second time
+			err2 := ctrlInstance.syncPVC(pvcNamespace + "/" + pvcName)
+			switch test.expectedModifyCallCount {
+			case 1:
+				if !util.IsDelayRetryError(err2) {
+					t.Errorf("for %s, unexpected second syncPVC error: %v", test.name, err)
+				}
+			case 2:
+				if !errors.Is(err2, test.csiModifyError) {
+					t.Errorf("for %s, unexpected second syncPVC error: %v", test.name, err)
+				}
+			default:
+				t.Errorf("for %s, unexpected second syncPVC error: %v", test.name, err)
+			}
+
+			// Confirm CSI ModifyVolume was called desired amount of times
+			modifyCallCount := client.GetModifyCount()
+			if test.expectedModifyCallCount != modifyCallCount {
+				t.Fatalf("for %s: expected %d csi modify calls, but got %d", test.name, test.expectedModifyCallCount, modifyCallCount)
+			}
+		})
+	}
+}
+
 // setupFakeK8sEnvironment creates fake K8s environment and starts Informers and ModifyController
 func setupFakeK8sEnvironment(t *testing.T, client *csi.MockClient, initialObjects []runtime.Object) (*modifyController, context.Context) {
 	t.Helper()
@@ -234,7 +323,7 @@ func setupFakeK8sEnvironment(t *testing.T, client *csi.MockClient, initialObject
 
 	controller := NewModifyController(driverName,
 		csiModifier, kubeClient,
-		0, false, informerFactory,
+		0 /* resyncPeriod */, 2*time.Minute, false, informerFactory,
 		workqueue.DefaultTypedControllerRateLimiter[string]())
 
 	/* Start informers and ModifyController*/
