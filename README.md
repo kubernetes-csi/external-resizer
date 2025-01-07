@@ -12,9 +12,9 @@ control-plane CSI RPC call or via node CSI RPC call or both as a two step proces
 
 This information reflects the head of this branch.
 
-| Compatible with CSI Version | Container Image | [Min K8s Version](https://kubernetes-csi.github.io/docs/kubernetes-compatibility.html#minimum-version) | [Recommended K8s Version](https://kubernetes-csi.github.io/docs/kubernetes-compatibility.html#recommended-version) |
-| ------------------------------------------------------------------------------------------ | -------------------------------| --------------- | ------------- |
-| [CSI Spec v1.10.0](https://github.com/container-storage-interface/spec/releases/tag/v1.5.0) | k8s.gcr.io/sig-storage/csi-resizer | 1.16 | 1.31 |
+| Compatible with CSI Version                                                                 | Container Image                    | [Min K8s Version](https://kubernetes-csi.github.io/docs/kubernetes-compatibility.html#minimum-version) | [Recommended K8s Version](https://kubernetes-csi.github.io/docs/kubernetes-compatibility.html#recommended-version) |
+|---------------------------------------------------------------------------------------------|------------------------------------|--------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------|
+| [CSI Spec v1.10.0](https://github.com/container-storage-interface/spec/releases/tag/v1.5.0) | k8s.gcr.io/sig-storage/csi-resizer | 1.16                                                                                                   | 1.32                                                                                                               |
 
 ## Feature status
 
@@ -22,11 +22,13 @@ Various external-resizer releases come with different alpha / beta features.
 
 The following table reflects the head of this branch.
 
-| Feature                | Status | Default | Description                                                                                                                   |
-| ---------------------- |--------| ------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| VolumeExpansion        | Stable | On      | [Support for expanding CSI volumes](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#csi-volume-expansion).    |
-| ReadWriteOncePod       | Stable | On      | [Single pod access mode for PersistentVolumes](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#access-modes). |
-| VolumeAttributesClass  | Beta   | Off     | [Volume Attributes Classes](https://kubernetes.io/docs/concepts/storage/volume-attributes-classes).                           |
+| Feature                       | Status | Default | Description                                                                                                                                             |
+|-------------------------------|--------|---------|---------------------------------------------------------------------------------------------------------------------------------------------------------|
+| VolumeExpansion               | Stable | On      | [Support for expanding CSI volumes](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#csi-volume-expansion).                              |
+| ReadWriteOncePod              | Stable | On      | [Single pod access mode for PersistentVolumes](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#access-modes).                           |
+| RecoverVolumeExpansionFailure | Beta   | On      | [Recover from volume expansion failure](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#recovering-from-failure-when-expanding-volumes) |
+| VolumeAttributesClass         | Beta   | Off     | [Volume Attributes Classes](https://kubernetes.io/docs/concepts/storage/volume-attributes-classes).                                                     |
+
 
 ## Usage
 
@@ -78,12 +80,12 @@ Note that the external-resizer does not scale with more replicas. Only one exter
   * `AnnotateFsResize=true|false` (ALPHA - default=false): Store current size of pvc in pv's annotation, so as if pvc is deleted while expansion was pending on the node, the size of pvc can be restored to old value. This permits
     expansion on the node in case pvc was deleted while expansion was pending on the node (but completed in the controller). Use of this feature depends on Kubernetes version 1.21.
 
-  * `RecoverVolumeExpansionFailure=true|false` (ALPHA - default=false): Allow users to reduce size of PVC if expansion to current size is failing. If the feature gate `RecoverVolumeExpansionFailure` is enabled
+  * `RecoverVolumeExpansionFailure=true|false` (BETA - default=true): Allow users to reduce size of PVC if expansion to current size is failing. If the feature gate `RecoverVolumeExpansionFailure` is enabled
     and expansion has failed for a PVC, you can retry expansion with a smaller size than the previously requested value. To request a new expansion attempt with a
     smaller proposed size, edit `.spec.resources` for that PVC and choose a value that is less than the value you previously tried.
     This is useful if expansion to a higher value did not succeed because of capacity constraint.
     If that has happened, or you suspect that it might have, you can retry expansion by specifying a
-    size that is within the capacity limits of underlying storage provider. You can monitor status of resize operation by watching `.status.resizeStatus` and events on the PVC. Use of this feature-gate requires Kubernetes 1.31.
+    size that is within the capacity limits of underlying storage provider. You can monitor status of resize operation by watching `.status.resizeStatus` and events on the PVC. Use of this feature-gate requires Kubernetes 1.32.
 
 
 #### Other recognized arguments
