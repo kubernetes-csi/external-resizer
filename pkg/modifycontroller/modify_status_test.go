@@ -28,12 +28,14 @@ import (
 const (
 	pvcName      = "foo"
 	pvcNamespace = "modify"
+	pvName       = "testPV"
 )
 
 var (
 	fsVolumeMode           = v1.PersistentVolumeFilesystem
 	testVac                = "test-vac"
 	targetVac              = "target-vac"
+	testDriverName         = "mock"
 	infeasibleErr          = status.Errorf(codes.InvalidArgument, "Parameters in VolumeAttributesClass is invalid")
 	finalErr               = status.Errorf(codes.Internal, "Final error")
 	pvcConditionInProgress = v1.PersistentVolumeClaimCondition{
@@ -118,7 +120,7 @@ func TestMarkControllerModifyVolumeStatus(t *testing.T) {
 			}
 			controller := NewModifyController(driverName,
 				csiModifier, kubeClient,
-				time.Second, false, informerFactory,
+				time.Second, 2*time.Minute, false, informerFactory,
 				workqueue.DefaultTypedControllerRateLimiter[string]())
 
 			ctrlInstance, _ := controller.(*modifyController)
@@ -178,7 +180,7 @@ func TestUpdateConditionBasedOnError(t *testing.T) {
 			}
 			controller := NewModifyController(driverName,
 				csiModifier, kubeClient,
-				time.Second, false, informerFactory,
+				time.Second, 2*time.Minute, false, informerFactory,
 				workqueue.DefaultTypedControllerRateLimiter[string]())
 
 			ctrlInstance, _ := controller.(*modifyController)
@@ -246,7 +248,7 @@ func TestMarkControllerModifyVolumeCompleted(t *testing.T) {
 			}
 			controller := NewModifyController(driverName,
 				csiModifier, kubeClient,
-				time.Second, false, informerFactory,
+				time.Second, 2*time.Minute, false, informerFactory,
 				workqueue.DefaultTypedControllerRateLimiter[string]())
 
 			ctrlInstance, _ := controller.(*modifyController)
@@ -312,7 +314,7 @@ func TestRemovePVCFromModifyVolumeUncertainCache(t *testing.T) {
 			}
 			controller := NewModifyController(driverName,
 				csiModifier, kubeClient,
-				time.Second, false, informerFactory,
+				time.Second, 2*time.Minute, false, informerFactory,
 				workqueue.DefaultTypedControllerRateLimiter[string]())
 
 			ctrlInstance, _ := controller.(*modifyController)
@@ -344,10 +346,11 @@ func TestRemovePVCFromModifyVolumeUncertainCache(t *testing.T) {
 
 			time.Sleep(time.Second * 2)
 
-			err = ctrlInstance.removePVCFromModifyVolumeUncertainCache(tc.pvc)
+			pvcKey, err := cache.MetaNamespaceKeyFunc(tc.pvc)
 			if err != nil {
-				t.Errorf("err deleting pvc: %v", tc.pvc)
+				t.Errorf("failed to extract pvc key from pvc %v", tc.pvc)
 			}
+			ctrlInstance.removePVCFromModifyVolumeUncertainCache(pvcKey)
 
 			deletedPVCKey, err := cache.MetaNamespaceKeyFunc(tc.pvc)
 			if err != nil {
@@ -390,7 +393,7 @@ func createTestPV(capacityGB int, pvcName, pvcNamespace string, pvcUID types.UID
 			},
 			PersistentVolumeSource: v1.PersistentVolumeSource{
 				CSI: &v1.CSIPersistentVolumeSource{
-					Driver:       "foo",
+					Driver:       testDriverName,
 					VolumeHandle: "foo",
 				},
 			},

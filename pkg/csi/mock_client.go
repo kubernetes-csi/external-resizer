@@ -39,7 +39,7 @@ type MockClient struct {
 	expandCalled                            atomic.Int32
 	modifyCalled                            atomic.Int32
 	expansionError                          error
-	modifyFailed                            bool
+	modifyError                             error
 	checkMigratedLabel                      bool
 	usedSecrets                             atomic.Pointer[map[string]string]
 	usedCapability                          atomic.Pointer[csi.VolumeCapability]
@@ -74,8 +74,8 @@ func (c *MockClient) SetExpansionError(err error) {
 	c.expansionError = err
 }
 
-func (c *MockClient) SetModifyFailed() {
-	c.modifyFailed = true
+func (c *MockClient) SetModifyError(err error) {
+	c.modifyError = err
 }
 
 func (c *MockClient) SetCheckMigratedLabel() {
@@ -135,8 +135,8 @@ func (c *MockClient) Modify(
 	secrets map[string]string,
 	mutableParameters map[string]string) error {
 	c.modifyCalled.Add(1)
-	if c.modifyFailed {
-		return fmt.Errorf("modify failed")
+	if c.modifyError != nil {
+		return c.modifyError
 	}
 	return nil
 }
