@@ -145,7 +145,8 @@ func (r *csiResizer) Resize(pv *v1.PersistentVolume, requestSize resource.Quanti
 		translator := csitrans.New()
 		if translator.IsMigratedCSIDriverByName(r.name) {
 			// handle migrated in-tree volume
-			csiPV, err := translator.TranslateInTreePVToCSI(pv)
+			// TODO replace klog.TODO() once contextual logging is implemented for resizer
+			csiPV, err := translator.TranslateInTreePVToCSI(klog.TODO(), pv)
 			if err != nil {
 				return oldSize, false, fmt.Errorf("failed to translate persistent volume: %v", err)
 			}
