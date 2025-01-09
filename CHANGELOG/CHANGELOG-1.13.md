@@ -6,9 +6,9 @@
 
 ### Feature
 
-- Adds the flag --extra-modify-metadata, which when set to true, will inject extra PVC and PV metadata as parameters when calling ModifyVolume on CSI Drivers (#420, @mdzraf)
-- Infeasible PVC modifications will be retried at a slower pace than normal failures. (#453, @AndrewSirenko)
-- Move RecoverVolumeExpansionFailure to beta and enabled by default. (#459, @gnufied)
+- Adds the flag --extra-modify-metadata, which when set to true, will inject extra PVC and PV metadata as parameters when calling ModifyVolume on CSI Drivers ([#420](https://github.com/kubernetes-csi/external-resizer/pull/420), [@mdzraf](https://github.com/mdzraf))
+- Infeasible PVC modifications will be retried at a slower pace than normal failures. ([#453](https://github.com/kubernetes-csi/external-resizer/pull/453), [@AndrewSirenko](https://github.com/AndrewSirenko))
+- Move RecoverVolumeExpansionFailure to beta and enabled by default. ([#459](https://github.com/kubernetes-csi/external-resizer/pull/459), [@gnufied](https://gitihub.com/gnufied))
 
 ## Dependencies
 
