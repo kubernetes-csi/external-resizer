@@ -268,11 +268,16 @@ func (ctrl *modifyController) syncPVC(key string) error {
 	}
 
 	// Only trigger modify volume if the following conditions are met
-	// 1. Non-empty vac name
-	// 2. PVC is in Bound state
-	// 3. PV CSI driver name matches local driver
+	// 1. PV provisioned by CSI driver AND driver name matches local driver
+	// 2. Non-empty vac name
+	// 3. PVC is in Bound state
+	if pv.Spec.CSI == nil || pv.Spec.CSI.Driver != ctrl.name {
+		klog.V(7).InfoS("Skipping PV provisioned by different driver", "PV", klog.KObj(pv))
+		return nil
+	}
+
 	vacName := pvc.Spec.VolumeAttributesClassName
-	if vacName != nil && *vacName != "" && pvc.Status.Phase == v1.ClaimBound && pv.Spec.CSI.Driver == ctrl.name {
+	if vacName != nil && *vacName != "" && pvc.Status.Phase == v1.ClaimBound {
 		_, _, err, _ := ctrl.modify(pvc, pv)
 		if err != nil {
 			return err
