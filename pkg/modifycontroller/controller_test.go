@@ -7,6 +7,7 @@ import (
 	"github.com/kubernetes-csi/external-resizer/pkg/util"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/cache"
 	"testing"
 	"time"
@@ -156,6 +157,25 @@ func TestSyncPVC(t *testing.T) {
 	pvcWithUncreatedPV := createTestPVC(pvcName, targetVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/)
 	pvcWithUncreatedPV.Spec.VolumeName = ""
 
+	nonCSIPVC := &v1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{Name: pvcName, Namespace: pvcNamespace},
+		Spec: v1.PersistentVolumeClaimSpec{
+			VolumeAttributesClassName: &targetVac,
+			VolumeName:                pvName,
+		},
+		Status: v1.PersistentVolumeClaimStatus{
+			Phase: v1.ClaimBound,
+		},
+	}
+	nonCSIPV := &v1.PersistentVolume{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: pvName,
+		},
+		Spec: v1.PersistentVolumeSpec{
+			VolumeAttributesClassName: nil,
+		},
+	}
+
 	tests := []struct {
 		name          string
 		pvc           *v1.PersistentVolumeClaim
@@ -190,6 +210,12 @@ func TestSyncPVC(t *testing.T) {
 			name:          "Should NOT modify if PVC's PV not created yet",
 			pvc:           pvcWithUncreatedPV,
 			pv:            basePV,
+			callCSIModify: false,
+		},
+		{
+			name:          "Should NOT modify if PV wasn't provisioned by CSI driver",
+			pvc:           nonCSIPVC,
+			pv:            nonCSIPV,
 			callCSIModify: false,
 		},
 	}
