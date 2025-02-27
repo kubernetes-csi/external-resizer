@@ -1,3 +1,28 @@
+# Release notes for 1.13.2
+
+[Documentation](https://kubernetes-csi.github.io)
+
+## Changes by Kind
+
+### Feature
+
+- Serve additional leader election, work queue, process, and Go runtime metrics ([#475](https://github.com/kubernetes-csi/external-resizer/pull/475), [@AndrewSirenko](https://github.com/AndrewSirenko))
+
+### Bug fix
+
+- Fix panic when attempting to modify non-CSI volumes ([#471](https://github.com/kubernetes-csi/external-resizer/pull/471), [@AndrewSirenko](https://github.com/AndrewSirenko))
+
+## Dependencies
+
+### Added
+_Nothing has changed._
+
+### Changed
+- github.com/kubernetes-csi/csi-lib-utils: [v0.20.0 → v0.21.0](https://github.com/kubernetes-csi/csi-lib-utils/compare/v0.20.0...v0.21.0)
+
+### Removed
+_Nothing has changed._
+
 # Release notes for 1.13.0
 
 [Documentation](https://kubernetes-csi.github.io)
