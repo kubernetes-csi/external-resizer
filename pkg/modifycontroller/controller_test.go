@@ -4,13 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"testing"
+	"time"
+
 	"github.com/kubernetes-csi/external-resizer/pkg/util"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/cache"
-	"testing"
-	"time"
 
 	"github.com/kubernetes-csi/external-resizer/pkg/features"
 
@@ -27,7 +28,7 @@ import (
 )
 
 func TestController(t *testing.T) {
-	basePVC := createTestPVC(pvcName, testVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/)
+	basePVC := createTestPVC(pvcName, testVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/, "" /*modifyVolumeStatus*/)
 	basePV := createTestPV(1, pvcName, pvcNamespace, "foobaz" /*pvcUID*/, &fsVolumeMode, testVac)
 	firstTimePV := basePV.DeepCopy()
 	firstTimePV.Spec.VolumeAttributesClassName = nil
@@ -44,7 +45,7 @@ func TestController(t *testing.T) {
 	}{
 		{
 			name:          "Modify called",
-			pvc:           createTestPVC(pvcName, targetVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/),
+			pvc:           createTestPVC(pvcName, targetVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/, "" /*modifyVolumeStatus*/),
 			pv:            basePV,
 			vacExists:     true,
 			callCSIModify: true,
@@ -104,14 +105,14 @@ func TestModifyPVC(t *testing.T) {
 	}{
 		{
 			name:          "Modify succeeded",
-			pvc:           createTestPVC(pvcName, targetVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/),
+			pvc:           createTestPVC(pvcName, targetVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/, "" /*modifyVolumeStatus*/),
 			pv:            basePV,
 			modifyFailure: false,
 			expectFailure: false,
 		},
 		{
 			name:          "Modify failed",
-			pvc:           createTestPVC(pvcName, targetVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/),
+			pvc:           createTestPVC(pvcName, targetVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/, "" /*modifyVolumeStatus*/),
 			pv:            basePV,
 			modifyFailure: true,
 			expectFailure: true,
@@ -145,16 +146,16 @@ func TestModifyPVC(t *testing.T) {
 }
 
 func TestSyncPVC(t *testing.T) {
-	basePVC := createTestPVC(pvcName, targetVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/)
+	basePVC := createTestPVC(pvcName, targetVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/, "" /*modifyVolumeStatus*/)
 	basePV := createTestPV(1, pvcName, pvcNamespace, "foobaz" /*pvcUID*/, &fsVolumeMode, testVac)
 
 	otherDriverPV := createTestPV(1, pvcName, pvcNamespace, "foobaz" /*pvcUID*/, &fsVolumeMode, testVac)
 	otherDriverPV.Spec.PersistentVolumeSource.CSI.Driver = "some-other-driver"
 
-	unboundPVC := createTestPVC(pvcName, targetVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/)
+	unboundPVC := createTestPVC(pvcName, targetVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/, "" /*modifyVolumeStatus*/)
 	unboundPVC.Status.Phase = v1.ClaimPending
 
-	pvcWithUncreatedPV := createTestPVC(pvcName, targetVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/)
+	pvcWithUncreatedPV := createTestPVC(pvcName, targetVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/, "" /*modifyVolumeStatus*/)
 	pvcWithUncreatedPV.Spec.VolumeName = ""
 
 	nonCSIPVC := &v1.PersistentVolumeClaim{
@@ -196,7 +197,7 @@ func TestSyncPVC(t *testing.T) {
 		},
 		{
 			name:          "Should NOT modify if PVC has empty Spec.VACName",
-			pvc:           createTestPVC(pvcName, "" /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/),
+			pvc:           createTestPVC(pvcName, "" /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/, "" /*modifyVolumeStatus*/),
 			pv:            basePV,
 			callCSIModify: false,
 		},
@@ -247,7 +248,7 @@ func TestSyncPVC(t *testing.T) {
 
 // TestInfeasibleRetry tests that sidecar doesn't spam plugin upon infeasible error code (e.g. invalid VAC parameter)
 func TestInfeasibleRetry(t *testing.T) {
-	basePVC := createTestPVC(pvcName, targetVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/)
+	basePVC := createTestPVC(pvcName, targetVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/, "" /*modifyVolumeStatus*/)
 	basePV := createTestPV(1, pvcName, pvcNamespace, "foobaz" /*pvcUID*/, &fsVolumeMode, testVac)
 
 	tests := []struct {

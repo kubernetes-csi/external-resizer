@@ -71,6 +71,16 @@ func (ctrl *modifyController) modify(pvc *v1.PersistentVolumeClaim, pv *v1.Persi
 		}
 	}
 
+	// Rollback infeasible errors for recovery
+	if pvc.Status.ModifyVolumeStatus != nil && pvc.Status.ModifyVolumeStatus.Status == v1.PersistentVolumeClaimModifyVolumeInfeasible {
+		targetVacName := pvc.Status.ModifyVolumeStatus.TargetVolumeAttributesClassName
+		// Case 1: rollback to nil
+		// Case 2: rollback to previous VAC
+		if (pvcSpecVacName == nil && curVacName == nil && targetVacName != "") || (pvcSpecVacName != nil && curVacName != nil && *pvcSpecVacName == *curVacName && targetVacName != *curVacName) {
+			return ctrl.validateVACAndRollback(pvc, pv)
+		}
+	}
+
 	// No modification required
 	return pvc, pv, nil, false
 }
@@ -103,6 +113,22 @@ func (ctrl *modifyController) validateVACAndModifyVolumeWithTarget(
 		pvc, err = ctrl.markControllerModifyVolumeStatus(pvc, v1.PersistentVolumeClaimModifyVolumePending, nil)
 		return pvc, pv, err, false
 	}
+}
+
+func (ctrl *modifyController) validateVACAndRollback(
+	pvc *v1.PersistentVolumeClaim,
+	pv *v1.PersistentVolume) (*v1.PersistentVolumeClaim, *v1.PersistentVolume, error, bool) {
+	// The controller does not triggers ModifyVolume because it is only
+	// for rollbacking infeasible errors
+	// Record an event to indicate that external resizer is rolling back this volume.
+	ctrl.eventRecorder.Event(pvc, v1.EventTypeNormal, util.VolumeModify,
+		fmt.Sprintf("external resizer is rolling back volume %s with infeasible error", pvc.Name))
+	// Mark pvc.Status.ModifyVolumeStatus as completed
+	pvc, pv, err := ctrl.markCotrollerModifyVolumeRollbackCompeleted(pvc, pv)
+	if err != nil {
+		return pvc, pv, fmt.Errorf("rollback volume %s modification with error: %v ", pvc.Name, err), false
+	}
+	return pvc, pv, nil, false
 }
 
 // func controllerModifyVolumeWithTarget trigger the CSI ControllerModifyVolume API call
