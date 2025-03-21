@@ -278,7 +278,7 @@ func (ctrl *modifyController) syncPVC(key string) error {
 	}
 
 	vacName := pvc.Spec.VolumeAttributesClassName
-	if vacName != nil && *vacName != "" && pvc.Status.Phase == v1.ClaimBound {
+	if (vacName != nil && *vacName != "" && pvc.Status.Phase == v1.ClaimBound) || (util.CurrentModificationInfeasible(pvc) && util.IsVacRolledBack(pvc)) {
 		_, _, err, _ := ctrl.modify(pvc, pv)
 		if err != nil {
 			return err

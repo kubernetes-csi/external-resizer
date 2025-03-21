@@ -39,8 +39,9 @@ const (
 
 // The return value bool is only used as a sentinel value when function returns without actually performing modification
 func (ctrl *modifyController) modify(pvc *v1.PersistentVolumeClaim, pv *v1.PersistentVolume) (*v1.PersistentVolumeClaim, *v1.PersistentVolume, error, bool) {
-	pvcSpecVacName := pvc.Spec.VolumeAttributesClassName
-	curVacName := pvc.Status.CurrentVolumeAttributesClassName
+	pvcSpecVACName := pvc.Spec.VolumeAttributesClassName
+	currentVacName := pvc.Status.CurrentVolumeAttributesClassName
+
 	pvcKey, err := cache.MetaNamespaceKeyFunc(pvc)
 	if err != nil {
 		return pvc, pv, err, false
@@ -52,28 +53,52 @@ func (ctrl *modifyController) modify(pvc *v1.PersistentVolumeClaim, pv *v1.Persi
 		return pvc, pv, delayModificationErr, false
 	}
 
-	if pvcSpecVacName != nil && curVacName == nil {
-		// First time adding VAC to a PVC
+	if util.CurrentModificationInfeasible(pvc) && util.IsVacRolledBack(pvc) {
+		return ctrl.validateVACAndRollback(pvc, pv)
+	}
+
+	if pvcSpecVACName == nil {
+		return pvc, pv, nil, false
+	}
+
+	// If there are in-progress or non-final error VAC modifications, do not apply
+	// the next VAC until the current one applies or fails.
+	if pvc.Status.ModifyVolumeStatus != nil &&
+		pvc.Status.ModifyVolumeStatus.Status == v1.PersistentVolumeClaimModifyVolumeInProgress {
+		_, inUncertainCache := ctrl.uncertainPVCs[pvcKey]
+		hasModifyErrorCondition := false
+		for _, c := range pvc.Status.Conditions {
+			if c.Type == v1.PersistentVolumeClaimVolumeModifyVolumeError && c.Status == v1.ConditionTrue {
+				hasModifyErrorCondition = true
+				break
+			}
+		}
+		if inUncertainCache || !hasModifyErrorCondition {
+			klog.V(4).Infof("PVC %s is already being modified, skipping", pvcKey)
+			return pvc, pv, nil, false
+		}
+	}
+
+	switch {
+	case currentVacName == nil:
 		return ctrl.validateVACAndModifyVolumeWithTarget(pvc, pv)
-	} else if pvcSpecVacName != nil && curVacName != nil && *pvcSpecVacName != *curVacName {
+	case *currentVacName != *pvcSpecVACName:
 		// Check if PVC in uncertain state
 		_, inUncertainState := ctrl.uncertainPVCs[pvcKey]
 		if !inUncertainState {
 			klog.V(3).InfoS("previous operation on the PVC failed with a final error, retrying")
 			return ctrl.validateVACAndModifyVolumeWithTarget(pvc, pv)
 		} else {
-			vac, err := ctrl.vacLister.Get(*pvcSpecVacName)
+			vac, err := ctrl.vacLister.Get(*pvcSpecVACName)
 			if err != nil {
 				if apierrors.IsNotFound(err) {
-					ctrl.eventRecorder.Eventf(pvc, v1.EventTypeWarning, util.VolumeModifyFailed, "VAC "+*pvcSpecVacName+" does not exist.")
+					ctrl.eventRecorder.Eventf(pvc, v1.EventTypeWarning, util.VolumeModifyFailed, "VAC "+*pvcSpecVACName+" does not exist.")
 				}
 				return pvc, pv, err, false
 			}
-			return ctrl.controllerModifyVolumeWithTarget(pvc, pv, vac, pvcSpecVacName)
+			return ctrl.controllerModifyVolumeWithTarget(pvc, pv, vac, pvcSpecVACName)
 		}
 	}
-
-	// No modification required
 	return pvc, pv, nil, false
 }
 
@@ -105,6 +130,26 @@ func (ctrl *modifyController) validateVACAndModifyVolumeWithTarget(
 		pvc, err = ctrl.markControllerModifyVolumeStatus(pvc, v1.PersistentVolumeClaimModifyVolumePending, nil)
 		return pvc, pv, err, false
 	}
+}
+
+func (ctrl *modifyController) validateVACAndRollback(
+	pvc *v1.PersistentVolumeClaim,
+	pv *v1.PersistentVolume) (*v1.PersistentVolumeClaim, *v1.PersistentVolume, error, bool) {
+	// The controller does not triggers ModifyVolume because it is only
+	// for rollbacking infeasible errors
+	// Record an event to indicate that external resizer is rolling back this volume.
+	rollbackVACName := "nil"
+	if pvc.Spec.VolumeAttributesClassName != nil {
+		rollbackVACName = *pvc.Spec.VolumeAttributesClassName
+	}
+	ctrl.eventRecorder.Event(pvc, v1.EventTypeNormal, util.VolumeModify,
+		fmt.Sprintf("external resizer is rolling back volume %s with infeasible error to VAC %s", pvc.Name, rollbackVACName))
+	// Mark pvc.Status.ModifyVolumeStatus as completed
+	pvc, pv, err := ctrl.markControllerModifyVolumeRollbackCompeleted(pvc, pv)
+	if err != nil {
+		return pvc, pv, fmt.Errorf("rollback volume %s modification with error: %v ", pvc.Name, err), false
+	}
+	return pvc, pv, nil, false
 }
 
 // func controllerModifyVolumeWithTarget trigger the CSI ControllerModifyVolume API call

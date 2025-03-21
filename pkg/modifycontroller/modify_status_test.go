@@ -33,6 +33,7 @@ const (
 
 var (
 	fsVolumeMode           = v1.PersistentVolumeFilesystem
+	emptyString            = ""
 	testVac                = "test-vac"
 	targetVac              = "target-vac"
 	testDriverName         = "mock"
@@ -199,7 +200,7 @@ func TestUpdateConditionBasedOnError(t *testing.T) {
 
 func TestMarkControllerModifyVolumeCompleted(t *testing.T) {
 	basePVC := testutil.MakeTestPVC([]v1.PersistentVolumeClaimCondition{})
-	basePV := createTestPV(1, pvcName, pvcNamespace, "foobaz" /*pvcUID*/, &fsVolumeMode, testVac)
+	basePV := createTestPV(1, pvcName, pvcNamespace, "foobaz" /*pvcUID*/, &fsVolumeMode, &testVac)
 	expectedPV := basePV.DeepCopy()
 	expectedPV.Spec.VolumeAttributesClassName = &targetVac
 	expectedPVC := basePVC.WithCurrentVolumeAttributesClassName(targetVac).Get()
@@ -377,7 +378,7 @@ func TestRemovePVCFromModifyVolumeUncertainCache(t *testing.T) {
 	}
 }
 
-func createTestPV(capacityGB int, pvcName, pvcNamespace string, pvcUID types.UID, volumeMode *v1.PersistentVolumeMode, vacName string) *v1.PersistentVolume {
+func createTestPV(capacityGB int, pvcName, pvcNamespace string, pvcUID types.UID, volumeMode *v1.PersistentVolumeMode, vacName *string) *v1.PersistentVolume {
 	capacity := testutil.QuantityGB(capacityGB)
 
 	pv := &v1.PersistentVolume{
@@ -395,10 +396,11 @@ func createTestPV(capacityGB int, pvcName, pvcNamespace string, pvcUID types.UID
 					VolumeHandle: "foo",
 				},
 			},
+			VolumeAttributesClassName: vacName,
 			VolumeMode:                volumeMode,
-			VolumeAttributesClassName: &vacName,
 		},
 	}
+
 	if len(pvcName) > 0 {
 		pv.Spec.ClaimRef = &v1.ObjectReference{
 			Namespace: pvcNamespace,

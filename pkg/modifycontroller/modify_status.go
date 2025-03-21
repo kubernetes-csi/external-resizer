@@ -74,6 +74,44 @@ func (ctrl *modifyController) markControllerModifyVolumeStatus(
 	return updatedPVC, nil
 }
 
+func (ctrl *modifyController) markControllerModifyVolumeRollbackCompeleted(
+	pvc *v1.PersistentVolumeClaim,
+	pv *v1.PersistentVolume) (*v1.PersistentVolumeClaim, *v1.PersistentVolume, error) {
+	// Update PVC
+	newPVC := pvc.DeepCopy()
+
+	// Update ModifyVolumeStatus to completed
+	newPVC.Status.ModifyVolumeStatus = nil
+
+	// Rollback CurrentVolumeAttributesClassName
+	newPVC.Status.CurrentVolumeAttributesClassName = pvc.Spec.VolumeAttributesClassName
+
+	// Clear all the conditions related to modify volume
+	newPVC.Status.Conditions = clearModifyVolumeConditions(newPVC.Status.Conditions)
+
+	// Update PV
+	newPV := pv.DeepCopy()
+	if pvc.Spec.VolumeAttributesClassName != nil && *pvc.Spec.VolumeAttributesClassName == "" {
+		// PV does not support empty string, set VolumeAttributesClassName to nil
+		newPV.Spec.VolumeAttributesClassName = nil
+	} else {
+		newPV.Spec.VolumeAttributesClassName = pvc.Spec.VolumeAttributesClassName
+	}
+
+	// Update PV before PVC to avoid PV not getting updated but PVC did
+	updatedPV, err := util.PatchPersistentVolume(ctrl.kubeClient, pv, newPV)
+	if err != nil {
+		return pvc, pv, fmt.Errorf("update pv.Spec.VolumeAttributesClassName for PVC %q failed, errored with: %v", pvc.Name, err)
+	}
+
+	updatedPVC, err := util.PatchClaim(ctrl.kubeClient, pvc, newPVC, false /* addResourceVersionCheck */)
+	if err != nil {
+		return pvc, pv, fmt.Errorf("mark PVC %q as ModifyVolumeCompleted failed, errored with: %v", pvc.Name, err)
+	}
+
+	return updatedPVC, updatedPV, nil
+}
+
 func (ctrl *modifyController) updateConditionBasedOnError(pvc *v1.PersistentVolumeClaim, err error) (*v1.PersistentVolumeClaim, error) {
 	newPVC := pvc.DeepCopy()
 	pvcCondition := v1.PersistentVolumeClaimCondition{
@@ -92,12 +130,12 @@ func (ctrl *modifyController) updateConditionBasedOnError(pvc *v1.PersistentVolu
 
 	updatedPVC, err := util.PatchClaim(ctrl.kubeClient, pvc, newPVC, false /* addResourceVersionCheck */)
 	if err != nil {
-		return pvc, fmt.Errorf("mark PVC %q as controller expansion failed, errored with: %v", pvc.Name, err)
+		return pvc, fmt.Errorf("mark PVC %q as controller modification failed, errored with: %v", pvc.Name, err)
 	}
 	return updatedPVC, nil
 }
 
-// markControllerModifyVolumeStatus will mark ModifyVolumeStatus as completed in the PVC
+// markControllerModifyVolumeCompleted will mark ModifyVolumeStatus as completed in the PVC
 // and update CurrentVolumeAttributesClassName, clear the conditions
 func (ctrl *modifyController) markControllerModifyVolumeCompleted(pvc *v1.PersistentVolumeClaim, pv *v1.PersistentVolume) (*v1.PersistentVolumeClaim, *v1.PersistentVolume, error) {
 	modifiedVacName := pvc.Status.ModifyVolumeStatus.TargetVolumeAttributesClassName
@@ -132,7 +170,7 @@ func (ctrl *modifyController) markControllerModifyVolumeCompleted(pvc *v1.Persis
 	return updatedPVC, updatedPV, nil
 }
 
-// markControllerModifyVolumeStatus clears all the conditions related to modify volume and only
+// clearModifyVolumeConditions clears all the conditions related to modify volume and only
 // leave other condition types
 func clearModifyVolumeConditions(conditions []v1.PersistentVolumeClaimCondition) []v1.PersistentVolumeClaimCondition {
 	knownConditions := []v1.PersistentVolumeClaimCondition{}

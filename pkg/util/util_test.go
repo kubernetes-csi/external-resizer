@@ -169,3 +169,91 @@ func TestMergeModifyVolumeConditionsOfPVC(t *testing.T) {
 		})
 	}
 }
+
+func TestIsVacRolledBack(t *testing.T) {
+	emptyString := ""
+	originalVacName := "original-vac"
+	targetVacName := "test"
+	noRollbackVacName := "no-rollback-vac"
+	tests := []struct {
+		name           string
+		pvc            *v1.PersistentVolumeClaim
+		expectedOutput bool
+	}{
+		{
+			name: "rollback to nil",
+			pvc: &v1.PersistentVolumeClaim{
+				Spec: v1.PersistentVolumeClaimSpec{
+					VolumeAttributesClassName: nil,
+				},
+				Status: v1.PersistentVolumeClaimStatus{
+					CurrentVolumeAttributesClassName: nil,
+					ModifyVolumeStatus: &v1.ModifyVolumeStatus{
+						Status:                          v1.PersistentVolumeClaimModifyVolumeInfeasible,
+						TargetVolumeAttributesClassName: targetVacName,
+					},
+				},
+			},
+			expectedOutput: true,
+		},
+		{
+			name: "rollback to empty string",
+			pvc: &v1.PersistentVolumeClaim{
+				Spec: v1.PersistentVolumeClaimSpec{
+					VolumeAttributesClassName: &emptyString,
+				},
+				Status: v1.PersistentVolumeClaimStatus{
+					CurrentVolumeAttributesClassName: nil,
+					ModifyVolumeStatus: &v1.ModifyVolumeStatus{
+						Status:                          v1.PersistentVolumeClaimModifyVolumeInfeasible,
+						TargetVolumeAttributesClassName: targetVacName,
+					},
+				},
+			},
+			expectedOutput: true,
+		},
+		{
+			name: "rollback from VAC B to VAC A",
+			pvc: &v1.PersistentVolumeClaim{
+				Spec: v1.PersistentVolumeClaimSpec{
+					VolumeAttributesClassName: &originalVacName,
+				},
+				Status: v1.PersistentVolumeClaimStatus{
+					CurrentVolumeAttributesClassName: &originalVacName,
+					ModifyVolumeStatus: &v1.ModifyVolumeStatus{
+						Status:                          v1.PersistentVolumeClaimModifyVolumeInfeasible,
+						TargetVolumeAttributesClassName: targetVacName,
+					},
+				},
+			},
+			expectedOutput: true,
+		},
+		{
+			name: "no rollback",
+			pvc: &v1.PersistentVolumeClaim{
+				Spec: v1.PersistentVolumeClaimSpec{
+					VolumeAttributesClassName: &noRollbackVacName,
+				},
+				Status: v1.PersistentVolumeClaimStatus{
+					CurrentVolumeAttributesClassName: &originalVacName,
+					ModifyVolumeStatus: &v1.ModifyVolumeStatus{
+						Status:                          v1.PersistentVolumeClaimModifyVolumeInfeasible,
+						TargetVolumeAttributesClassName: targetVacName,
+					},
+				},
+			},
+			expectedOutput: false,
+		},
+	}
+
+	for _, test := range tests {
+		tc := test
+		t.Run(tc.name, func(t *testing.T) {
+			actualOutput := IsVacRolledBack(tc.pvc)
+			if actualOutput != tc.expectedOutput {
+				t.Errorf("expected output %+v got %+v", tc.expectedOutput, actualOutput)
+			}
+		})
+	}
+
+}
