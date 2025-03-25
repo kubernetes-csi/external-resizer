@@ -74,3 +74,5 @@ require (
 	sigs.k8s.io/structured-merge-diff/v4 v4.5.0 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect
 )
+
+replace github.com/kubernetes-csi/csi-lib-utils => github.com/mdzraf/csi-lib-utils v0.0.0-20250408153324-d3fabff50cd7

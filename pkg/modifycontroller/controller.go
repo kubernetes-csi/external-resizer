@@ -23,6 +23,7 @@ import (
 
 	"github.com/kubernetes-csi/external-resizer/pkg/util"
 
+	"github.com/kubernetes-csi/csi-lib-utils/slowset"
 	"github.com/kubernetes-csi/external-resizer/pkg/modifier"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -62,7 +63,7 @@ type modifyController struct {
 	// the key of the map is {PVC_NAMESPACE}/{PVC_NAME}
 	uncertainPVCs map[string]v1.PersistentVolumeClaim
 	// slowSet tracks PVCs for which modification failed with infeasible error and should be retried at slower rate.
-	slowSet *util.SlowSet
+	slowSet *slowset.SlowSet
 }
 
 // NewModifyController returns a ModifyController.
@@ -102,7 +103,7 @@ func NewModifyController(
 		claimQueue:          claimQueue,
 		eventRecorder:       eventRecorder,
 		extraModifyMetadata: extraModifyMetadata,
-		slowSet:             util.NewSlowSet(maxRetryInterval),
+		slowSet:             slowset.NewSlowSet(maxRetryInterval),
 	}
 	// Add a resync period as the PVC's request modify can be modified again when we are handling
 	// a previous modify request of the same PVC.

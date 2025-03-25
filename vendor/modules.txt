@@ -87,7 +87,7 @@ github.com/klauspost/compress/internal/cpuinfo
 github.com/klauspost/compress/internal/snapref
 github.com/klauspost/compress/zstd
 github.com/klauspost/compress/zstd/internal/xxhash
-# github.com/kubernetes-csi/csi-lib-utils v0.21.0
+# github.com/kubernetes-csi/csi-lib-utils v0.21.0 => github.com/mdzraf/csi-lib-utils v0.0.0-20250408153324-d3fabff50cd7
 ## explicit; go 1.23.1
 github.com/kubernetes-csi/csi-lib-utils/accessmodes
 github.com/kubernetes-csi/csi-lib-utils/connection
@@ -95,6 +95,7 @@ github.com/kubernetes-csi/csi-lib-utils/leaderelection
 github.com/kubernetes-csi/csi-lib-utils/metrics
 github.com/kubernetes-csi/csi-lib-utils/protosanitizer
 github.com/kubernetes-csi/csi-lib-utils/rpc
+github.com/kubernetes-csi/csi-lib-utils/slowset
 # github.com/mailru/easyjson v0.9.0
 ## explicit; go 1.20
 github.com/mailru/easyjson/buffer
@@ -842,3 +843,4 @@ sigs.k8s.io/structured-merge-diff/v4/value
 ## explicit; go 1.12
 sigs.k8s.io/yaml
 sigs.k8s.io/yaml/goyaml.v2
+# github.com/kubernetes-csi/csi-lib-utils => github.com/mdzraf/csi-lib-utils v0.0.0-20250408153324-d3fabff50cd7
