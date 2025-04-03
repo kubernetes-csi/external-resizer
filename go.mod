@@ -10,8 +10,8 @@ require (
 	golang.org/x/oauth2 v0.25.0 // indirect
 	golang.org/x/term v0.28.0 // indirect
 	google.golang.org/grpc v1.69.2
-	k8s.io/api v0.32.2
-	k8s.io/apimachinery v0.32.2
+	k8s.io/api v0.32.3
+	k8s.io/apimachinery v0.32.3
 	k8s.io/apiserver v0.32.0
 	k8s.io/client-go v0.32.3
 	k8s.io/component-base v0.32.0
@@ -80,8 +80,6 @@ replace k8s.io/api => k8s.io/api v0.32.0
 replace k8s.io/apimachinery => k8s.io/apimachinery v0.32.0
 
 replace k8s.io/apiserver => k8s.io/apiserver v0.32.0
-
-replace k8s.io/client-go => k8s.io/client-go v0.32.0
 
 replace k8s.io/component-base => k8s.io/component-base v0.32.0
 
