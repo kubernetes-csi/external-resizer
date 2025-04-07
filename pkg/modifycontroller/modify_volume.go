@@ -65,6 +65,24 @@ func (ctrl *modifyController) modify(pvc *v1.PersistentVolumeClaim, pv *v1.Persi
 			}
 			return ctrl.controllerModifyVolumeWithTarget(pvc, pv, vac, pvcSpecVacName)
 		}
+	} else if pvcSpecVacName != nil && curVacName != nil && pvc.Status.ModifyVolumeStatus != nil && *pvcSpecVacName == *curVacName {
+		targetVacName := pvc.Status.ModifyVolumeStatus.TargetVolumeAttributesClassName
+		// Allow rollback of VAC if it is in infeasible state
+		if targetVacName != "" && targetVacName != *curVacName && pvc.Status.ModifyVolumeStatus.Status == v1.PersistentVolumeClaimModifyVolumeInfeasible {
+			vac, err := ctrl.vacLister.Get(*pvcSpecVacName)
+			if err != nil {
+				return pvc, pv, err, false
+			}
+			// Mark pvc.Status.ModifyVolumeStatus as in progress
+			pvc, err = ctrl.markControllerModifyVolumeStatus(pvc, v1.PersistentVolumeClaimModifyVolumeInProgress, nil)
+			if err != nil {
+				return pvc, pv, err, false
+			}
+			// Record an event to indicate that external resizer is rolling back VAC in this volume.
+			ctrl.eventRecorder.Event(pvc, v1.EventTypeNormal, util.VolumeModify,
+				fmt.Sprintf("external resizer is rolling back a modification of the volume %s to vac %s", pvc.Name, *pvcSpecVacName))
+			return ctrl.controllerModifyVolumeWithTarget(pvc, pv, vac, pvcSpecVacName)
+		}
 	}
 
 	// No modification required
