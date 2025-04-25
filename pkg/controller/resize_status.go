@@ -178,6 +178,7 @@ func (ctrl *resizeController) markOverallExpansionAsFinished(
 		newPVC.Status.AllocatedResourceStatuses = resourceStatusMap
 	}
 
+	// this will ensure that kubelet does not try to resize volume again
 	newPVC = ctrl.addNodeExpansionNotRequiredAnnotation(newPVC)
 
 	updatedPVC, err := util.PatchClaim(ctrl.kubeClient, pvc, newPVC, true /* addResourceVersionCheck */)
