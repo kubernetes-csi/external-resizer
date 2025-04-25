@@ -53,6 +53,8 @@ var (
 	// Its value will be set by the external-resizer when it deems that filesystem resize is required after resizing volume.
 	// Its value will be used by pv_controller to determine pvc's status capacity when binding pvc and pv.
 	AnnPreResizeCapacity = "volume.alpha.kubernetes.io/pre-resize-capacity"
+
+	NodeExpansionNotRequired = "volume.kubernetes.io/node-expansion-not-required"
 )
 
 // MergeResizeConditionsOfPVC updates pvc with requested resize conditions

@@ -22,6 +22,7 @@ import (
 	"github.com/kubernetes-csi/external-resizer/pkg/util"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/klog/v2"
 )
 
@@ -194,6 +195,27 @@ func (ctrl *resizeController) expandAndRecover(pvc *v1.PersistentVolumeClaim, pv
 
 	klog.V(4).InfoS("Update capacity of PV succeeded", "PV", klog.KObj(pv), "capacity", newSize.String())
 	return pvc, pv, nil, true
+}
+
+func (ctrl *resizeController) removeNodeExpansionNotRequiredAnnotation(pvc *v1.PersistentVolumeClaim) *v1.PersistentVolumeClaim {
+	if !metav1.HasAnnotation(pvc.ObjectMeta, util.NodeExpansionNotRequired) {
+		return pvc
+	}
+
+	delete(pvc.Annotations, util.NodeExpansionNotRequired)
+	return pvc
+}
+
+func (ctrl *resizeController) addNodeExpansionNotRequiredAnnotation(pvc *v1.PersistentVolumeClaim) *v1.PersistentVolumeClaim {
+	if metav1.HasAnnotation(pvc.ObjectMeta, util.NodeExpansionNotRequired) {
+		return pvc
+	}
+
+	if pvc.Annotations == nil {
+		pvc.Annotations = make(map[string]string)
+	}
+	pvc.Annotations[util.NodeExpansionNotRequired] = "true"
+	return pvc
 }
 
 func (ctrl *resizeController) markForSlowRetry(pvcKey string, resizeStatus v1.ClaimResourceStatus) {

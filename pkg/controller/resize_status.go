@@ -47,6 +47,8 @@ func (ctrl *resizeController) markControllerResizeInProgress(
 		newPVC.Status.Conditions = util.MergeResizeConditionsOfPVC(newPVC.Status.Conditions, conditions, true /*keepOldResizeConditions*/)
 	}
 
+	newPVC = ctrl.removeNodeExpansionNotRequiredAnnotation(newPVC)
+
 	if updateStatus {
 		newPVC = mergeStorageResourceStatus(newPVC, v1.PersistentVolumeClaimControllerResizeInProgress)
 	}
@@ -77,6 +79,9 @@ func (ctrl *resizeController) markForPendingNodeExpansion(pvc *v1.PersistentVolu
 	newPVC := pvc.DeepCopy()
 	newPVC.Status.Conditions = util.MergeResizeConditionsOfPVC(newPVC.Status.Conditions,
 		[]v1.PersistentVolumeClaimCondition{pvcCondition}, true /*keepOldResizeConditions*/)
+
+	// make sure if any annotation was previously added is removed here
+	newPVC = ctrl.removeNodeExpansionNotRequiredAnnotation(newPVC)
 
 	newPVC = mergeStorageResourceStatus(newPVC, v1.PersistentVolumeClaimNodeResizePending)
 	updatedPVC, err := util.PatchClaim(ctrl.kubeClient, pvc, newPVC, true /* addResourceVersionCheck */)
@@ -172,6 +177,8 @@ func (ctrl *resizeController) markOverallExpansionAsFinished(
 	} else {
 		newPVC.Status.AllocatedResourceStatuses = resourceStatusMap
 	}
+
+	newPVC = ctrl.addNodeExpansionNotRequiredAnnotation(newPVC)
 
 	updatedPVC, err := util.PatchClaim(ctrl.kubeClient, pvc, newPVC, true /* addResourceVersionCheck */)
 	if err != nil {
