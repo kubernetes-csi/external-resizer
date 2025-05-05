@@ -9,10 +9,12 @@ import (
 	"github.com/kubernetes-csi/external-resizer/pkg/features"
 	"github.com/kubernetes-csi/external-resizer/pkg/resizer"
 	"github.com/kubernetes-csi/external-resizer/pkg/testutil"
+	"github.com/kubernetes-csi/external-resizer/pkg/util"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
@@ -29,21 +31,24 @@ func TestExpandAndRecover(t *testing.T) {
 		pv                         *v1.PersistentVolume
 		disableNodeExpansion       bool
 		disableControllerExpansion bool
+
 		// expectations of test
-		expectedResizeStatus  v1.ClaimResourceStatus
-		expectedAllocatedSize resource.Quantity
-		pvcWithFinalErrors    sets.Set[string]
-		expansionError        error
-		expectResizeCall      bool
-		expectedConditions    []v1.PersistentVolumeClaimConditionType
+		expectedResizeStatus                     v1.ClaimResourceStatus
+		expectedAllocatedSize                    resource.Quantity
+		expectNodeExpansionNotRequiredAnnotation bool
+		pvcWithFinalErrors                       sets.Set[string]
+		expansionError                           error
+		expectResizeCall                         bool
+		expectedConditions                       []v1.PersistentVolumeClaimConditionType
 	}{
 		{
-			name:                  "pvc.spec.size > pv.spec.size, resize_status=node_expansion_inprogress",
-			pvc:                   testutil.GetTestPVC("test-vol0", "2G", "1G", "", ""),
-			pv:                    createPV(1, "claim01", defaultNS, "test-uid", &fsVolumeMode),
-			expectedResizeStatus:  v1.PersistentVolumeClaimNodeResizePending,
-			expectedAllocatedSize: resource.MustParse("2G"),
-			expectResizeCall:      true,
+			name:                                     "pvc.spec.size > pv.spec.size, resize_status=node_expansion_inprogress",
+			pvc:                                      testutil.GetTestPVC("test-vol0", "2G", "1G", "", ""),
+			pv:                                       createPV(1, "claim01", defaultNS, "test-uid", &fsVolumeMode),
+			expectedResizeStatus:                     v1.PersistentVolumeClaimNodeResizePending,
+			expectNodeExpansionNotRequiredAnnotation: false,
+			expectedAllocatedSize:                    resource.MustParse("2G"),
+			expectResizeCall:                         true,
 		},
 		{
 			name:                  "pvc.spec.size = pv.spec.size, resize_status=no_expansion_inprogress",
@@ -116,13 +121,14 @@ func TestExpandAndRecover(t *testing.T) {
 			expectResizeCall:      false,
 		},
 		{
-			name:                  "pvc.spec.size > pv.spec.size, disable_node_expansion=true, resize_status=no_expansion_inprogress",
-			pvc:                   testutil.GetTestPVC("test-vol0", "2G", "1G", "", ""),
-			pv:                    createPV(1, "claim01", defaultNS, "test-uid", &fsVolumeMode),
-			disableNodeExpansion:  true,
-			expectedResizeStatus:  "",
-			expectedAllocatedSize: resource.MustParse("2G"),
-			expectResizeCall:      true,
+			name:                                     "pvc.spec.size > pv.spec.size, disable_node_expansion=true, resize_status=no_expansion_inprogress",
+			pvc:                                      testutil.GetTestPVC("test-vol0", "2G", "1G", "", ""),
+			pv:                                       createPV(1, "claim01", defaultNS, "test-uid", &fsVolumeMode),
+			disableNodeExpansion:                     true,
+			expectedResizeStatus:                     "",
+			expectNodeExpansionNotRequiredAnnotation: true,
+			expectedAllocatedSize:                    resource.MustParse("2G"),
+			expectResizeCall:                         true,
 		},
 		{
 			name:                  "pv.spec.size >= pvc.spec.size, resize_status=node_expansion_failed",
@@ -191,6 +197,10 @@ func TestExpandAndRecover(t *testing.T) {
 
 			if actualResizeStatus != test.expectedResizeStatus {
 				t.Fatalf("expected resize status to be %s, got %s", test.expectedResizeStatus, actualResizeStatus)
+			}
+
+			if test.expectNodeExpansionNotRequiredAnnotation != metav1.HasAnnotation(pvc.ObjectMeta, util.NodeExpansionNotRequired) {
+				t.Fatalf("expected node expansion not required annotation to be %t, got %t", test.expectNodeExpansionNotRequiredAnnotation, metav1.HasAnnotation(pvc.ObjectMeta, util.NodeExpansionNotRequired))
 			}
 
 			actualAllocatedSize := pvc.Status.AllocatedResources.Storage()
