@@ -35,7 +35,7 @@ var (
 )
 
 func TestModify(t *testing.T) {
-	basePVC := createTestPVC(pvcName, testVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/)
+	basePVC := createTestPVC(pvcName, testVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/, "" /*modifyVolumeStatus*/)
 	basePV := createTestPV(1, pvcName, pvcNamespace, "foobaz" /*pvcUID*/, &fsVolumeMode, testVac)
 
 	var tests = []struct {
@@ -61,7 +61,7 @@ func TestModify(t *testing.T) {
 		},
 		{
 			name:             "vac does not exist, no modification and set ModifyVolumeStatus to pending",
-			pvc:              createTestPVC(pvcName, targetVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/),
+			pvc:              createTestPVC(pvcName, targetVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/, "" /*modifyVolumeStatus*/),
 			pv:               basePV,
 			expectModifyCall: false,
 			expectedModifyVolumeStatus: &v1.ModifyVolumeStatus{
@@ -73,7 +73,7 @@ func TestModify(t *testing.T) {
 		},
 		{
 			name:                                     "modify volume success",
-			pvc:                                      createTestPVC(pvcName, targetVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/),
+			pvc:                                      createTestPVC(pvcName, targetVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/, "" /*modifyVolumeStatus*/),
 			pv:                                       basePV,
 			vacExists:                                true,
 			expectModifyCall:                         true,
@@ -83,7 +83,7 @@ func TestModify(t *testing.T) {
 		},
 		{
 			name:                                     "modify volume success with extra metadata",
-			pvc:                                      createTestPVC(pvcName, targetVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/),
+			pvc:                                      createTestPVC(pvcName, targetVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/, "" /*modifyVolumeStatus*/),
 			pv:                                       basePV,
 			vacExists:                                true,
 			expectModifyCall:                         true,
@@ -97,6 +97,16 @@ func TestModify(t *testing.T) {
 				"csi.storage.k8s.io/pvc/namespace": basePVC.GetNamespace(),
 				"csi.storage.k8s.io/pv/name":       "testPV",
 			},
+		},
+		{
+			name:                                     "modify volume rollback succeeds for infeasible errors",
+			pvc:                                      createTestPVC(pvcName, testVac /*vacName*/, targetVac /*curVacName*/, testVac /*targetVacName*/, v1.PersistentVolumeClaimModifyVolumeInfeasible),
+			pv:                                       basePV,
+			vacExists:                                true,
+			expectModifyCall:                         true,
+			expectedModifyVolumeStatus:               nil,
+			expectedCurrentVolumeAttributesClassName: &testVac,
+			expectedPVVolumeAttributesClassName:      &testVac,
 		},
 	}
 
@@ -154,7 +164,7 @@ func TestModify(t *testing.T) {
 	}
 }
 
-func createTestPVC(pvcName string, vacName string, curVacName string, targetVacName string) *v1.PersistentVolumeClaim {
+func createTestPVC(pvcName string, vacName string, curVacName string, targetVacName string, modifyVolumeStatus v1.PersistentVolumeClaimModifyVolumeStatus) *v1.PersistentVolumeClaim {
 	pvc := &v1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{Name: pvcName, Namespace: pvcNamespace},
 		Spec: v1.PersistentVolumeClaimSpec{
@@ -178,7 +188,7 @@ func createTestPVC(pvcName string, vacName string, curVacName string, targetVacN
 			CurrentVolumeAttributesClassName: &curVacName,
 			ModifyVolumeStatus: &v1.ModifyVolumeStatus{
 				TargetVolumeAttributesClassName: targetVacName,
-				Status:                          "",
+				Status:                          modifyVolumeStatus,
 			},
 		},
 	}
