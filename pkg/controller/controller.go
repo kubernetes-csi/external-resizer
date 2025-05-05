@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/kubernetes-csi/csi-lib-utils/slowset"
 	"github.com/kubernetes-csi/external-resizer/pkg/features"
 	"k8s.io/apimachinery/pkg/api/errors"
 
@@ -71,7 +72,7 @@ type resizeController struct {
 
 	// slowSet is used to track PVCs for which expansion failed with infeasible error
 	// and should be retried at slower rate.
-	slowSet *util.SlowSet
+	slowSet *slowset.SlowSet
 
 	// a cache to store PersistentVolume objects
 	volumes cache.Store
@@ -113,7 +114,7 @@ func NewResizeController(
 		volumes:                pvInformer.Informer().GetStore(),
 		claims:                 pvcInformer.Informer().GetStore(),
 		eventRecorder:          eventRecorder,
-		slowSet:                util.NewSlowSet(maxRetryInterval),
+		slowSet:                slowset.NewSlowSet(maxRetryInterval),
 		finalErrorPVCs:         sets.New[string](),
 		usedPVCs:               newUsedPVCStore(),
 		handleVolumeInUseError: handleVolumeInUseError,
