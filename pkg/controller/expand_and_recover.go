@@ -17,6 +17,7 @@ limitations under the License.
 package controller
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/kubernetes-csi/external-resizer/pkg/util"
@@ -153,7 +154,7 @@ func (ctrl *resizeController) expandAndRecover(pvc *v1.PersistentVolumeClaim, pv
 	if allocatedSize != nil && allocatedSize.Cmp(newSize) == 0 {
 		if inSlowSet {
 			msg := fmt.Sprintf("skipping volume expansion for pvc %s, because expansion previously failed with infeasible error", pvcKey)
-			klog.V(4).Infof(msg)
+			klog.V(4).Info(msg)
 			delayRetryError := util.NewDelayRetryError(msg, ctrl.slowSet.TimeRemaining(pvcKey))
 			return pvc, pv, delayRetryError, resizeNotCalled
 		}
@@ -172,7 +173,7 @@ func (ctrl *resizeController) expandAndRecover(pvc *v1.PersistentVolumeClaim, pv
 		// Record an event to indicate that resizer is not expanding the pvc
 		msg := fmt.Sprintf("Unable to expand %s because CSI driver %s only supports offline expansion and volume is currently in-use", klog.KObj(pvc), ctrl.resizer.Name())
 		ctrl.eventRecorder.Event(pvc, v1.EventTypeWarning, util.VolumeResizeFailed, msg)
-		return pvc, pv, fmt.Errorf(msg), resizeNotCalled
+		return pvc, pv, errors.New(msg), resizeNotCalled
 	}
 
 	// Record an event to indicate that external resizer is resizing this volume.
