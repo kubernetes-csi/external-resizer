@@ -18,11 +18,12 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/kubernetes-csi/external-resizer/pkg/features"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/kubernetes-csi/external-resizer/pkg/resizer"
 	"github.com/kubernetes-csi/external-resizer/pkg/util"
@@ -460,7 +461,7 @@ func (ctrl *resizeController) resizePVC(pvc *v1.PersistentVolumeClaim, pv *v1.Pe
 		// Record an event to indicate that resizer is not expanding the pvc
 		msg := fmt.Sprintf("Unable to expand %s because CSI driver %s only supports offline expansion and volume is currently in-use", klog.KObj(pvc), ctrl.resizer.Name())
 		ctrl.eventRecorder.Event(pvc, v1.EventTypeWarning, util.VolumeResizeFailed, msg)
-		return fmt.Errorf(msg)
+		return errors.New(msg)
 	}
 
 	// Record an event to indicate that external resizer is resizing this volume.
@@ -481,7 +482,7 @@ func (ctrl *resizeController) resizePVC(pvc *v1.PersistentVolumeClaim, pv *v1.Pe
 		return ctrl.markPVCResizeFinished(pvc, newSize)
 	}()
 
-	if err != nil && !errors.IsConflict(err) /* ignore conflicts as they should be silently retried */ {
+	if err != nil && !apierrors.IsConflict(err) /* ignore conflicts as they should be silently retried */ {
 		// Record an event to indicate that resize operation is failed.
 		ctrl.eventRecorder.Eventf(pvc, v1.EventTypeWarning, util.VolumeResizeFailed, err.Error())
 	}
