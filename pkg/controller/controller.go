@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	stderrors "errors"
 	"fmt"
 	"time"
 
@@ -460,7 +461,7 @@ func (ctrl *resizeController) resizePVC(pvc *v1.PersistentVolumeClaim, pv *v1.Pe
 		// Record an event to indicate that resizer is not expanding the pvc
 		msg := fmt.Sprintf("Unable to expand %s because CSI driver %s only supports offline expansion and volume is currently in-use", klog.KObj(pvc), ctrl.resizer.Name())
 		ctrl.eventRecorder.Event(pvc, v1.EventTypeWarning, util.VolumeResizeFailed, msg)
-		return fmt.Errorf(msg)
+		return stderrors.New(msg)
 	}
 
 	// Record an event to indicate that external resizer is resizing this volume.
