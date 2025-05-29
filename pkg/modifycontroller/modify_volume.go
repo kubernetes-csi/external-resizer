@@ -24,6 +24,7 @@ import (
 	"google.golang.org/grpc/status"
 	v1 "k8s.io/api/core/v1"
 	storagev1beta1 "k8s.io/api/storage/v1beta1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
 )
@@ -61,6 +62,9 @@ func (ctrl *modifyController) modify(pvc *v1.PersistentVolumeClaim, pv *v1.Persi
 		} else {
 			vac, err := ctrl.vacLister.Get(*pvcSpecVacName)
 			if err != nil {
+				if apierrors.IsNotFound(err) {
+					ctrl.eventRecorder.Eventf(pvc, v1.EventTypeWarning, util.VolumeModifyFailed, "VAC "+*pvcSpecVacName+" does not exist.")
+				}
 				return pvc, pv, err, false
 			}
 			return ctrl.controllerModifyVolumeWithTarget(pvc, pv, vac, pvcSpecVacName)
@@ -91,6 +95,9 @@ func (ctrl *modifyController) validateVACAndModifyVolumeWithTarget(
 			fmt.Sprintf("external resizer is modifying volume %s with vac %s", pvc.Name, *pvcSpecVacName))
 		return ctrl.controllerModifyVolumeWithTarget(pvc, pv, vac, pvcSpecVacName)
 	} else {
+		if apierrors.IsNotFound(err) {
+			ctrl.eventRecorder.Eventf(pvc, v1.EventTypeWarning, util.VolumeModifyFailed, "VAC "+*pvcSpecVacName+" does not exist.")
+		}
 		klog.Errorf("Get VAC with vac name %s in VACInformer cache failed: %v", *pvcSpecVacName, err)
 		// Mark pvc.Status.ModifyVolumeStatus as pending
 		pvc, err = ctrl.markControllerModifyVolumeStatus(pvc, v1.PersistentVolumeClaimModifyVolumePending, nil)
