@@ -96,6 +96,8 @@ Note that the external-resizer does not scale with more replicas. Only one exter
 
 * `--metrics-address`: (deprecated) The TCP network address where the prometheus metrics endpoint will run (example: `:8080` which corresponds to port 8080 on local host). The default is empty string, which means metrics endpoint is disabled.
 
+* `--automaxprocs`: Automatically set the `GOMAXPROCS` environment variable to match the configured Linux container CPU quota. Defaults to false.
+
 * `--version`: Prints current external-resizer version and quits.
 
 * All glog / klog arguments are supported, such as `-v <log level>` or `-alsologtostderr`.
