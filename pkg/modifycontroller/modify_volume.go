@@ -193,7 +193,7 @@ func (ctrl *modifyController) delayModificationIfRecentlyInfeasible(pvc *v1.Pers
 
 	if inSlowSet {
 		msg := fmt.Sprintf("skipping volume modification for pvc %s, because modification previously failed with infeasible error", pvcKey)
-		klog.V(4).Infof(msg)
+		klog.V(4).Info(msg)
 		delayRetryError := util.NewDelayRetryError(msg, ctrl.slowSet.TimeRemaining(pvcKey))
 		return delayRetryError
 	}
