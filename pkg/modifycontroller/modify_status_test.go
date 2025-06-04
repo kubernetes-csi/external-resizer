@@ -397,9 +397,11 @@ func createTestPV(capacityGB int, pvcName, pvcNamespace string, pvcUID types.UID
 					VolumeHandle: "foo",
 				},
 			},
-			VolumeMode:                volumeMode,
-			VolumeAttributesClassName: &vacName,
+			VolumeMode: volumeMode,
 		},
+	}
+	if vacName != "" {
+		pv.Spec.VolumeAttributesClassName = &vacName
 	}
 	if len(pvcName) > 0 {
 		pv.Spec.ClaimRef = &v1.ObjectReference{
