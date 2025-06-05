@@ -18,7 +18,9 @@ package modifycontroller
 
 import (
 	"fmt"
+	"time"
 
+	"github.com/kubernetes-csi/csi-lib-utils/slowset"
 	"github.com/kubernetes-csi/external-resizer/pkg/util"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -204,6 +206,8 @@ func (ctrl *modifyController) delayModificationIfRecentlyInfeasible(pvc *v1.Pers
 func (ctrl *modifyController) markForSlowRetry(pvc *v1.PersistentVolumeClaim, pvcKey string) {
 	s := pvc.Status.ModifyVolumeStatus
 	if s != nil && s.Status == v1.PersistentVolumeClaimModifyVolumeInfeasible {
-		ctrl.slowSet.Add(pvcKey)
+		ctrl.slowSet.Add(pvcKey, slowset.ObjectData{
+			Timestamp: time.Now(),
+		})
 	}
 }
