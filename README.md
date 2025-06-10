@@ -100,6 +100,8 @@ Note that the external-resizer does not scale with more replicas. Only one exter
 
 * `--version`: Prints current external-resizer version and quits.
 
+* `--automaxprocs`:  flag to set the `GOMAXPROCS` environment variable to match the configured Linux container CPU quota.
+
 * All glog / klog arguments are supported, such as `-v <log level>` or `-alsologtostderr`.
 
 ### HTTP endpoint
