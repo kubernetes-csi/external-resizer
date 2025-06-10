@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package util
+package slowset
 
 import (
 	"sync"
@@ -30,18 +30,23 @@ type SlowSet struct {
 	retentionTime time.Duration
 
 	resyncPeriod time.Duration
-	workSet      map[string]time.Time
+	workSet      map[string]ObjectData
+}
+
+type ObjectData struct {
+	Timestamp       time.Time
+	StorageClassUID string
 }
 
 func NewSlowSet(retTime time.Duration) *SlowSet {
 	return &SlowSet{
 		retentionTime: retTime,
 		resyncPeriod:  100 * time.Millisecond,
-		workSet:       make(map[string]time.Time),
+		workSet:       make(map[string]ObjectData),
 	}
 }
 
-func (s *SlowSet) Add(key string) bool {
+func (s *SlowSet) Add(key string, info ObjectData) bool {
 	s.Lock()
 	defer s.Unlock()
 
@@ -49,16 +54,24 @@ func (s *SlowSet) Add(key string) bool {
 		return false
 	}
 
-	s.workSet[key] = time.Now()
+	s.workSet[key] = info
 	return true
+}
+
+func (s *SlowSet) Get(key string) (ObjectData, bool) {
+	s.RLock()
+	defer s.RUnlock()
+
+	info, ok := s.workSet[key]
+	return info, ok
 }
 
 func (s *SlowSet) Contains(key string) bool {
 	s.RLock()
 	defer s.RUnlock()
 
-	startTime, ok := s.workSet[key]
-	if ok && time.Since(startTime) < s.retentionTime {
+	info, ok := s.workSet[key]
+	if ok && time.Since(info.Timestamp) < s.retentionTime {
 		return true
 	}
 	return false
@@ -75,8 +88,8 @@ func (s *SlowSet) TimeRemaining(key string) time.Duration {
 	s.RLock()
 	defer s.RUnlock()
 
-	if startTime, ok := s.workSet[key]; ok {
-		return s.retentionTime - time.Since(startTime)
+	if info, ok := s.workSet[key]; ok {
+		return s.retentionTime - time.Since(info.Timestamp)
 	}
 	return 0
 }
@@ -84,8 +97,8 @@ func (s *SlowSet) TimeRemaining(key string) time.Duration {
 func (s *SlowSet) removeAllExpired() {
 	s.Lock()
 	defer s.Unlock()
-	for key, t := range s.workSet {
-		if time.Since(t) > s.retentionTime {
+	for key, info := range s.workSet {
+		if time.Since(info.Timestamp) > s.retentionTime {
 			delete(s.workSet, key)
 		}
 	}

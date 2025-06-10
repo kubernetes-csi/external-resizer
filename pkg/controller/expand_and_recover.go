@@ -19,7 +19,9 @@ package controller
 import (
 	"errors"
 	"fmt"
+	"time"
 
+	"github.com/kubernetes-csi/csi-lib-utils/slowset"
 	"github.com/kubernetes-csi/external-resizer/pkg/util"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -199,7 +201,9 @@ func (ctrl *resizeController) expandAndRecover(pvc *v1.PersistentVolumeClaim, pv
 
 func (ctrl *resizeController) markForSlowRetry(pvcKey string, resizeStatus v1.ClaimResourceStatus) {
 	if resizeStatus == v1.PersistentVolumeClaimControllerResizeInfeasible {
-		ctrl.slowSet.Add(pvcKey)
+		ctrl.slowSet.Add(pvcKey, slowset.ObjectData{
+			Timestamp: time.Now(),
+		})
 	}
 }
 
