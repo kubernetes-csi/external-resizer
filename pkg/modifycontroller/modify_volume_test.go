@@ -35,7 +35,7 @@ var (
 )
 
 func TestModify(t *testing.T) {
-	basePVC := createTestPVC(pvcName, testVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/)
+	basePVC := createTestPVC(pvcName, testVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/, "" /*modifyVolumeStatus*/)
 	basePV := createTestPV(1, pvcName, pvcNamespace, "foobaz" /*pvcUID*/, &fsVolumeMode, testVac)
 
 	var tests = []struct {
@@ -61,7 +61,7 @@ func TestModify(t *testing.T) {
 		},
 		{
 			name:             "vac does not exist, no modification and set ModifyVolumeStatus to pending",
-			pvc:              createTestPVC(pvcName, targetVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/),
+			pvc:              createTestPVC(pvcName, targetVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/, "" /*modifyVolumeStatus*/),
 			pv:               basePV,
 			expectModifyCall: false,
 			expectedModifyVolumeStatus: &v1.ModifyVolumeStatus{
@@ -73,7 +73,7 @@ func TestModify(t *testing.T) {
 		},
 		{
 			name:                                     "modify volume success",
-			pvc:                                      createTestPVC(pvcName, targetVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/),
+			pvc:                                      createTestPVC(pvcName, targetVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/, "" /*modifyVolumeStatus*/),
 			pv:                                       basePV,
 			vacExists:                                true,
 			expectModifyCall:                         true,
@@ -83,7 +83,7 @@ func TestModify(t *testing.T) {
 		},
 		{
 			name:                                     "modify volume success with extra metadata",
-			pvc:                                      createTestPVC(pvcName, targetVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/),
+			pvc:                                      createTestPVC(pvcName, targetVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/, "" /*modifyVolumeStatus*/),
 			pv:                                       basePV,
 			vacExists:                                true,
 			expectModifyCall:                         true,
@@ -130,16 +130,20 @@ func TestModify(t *testing.T) {
 
 			actualCurrentVolumeAttributesClassName := pvc.Status.CurrentVolumeAttributesClassName
 
-			if diff := cmp.Diff(*test.expectedCurrentVolumeAttributesClassName, *actualCurrentVolumeAttributesClassName); diff != "" {
-				t.Errorf("expected CurrentVolumeAttributesClassName to be %v, got %v", *test.expectedCurrentVolumeAttributesClassName, *actualCurrentVolumeAttributesClassName)
+			if test.expectedCurrentVolumeAttributesClassName != nil && actualCurrentVolumeAttributesClassName != nil {
+				if diff := cmp.Diff(*test.expectedCurrentVolumeAttributesClassName, *actualCurrentVolumeAttributesClassName); diff != "" {
+					t.Errorf("expected CurrentVolumeAttributesClassName to be %v, got %v", *test.expectedCurrentVolumeAttributesClassName, *actualCurrentVolumeAttributesClassName)
+				}
 			}
 
 			actualPVVolumeAttributesClassName := pv.Spec.VolumeAttributesClassName
-			if diff := cmp.Diff(*test.expectedPVVolumeAttributesClassName, *actualPVVolumeAttributesClassName); diff != "" {
-				t.Errorf("expected VolumeAttributesClassName of pv to be %v, got %v", *test.expectedPVVolumeAttributesClassName, *actualPVVolumeAttributesClassName)
+			if test.expectedPVVolumeAttributesClassName != nil && actualPVVolumeAttributesClassName != nil {
+				if diff := cmp.Diff(*test.expectedPVVolumeAttributesClassName, *actualPVVolumeAttributesClassName); diff != "" {
+					t.Errorf("expected VolumeAttributesClassName of pv to be %v, got %v", *test.expectedPVVolumeAttributesClassName, *actualPVVolumeAttributesClassName)
+				}
 			}
 
-			if test.withExtraMetadata {
+			if test.withExtraMetadata && test.expectedPVVolumeAttributesClassName != nil {
 				vacObj, err := ctrlInstance.vacLister.Get(*test.expectedPVVolumeAttributesClassName)
 				if err != nil {
 					t.Errorf("failed to get VAC: %v", err)
@@ -154,7 +158,7 @@ func TestModify(t *testing.T) {
 	}
 }
 
-func createTestPVC(pvcName string, vacName string, curVacName string, targetVacName string) *v1.PersistentVolumeClaim {
+func createTestPVC(pvcName string, vacName string, curVacName string, targetVacName string, modifyVolumeStatus v1.PersistentVolumeClaimModifyVolumeStatus) *v1.PersistentVolumeClaim {
 	pvc := &v1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{Name: pvcName, Namespace: pvcNamespace},
 		Spec: v1.PersistentVolumeClaimSpec{
@@ -167,20 +171,24 @@ func createTestPVC(pvcName string, vacName string, curVacName string, targetVacN
 					v1.ResourceName(v1.ResourceStorage): resource.MustParse("2Gi"),
 				},
 			},
-			VolumeAttributesClassName: &vacName,
-			VolumeName:                pvName,
+			VolumeName: pvName,
 		},
 		Status: v1.PersistentVolumeClaimStatus{
 			Phase: v1.ClaimBound,
 			Capacity: v1.ResourceList{
 				v1.ResourceStorage: resource.MustParse("2Gi"),
 			},
-			CurrentVolumeAttributesClassName: &curVacName,
 			ModifyVolumeStatus: &v1.ModifyVolumeStatus{
 				TargetVolumeAttributesClassName: targetVacName,
-				Status:                          "",
+				Status:                          modifyVolumeStatus,
 			},
 		},
+	}
+	if vacName != "" {
+		pvc.Spec.VolumeAttributesClassName = &vacName
+	}
+	if curVacName != "" {
+		pvc.Status.CurrentVolumeAttributesClassName = &curVacName
 	}
 	return pvc
 }
