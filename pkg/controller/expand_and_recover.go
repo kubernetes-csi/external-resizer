@@ -222,7 +222,7 @@ func (ctrl *resizeController) callResizeOnPlugin(
 		if util.IsFinalError(err) {
 			var markExpansionFailedError error
 			ctrl.finalErrorPVCs.Insert(pvcKey)
-			if util.IsInfeasibleError(err) {
+			if util.IsResizeInfeasibleError(err) {
 				pvc, markExpansionFailedError = ctrl.markControllerExpansionInfeasible(pvc, err)
 				if markExpansionFailedError != nil {
 					return pvc, pv, fmt.Errorf("resizing failed in controller with %v but failed to update PVC %s with: %v", err, klog.KObj(pvc), markExpansionFailedError)

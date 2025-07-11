@@ -258,10 +258,10 @@ func IsFinalError(err error) bool {
 	return true
 }
 
-// IsInfeasibleError returns true for grpc errors that are considered terminal in a way
+// IsResizeInfeasibleError returns true for grpc errors that are considered terminal in a way
 // that they indicate CSI operation as infeasible.
 // This function is a subset of final errors. All infeasible errors are also final errors
-func IsInfeasibleError(err error) bool {
+func IsResizeInfeasibleError(err error) bool {
 	st, ok := status.FromError(err)
 	if !ok {
 		// This is not gRPC error. The operation must have failed before gRPC
@@ -273,6 +273,26 @@ func IsInfeasibleError(err error) bool {
 	case codes.InvalidArgument,
 		codes.OutOfRange,
 		codes.NotFound:
+		return true
+	}
+	// All other errors mean that operation either did not
+	// even start or failed. It is for sure not in progress.
+	return false
+}
+
+// IsModifyInfeasibleError returns true for ControllerModifyVolume CSI grpc errors that are considered terminal in a way
+// that they indicate CSI operation as infeasible.
+// This function is a subset of final errors. All infeasible errors are also final errors
+func IsModifyInfeasibleError(err error) bool {
+	st, ok := status.FromError(err)
+	if !ok {
+		// This is not gRPC error. The operation must have failed before gRPC
+		// method was called, otherwise we would get gRPC error.
+		// We don't know if any previous volume operation is in progress, be on the safe side.
+		return false
+	}
+	switch st.Code() {
+	case codes.InvalidArgument:
 		return true
 	}
 	// All other errors mean that operation either did not

@@ -98,26 +98,6 @@ func TestModify(t *testing.T) {
 				"csi.storage.k8s.io/pv/name":       "testPV",
 			},
 		},
-		{
-			name:                                     "modify volume rollback succeeds for infeasible errors",
-			pvc:                                      createTestPVC(pvcName, testVac /*vacName*/, testVac /*curVacName*/, targetVac /*targetVacName*/, v1.PersistentVolumeClaimModifyVolumeInfeasible),
-			pv:                                       basePV,
-			vacExists:                                true,
-			expectModifyCall:                         false,
-			expectedModifyVolumeStatus:               nil,
-			expectedCurrentVolumeAttributesClassName: &testVac,
-			expectedPVVolumeAttributesClassName:      &testVac,
-		},
-		{
-			name:                                     "modify volume rollback to nil succeeds for infeasible errors",
-			pvc:                                      createTestPVC(pvcName, "" /*vacName*/, "" /*curVacName*/, targetVac /*targetVacName*/, v1.PersistentVolumeClaimModifyVolumeInfeasible),
-			pv:                                       createTestPV(1, pvcName, pvcNamespace, "foobaz" /*pvcUID*/, &fsVolumeMode, ""),
-			vacExists:                                true,
-			expectModifyCall:                         false,
-			expectedModifyVolumeStatus:               nil,
-			expectedCurrentVolumeAttributesClassName: nil,
-			expectedPVVolumeAttributesClassName:      nil,
-		},
 	}
 
 	for i := range tests {
