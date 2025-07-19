@@ -18,6 +18,7 @@ package modifycontroller
 
 import (
 	"fmt"
+	"maps"
 	"time"
 
 	"github.com/kubernetes-csi/csi-lib-utils/slowset"
@@ -161,12 +162,18 @@ func (ctrl *modifyController) callModifyVolumeOnPlugin(
 	pvc *v1.PersistentVolumeClaim,
 	pv *v1.PersistentVolume,
 	vac *storagev1.VolumeAttributesClass) (*v1.PersistentVolumeClaim, *v1.PersistentVolume, error) {
+	parameters := vac.Parameters
 	if ctrl.extraModifyMetadata {
-		vac.Parameters[pvcNameKey] = pvc.GetName()
-		vac.Parameters[pvcNamespaceKey] = pvc.GetNamespace()
-		vac.Parameters[pvNameKey] = pv.GetName()
+		if len(parameters) == 0 {
+			parameters = make(map[string]string, 3)
+		} else {
+			parameters = maps.Clone(parameters)
+		}
+		parameters[pvcNameKey] = pvc.GetName()
+		parameters[pvcNamespaceKey] = pvc.GetNamespace()
+		parameters[pvNameKey] = pv.GetName()
 	}
-	err := ctrl.modifier.Modify(pv, vac.Parameters)
+	err := ctrl.modifier.Modify(pv, parameters)
 
 	if err != nil {
 		return pvc, pv, err

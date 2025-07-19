@@ -25,12 +25,7 @@ var (
 	targetVacObject = &storagev1.VolumeAttributesClass{
 		ObjectMeta: metav1.ObjectMeta{Name: targetVac},
 		DriverName: testDriverName,
-		Parameters: map[string]string{
-			"iops":                             "4567",
-			"csi.storage.k8s.io/pvc/name":      pvcName,
-			"csi.storage.k8s.io/pvc/namespace": pvcNamespace,
-			"csi.storage.k8s.io/pv/name":       pvName,
-		},
+		Parameters: map[string]string{"iops": "4567"},
 	}
 )
 
@@ -48,7 +43,7 @@ func TestModify(t *testing.T) {
 		expectedCurrentVolumeAttributesClassName *string
 		expectedPVVolumeAttributesClassName      *string
 		withExtraMetadata                        bool
-		expectedVacParams                        map[string]string
+		expectedMutableParams                    map[string]string
 	}{
 		{
 			name:                                     "nothing to modify",
@@ -80,6 +75,7 @@ func TestModify(t *testing.T) {
 			expectedModifyVolumeStatus:               nil,
 			expectedCurrentVolumeAttributesClassName: &targetVac,
 			expectedPVVolumeAttributesClassName:      &targetVac,
+			expectedMutableParams:                    map[string]string{"iops": "4567"},
 		},
 		{
 			name:                                     "modify volume success with extra metadata",
@@ -91,7 +87,7 @@ func TestModify(t *testing.T) {
 			expectedCurrentVolumeAttributesClassName: &targetVac,
 			expectedPVVolumeAttributesClassName:      &targetVac,
 			withExtraMetadata:                        true,
-			expectedVacParams: map[string]string{
+			expectedMutableParams: map[string]string{
 				"iops":                             "4567",
 				"csi.storage.k8s.io/pvc/name":      basePVC.GetName(),
 				"csi.storage.k8s.io/pvc/namespace": basePVC.GetNamespace(),
@@ -104,12 +100,13 @@ func TestModify(t *testing.T) {
 		test := tests[i]
 		t.Run(test.name, func(t *testing.T) {
 			// Setup
-			client := csi.NewMockClient(testDriverName, true, true, true, true, true, test.withExtraMetadata)
+			client := csi.NewMockClient(testDriverName, true, true, true, true, true)
 			initialObjects := []runtime.Object{test.pvc, test.pv, testVacObject}
 			if test.vacExists {
 				initialObjects = append(initialObjects, targetVacObject)
 			}
 			ctrlInstance := setupFakeK8sEnvironment(t, client, initialObjects)
+			ctrlInstance.extraModifyMetadata = test.withExtraMetadata
 
 			// Action
 			pvc, pv, err, modifyCalled := ctrlInstance.modify(test.pvc, test.pv)
@@ -138,15 +135,10 @@ func TestModify(t *testing.T) {
 				t.Errorf("expected VolumeAttributesClassName of pv to be %v, got %v", *test.expectedPVVolumeAttributesClassName, *actualPVVolumeAttributesClassName)
 			}
 
-			if test.withExtraMetadata {
-				vacObj, err := ctrlInstance.vacLister.Get(*test.expectedPVVolumeAttributesClassName)
-				if err != nil {
-					t.Errorf("failed to get VAC: %v", err)
-				} else {
-					vacParams := vacObj.Parameters
-					if diff := cmp.Diff(test.expectedVacParams, vacParams); diff != "" {
-						t.Errorf("expected VAC parameters to be %v, got %v", test.expectedVacParams, vacParams)
-					}
+			if test.expectedMutableParams != nil {
+				p := client.GetModifiedParameters()
+				if diff := cmp.Diff(test.expectedMutableParams, p); diff != "" {
+					t.Errorf("expected mutable parameters to be %v, got %v", test.expectedMutableParams, p)
 				}
 			}
 		})
