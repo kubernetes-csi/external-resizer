@@ -6,8 +6,6 @@ require (
 	github.com/container-storage-interface/spec v1.11.0
 	github.com/google/go-cmp v0.7.0
 	github.com/kubernetes-csi/csi-lib-utils v0.22.0
-	golang.org/x/oauth2 v0.27.0 // indirect
-	golang.org/x/term v0.31.0 // indirect
 	google.golang.org/grpc v1.72.1
 	k8s.io/api v0.34.0
 	k8s.io/apimachinery v0.34.0
@@ -16,9 +14,8 @@ require (
 	k8s.io/component-base v0.34.0
 	k8s.io/csi-translation-lib v0.34.0
 	k8s.io/klog/v2 v2.130.1
+	k8s.io/utils v0.0.0-20250604170112-4c0f3b243397
 )
-
-require k8s.io/utils v0.0.0-20250604170112-4c0f3b243397
 
 require (
 	cel.dev/expr v0.24.0 // indirect
@@ -87,8 +84,10 @@ require (
 	golang.org/x/crypto v0.37.0 // indirect
 	golang.org/x/exp v0.0.0-20240719175910-8a7402abbf56 // indirect
 	golang.org/x/net v0.39.0 // indirect
+	golang.org/x/oauth2 v0.27.0 // indirect
 	golang.org/x/sync v0.13.0 // indirect
 	golang.org/x/sys v0.32.0 // indirect
+	golang.org/x/term v0.31.0 // indirect
 	golang.org/x/text v0.24.0 // indirect
 	golang.org/x/time v0.9.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20250303144028-a0af3efb3deb // indirect

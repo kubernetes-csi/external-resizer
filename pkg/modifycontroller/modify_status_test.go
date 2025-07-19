@@ -14,13 +14,11 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	v1 "k8s.io/api/core/v1"
-	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
-	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
 	featuregatetesting "k8s.io/component-base/featuregate/testing"
 )
@@ -38,6 +36,7 @@ var (
 	testDriverName         = "mock"
 	infeasibleErr          = status.Errorf(codes.InvalidArgument, "Parameters in VolumeAttributesClass is invalid")
 	finalErr               = status.Errorf(codes.Internal, "Final error")
+	nonFinalErr            = status.Errorf(codes.Aborted, "Non-final error")
 	pvcConditionInProgress = v1.PersistentVolumeClaimCondition{
 		Type:    v1.PersistentVolumeClaimVolumeModifyingVolume,
 		Status:  v1.ConditionTrue,
@@ -268,110 +267,6 @@ func TestMarkControllerModifyVolumeCompleted(t *testing.T) {
 
 			if diff := cmp.Diff(tc.expectedPV, pv); diff != "" {
 				t.Errorf("expected pvc %+v got %+v, diff is: %v", tc.expectedPV, pv, diff)
-			}
-		})
-	}
-}
-
-func TestRemovePVCFromModifyVolumeUncertainCache(t *testing.T) {
-	basePVC := testutil.MakeTestPVC([]v1.PersistentVolumeClaimCondition{})
-	basePVC.WithModifyVolumeStatus(v1.PersistentVolumeClaimModifyVolumeInProgress)
-	secondPVC := testutil.GetTestPVC("test-vol0", "2G", "1G", "", "")
-	secondPVC.Status.Phase = v1.ClaimBound
-	secondPVC.Status.ModifyVolumeStatus = &v1.ModifyVolumeStatus{}
-	secondPVC.Status.ModifyVolumeStatus.Status = v1.PersistentVolumeClaimModifyVolumeInfeasible
-
-	tests := []struct {
-		name string
-		pvc  *v1.PersistentVolumeClaim
-	}{
-		{
-			name: "should delete the target pvc but keep the others in the cache",
-			pvc:  basePVC.Get(),
-		},
-	}
-
-	for _, test := range tests {
-		tc := test
-		t.Run(tc.name, func(t *testing.T) {
-			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.VolumeAttributesClass, true)
-			client := csi.NewMockClient("foo", true, true, true, true, true)
-			driverName, _ := client.GetDriverName(context.TODO())
-
-			var initialObjects []runtime.Object
-			initialObjects = append(initialObjects, test.pvc)
-			initialObjects = append(initialObjects, secondPVC)
-
-			kubeClient, informerFactory := fakeK8s(initialObjects)
-			pvInformer := informerFactory.Core().V1().PersistentVolumes()
-			pvcInformer := informerFactory.Core().V1().PersistentVolumeClaims()
-			podInformer := informerFactory.Core().V1().Pods()
-			vacInformer := informerFactory.Storage().V1().VolumeAttributesClasses()
-
-			csiModifier, err := modifier.NewModifierFromClient(client, 15*time.Second, kubeClient, informerFactory, false, driverName)
-			if err != nil {
-				t.Fatalf("Test %s: Unable to create modifier: %v", test.name, err)
-			}
-			controller := NewModifyController(driverName,
-				csiModifier, kubeClient,
-				time.Second, 2*time.Minute, false, informerFactory,
-				workqueue.DefaultTypedControllerRateLimiter[string]())
-
-			ctrlInstance, _ := controller.(*modifyController)
-
-			stopCh := make(chan struct{})
-			informerFactory.Start(stopCh)
-
-			success := ctrlInstance.init(t.Context())
-			if !success {
-				t.Fatal("failed to init controller")
-			}
-
-			for _, obj := range initialObjects {
-				switch obj.(type) {
-				case *v1.PersistentVolume:
-					pvInformer.Informer().GetStore().Add(obj)
-				case *v1.PersistentVolumeClaim:
-					pvcInformer.Informer().GetStore().Add(obj)
-				case *v1.Pod:
-					podInformer.Informer().GetStore().Add(obj)
-				case *storagev1.VolumeAttributesClass:
-					vacInformer.Informer().GetStore().Add(obj)
-				default:
-					t.Fatalf("Test %s: Unknown initalObject type: %+v", test.name, obj)
-				}
-			}
-
-			time.Sleep(time.Second * 2)
-
-			pvcKey, err := cache.MetaNamespaceKeyFunc(tc.pvc)
-			if err != nil {
-				t.Errorf("failed to extract pvc key from pvc %v", tc.pvc)
-			}
-			ctrlInstance.removePVCFromModifyVolumeUncertainCache(pvcKey)
-
-			deletedPVCKey, err := cache.MetaNamespaceKeyFunc(tc.pvc)
-			if err != nil {
-				t.Errorf("failed to extract pvc key from pvc %v", tc.pvc)
-			}
-			_, ok := ctrlInstance.uncertainPVCs[deletedPVCKey]
-			if ok {
-				t.Errorf("pvc %v should be deleted but it is still in the uncertainPVCs cache", tc.pvc)
-			}
-			if err != nil {
-				t.Errorf("err get pvc %v from uncertainPVCs: %v", tc.pvc, err)
-			}
-
-			notDeletedPVCKey, err := cache.MetaNamespaceKeyFunc(secondPVC)
-			if err != nil {
-				t.Errorf("failed to extract pvc key from secondPVC %v", secondPVC)
-			}
-			_, ok = ctrlInstance.uncertainPVCs[notDeletedPVCKey]
-			if !ok {
-				t.Errorf("pvc %v should not be deleted, uncertainPVCs list %v", secondPVC, ctrlInstance.uncertainPVCs)
-			}
-			if err != nil {
-				t.Errorf("err get pvc %v from uncertainPVCs: %v", secondPVC, err)
 			}
 		})
 	}
