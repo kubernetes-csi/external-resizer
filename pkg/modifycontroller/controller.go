@@ -19,6 +19,7 @@ package modifycontroller
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/kubernetes-csi/external-resizer/pkg/util"
@@ -61,7 +62,7 @@ type modifyController struct {
 	vacListerSynced     cache.InformerSynced
 	extraModifyMetadata bool
 	// the key of the map is {PVC_NAMESPACE}/{PVC_NAME}
-	uncertainPVCs map[string]v1.PersistentVolumeClaim
+	uncertainPVCs sync.Map
 	// slowSet tracks PVCs for which modification failed with infeasible error and should be retried at slower rate.
 	slowSet *slowset.SlowSet
 }
@@ -121,7 +122,6 @@ func NewModifyController(
 }
 
 func (ctrl *modifyController) initUncertainPVCs() error {
-	ctrl.uncertainPVCs = make(map[string]v1.PersistentVolumeClaim)
 	allPVCs, err := ctrl.pvcLister.List(labels.Everything())
 	if err != nil {
 		klog.Errorf("Failed to list pvcs when init uncertain pvcs: %v", err)
@@ -133,7 +133,7 @@ func (ctrl *modifyController) initUncertainPVCs() error {
 			if err != nil {
 				return err
 			}
-			ctrl.uncertainPVCs[pvcKey] = *pvc.DeepCopy()
+			ctrl.uncertainPVCs.Store(pvcKey, pvc)
 		}
 	}
 
@@ -187,10 +187,7 @@ func (ctrl *modifyController) deletePVC(obj interface{}) {
 }
 
 func (ctrl *modifyController) init(ctx context.Context) bool {
-	informersSyncd := []cache.InformerSynced{ctrl.pvListerSynced, ctrl.pvcListerSynced}
-	informersSyncd = append(informersSyncd, ctrl.vacListerSynced)
-
-	if !cache.WaitForCacheSync(ctx.Done(), informersSyncd...) {
+	if !cache.WaitForCacheSync(ctx.Done(), ctrl.pvListerSynced, ctrl.pvcListerSynced, ctrl.vacListerSynced) {
 		klog.ErrorS(nil, "Cannot sync pod, pv, pvc or vac caches")
 		return false
 	}
@@ -220,7 +217,7 @@ func (ctrl *modifyController) Run(
 	// Starts go-routine that deletes expired slowSet entries.
 	go ctrl.slowSet.Run(stopCh)
 
-	for i := 0; i < workers; i++ {
+	for range workers {
 		go wait.Until(ctrl.sync, 0, stopCh)
 	}
 
