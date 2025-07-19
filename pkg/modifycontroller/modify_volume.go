@@ -30,6 +30,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
+	"k8s.io/utils/ptr"
 )
 
 const (
@@ -40,8 +41,6 @@ const (
 
 // The return value bool is only used as a sentinel value when function returns without actually performing modification
 func (ctrl *modifyController) modify(pvc *v1.PersistentVolumeClaim, pv *v1.PersistentVolume) (*v1.PersistentVolumeClaim, *v1.PersistentVolume, error, bool) {
-	pvcSpecVacName := pvc.Spec.VolumeAttributesClassName
-	curVacName := pvc.Status.CurrentVolumeAttributesClassName
 	pvcKey, err := cache.MetaNamespaceKeyFunc(pvc)
 	if err != nil {
 		return pvc, pv, err, false
@@ -53,30 +52,60 @@ func (ctrl *modifyController) modify(pvc *v1.PersistentVolumeClaim, pv *v1.Persi
 		return pvc, pv, delayModificationErr, false
 	}
 
-	if pvcSpecVacName != nil && curVacName == nil {
-		// First time adding VAC to a PVC
-		return ctrl.validateVACAndModifyVolumeWithTarget(pvc, pv)
-	} else if pvcSpecVacName != nil && curVacName != nil && *pvcSpecVacName != *curVacName {
-		// Check if PVC in uncertain state
-		_, inUncertainState := ctrl.uncertainPVCs.Load(pvcKey)
-		status := pvc.Status.ModifyVolumeStatus
-		if !inUncertainState || status == nil {
-			klog.V(3).InfoS("previous operation on the PVC succeeded or failed with a final error, retrying")
-			return ctrl.validateVACAndModifyVolumeWithTarget(pvc, pv)
-		} else {
-			vac, err := ctrl.vacLister.Get(status.TargetVolumeAttributesClassName)
-			if err != nil {
-				if apierrors.IsNotFound(err) {
-					ctrl.eventRecorder.Eventf(pvc, v1.EventTypeWarning, util.VolumeModifyFailed, "VAC "+status.TargetVolumeAttributesClassName+" does not exist.")
-				}
-				return pvc, pv, err, false
-			}
-			return ctrl.controllerModifyVolumeWithTarget(pvc, pv, vac, pvcSpecVacName)
-		}
+	pvcSpecVacName := ptr.Deref(pvc.Spec.VolumeAttributesClassName, "")
+	curVacName := ptr.Deref(pvc.Status.CurrentVolumeAttributesClassName, "")
+	status := pvc.Status.ModifyVolumeStatus
+
+	if status == nil && pvcSpecVacName == curVacName {
+		// No modification required, already reached target state
+		return pvc, pv, nil, false
 	}
 
-	// No modification required
-	return pvc, pv, nil, false
+	// Last modification failed with non-infeasible error
+	inProgress := status != nil && status.Status == v1.PersistentVolumeClaimModifyVolumeInProgress
+
+	if pvcSpecVacName == "" && !inProgress {
+		// User don't care the target state, and we've reached a relatively stable state. Just keep it here.
+		// Note: APIServer generally not allowing setting pvcSpecVacName to empty when curVacName is not empty.
+		klog.V(4).InfoS("stop reconcile for rolled back PVC", "PV", klog.KObj(pv))
+		// Don't try to revert anything here, because we only record the result of the last modification.
+		// We don't know what happened before. User can switch between InProgress/Infeasible/Pending status
+		// freely by modifying the spec.
+		return pvc, pv, nil, false
+	}
+
+	inUncertainState := false
+	if inProgress {
+		_, inUncertainState = ctrl.uncertainPVCs.Load(pvcKey)
+	} else {
+		// we either see a stall PVC, or the status was updated externally.
+		// For stall PVC, we will get Conflict error when marking InProgress.
+		// For status updated externally, we respect the user's choice and try the new target, as if it were not uncertain.
+		// `ctrl.uncertainPVCs` will be updated after the next ControllerModifyVolume call.
+	}
+	// Check if we should change our target
+	if inUncertainState || pvcSpecVacName == "" {
+		// No. Continue our previous modification
+		vac, err := ctrl.getTargetVAC(pvc, status.TargetVolumeAttributesClassName)
+		if err != nil {
+			return pvc, pv, err, false
+		}
+		return ctrl.controllerModifyVolumeWithTarget(pvc, pv, vac)
+	}
+
+	return ctrl.validateVACAndModifyVolumeWithTarget(pvc, pv)
+}
+
+func (ctrl *modifyController) getTargetVAC(pvc *v1.PersistentVolumeClaim, vacName string) (*storagev1.VolumeAttributesClass, error) {
+	vac, err := ctrl.vacLister.Get(vacName)
+	// Check if pvcSpecVac is valid and exist
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			ctrl.eventRecorder.Eventf(pvc, v1.EventTypeWarning, util.VolumeModifyFailed, "VAC %q does not exist.", vacName)
+		}
+		return nil, fmt.Errorf("get VAC with vac name %s in VACInformer cache failed: %w", vacName, err)
+	}
+	return vac, nil
 }
 
 // func validateVACAndModifyVolumeWithTarget validate the VAC. The function sets pvc.Status.ModifyVolumeStatus
@@ -84,29 +113,23 @@ func (ctrl *modifyController) modify(pvc *v1.PersistentVolumeClaim, pv *v1.Persi
 func (ctrl *modifyController) validateVACAndModifyVolumeWithTarget(
 	pvc *v1.PersistentVolumeClaim,
 	pv *v1.PersistentVolume) (*v1.PersistentVolumeClaim, *v1.PersistentVolume, error, bool) {
-	// The controller only triggers ModifyVolume if pvcSpecVacName is not nil nor empty
-	pvcSpecVacName := pvc.Spec.VolumeAttributesClassName
-	// Check if pvcSpecVac is valid and exist
-	vac, err := ctrl.vacLister.Get(*pvcSpecVacName)
-	if err == nil {
-		// Mark pvc.Status.ModifyVolumeStatus as in progress
-		pvc, err = ctrl.markControllerModifyVolumeStatus(pvc, v1.PersistentVolumeClaimModifyVolumeInProgress, nil)
-		if err != nil {
-			return pvc, pv, err, false
-		}
-		// Record an event to indicate that external resizer is modifying this volume.
-		ctrl.eventRecorder.Event(pvc, v1.EventTypeNormal, util.VolumeModify,
-			fmt.Sprintf("external resizer is modifying volume %s with vac %s", pvc.Name, *pvcSpecVacName))
-		return ctrl.controllerModifyVolumeWithTarget(pvc, pv, vac, pvcSpecVacName)
-	} else {
-		if apierrors.IsNotFound(err) {
-			ctrl.eventRecorder.Eventf(pvc, v1.EventTypeWarning, util.VolumeModifyFailed, "VAC "+*pvcSpecVacName+" does not exist.")
-		}
-		klog.Errorf("Get VAC with vac name %s in VACInformer cache failed: %v", *pvcSpecVacName, err)
+
+	vac, err := ctrl.getTargetVAC(pvc, *pvc.Spec.VolumeAttributesClassName)
+	if err != nil {
 		// Mark pvc.Status.ModifyVolumeStatus as pending
 		pvc, err = ctrl.markControllerModifyVolumeStatus(pvc, v1.PersistentVolumeClaimModifyVolumePending, nil)
 		return pvc, pv, err, false
 	}
+
+	// Mark pvc.Status.ModifyVolumeStatus as in progress
+	pvc, err = ctrl.markControllerModifyVolumeStatus(pvc, v1.PersistentVolumeClaimModifyVolumeInProgress, nil)
+	if err != nil {
+		return pvc, pv, err, false
+	}
+	// Record an event to indicate that external resizer is modifying this volume.
+	ctrl.eventRecorder.Event(pvc, v1.EventTypeNormal, util.VolumeModify,
+		fmt.Sprintf("external resizer is modifying volume %s with vac %s", pvc.Name, vac.Name))
+	return ctrl.controllerModifyVolumeWithTarget(pvc, pv, vac)
 }
 
 // func controllerModifyVolumeWithTarget trigger the CSI ControllerModifyVolume API call
@@ -115,11 +138,11 @@ func (ctrl *modifyController) controllerModifyVolumeWithTarget(
 	pvc *v1.PersistentVolumeClaim,
 	pv *v1.PersistentVolume,
 	vacObj *storagev1.VolumeAttributesClass,
-	pvcSpecVacName *string) (*v1.PersistentVolumeClaim, *v1.PersistentVolume, error, bool) {
+) (*v1.PersistentVolumeClaim, *v1.PersistentVolume, error, bool) {
 	var err error
 	pvc, pv, err = ctrl.callModifyVolumeOnPlugin(pvc, pv, vacObj)
 	if err == nil {
-		klog.V(4).Infof("Update volumeAttributesClass of PV %q to %s succeeded", pv.Name, *pvcSpecVacName)
+		klog.V(4).Infof("Update volumeAttributesClass of PV %q to %s succeeded", pv.Name, vacObj.Name)
 		// Record an event to indicate that modify operation is successful.
 		ctrl.eventRecorder.Eventf(pvc, v1.EventTypeNormal, util.VolumeModifySuccess, fmt.Sprintf("external resizer modified volume %s with vac %s successfully", pvc.Name, vacObj.Name))
 		return pvc, pv, nil, true

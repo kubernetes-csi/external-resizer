@@ -41,6 +41,7 @@ import (
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog/v2"
+	"k8s.io/utils/ptr"
 )
 
 // ModifyController watches PVCs and checks if they are requesting an modify operation.
@@ -133,7 +134,7 @@ func (ctrl *modifyController) initUncertainPVCs() error {
 		return err
 	}
 	for _, pvc := range allPVCs {
-		if pvc.Status.ModifyVolumeStatus != nil && (pvc.Status.ModifyVolumeStatus.Status == v1.PersistentVolumeClaimModifyVolumeInProgress || pvc.Status.ModifyVolumeStatus.Status == v1.PersistentVolumeClaimModifyVolumeInfeasible) {
+		if pvc.Status.ModifyVolumeStatus != nil && (pvc.Status.ModifyVolumeStatus.Status == v1.PersistentVolumeClaimModifyVolumeInProgress) {
 			pvcKey, err := cache.MetaNamespaceKeyFunc(pvc)
 			if err != nil {
 				return err
@@ -165,12 +166,11 @@ func (ctrl *modifyController) updatePVC(oldObj, newObj interface{}) {
 	}
 
 	// Only trigger modify volume if the following conditions are met
-	// 1. Non empty vac name
-	// 2. oldVacName != newVacName
-	// 3. PVC is in Bound state
-	oldVacName := oldPVC.Spec.VolumeAttributesClassName
-	newVacName := newPVC.Spec.VolumeAttributesClassName
-	if newVacName != nil && *newVacName != "" && (oldVacName == nil || *newVacName != *oldVacName) && oldPVC.Status.Phase == v1.ClaimBound {
+	// 1. VAC changed or modify finished (check pending modify request while we are modifying)
+	// 2. PVC is in Bound state
+	oldVacName := ptr.Deref(oldPVC.Spec.VolumeAttributesClassName, "")
+	newVacName := ptr.Deref(newPVC.Spec.VolumeAttributesClassName, "")
+	if (newVacName != oldVacName || newPVC.Status.ModifyVolumeStatus == nil) && newPVC.Status.Phase == v1.ClaimBound {
 		_, err := ctrl.pvLister.Get(oldPVC.Spec.VolumeName)
 		if err != nil {
 			klog.Errorf("Get PV %q of pvc %q in PVInformer cache failed: %v", oldPVC.Spec.VolumeName, klog.KObj(oldPVC), err)
@@ -282,15 +282,13 @@ func (ctrl *modifyController) syncPVC(key string) error {
 
 	// Only trigger modify volume if the following conditions are met
 	// 1. PV provisioned by CSI driver AND driver name matches local driver
-	// 2. Non-empty vac name
-	// 3. PVC is in Bound state
+	// 2. PVC is in Bound state
 	if pv.Spec.CSI == nil || pv.Spec.CSI.Driver != ctrl.name {
 		klog.V(7).InfoS("Skipping PV provisioned by different driver", "PV", klog.KObj(pv))
 		return nil
 	}
 
-	vacName := pvc.Spec.VolumeAttributesClassName
-	if vacName != nil && *vacName != "" && pvc.Status.Phase == v1.ClaimBound {
+	if pvc.Status.Phase == v1.ClaimBound {
 		_, _, err, _ := ctrl.modify(pvc, pv)
 		if err != nil {
 			return err

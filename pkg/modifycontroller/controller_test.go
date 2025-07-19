@@ -23,13 +23,13 @@ import (
 )
 
 func TestController(t *testing.T) {
-	basePVC := createTestPVC(pvcName, testVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/)
+	basePVC := createTestPVC(pvcName, testVac /*vacName*/, testVac /*curVacName*/, "" /*targetVacName*/)
+	basePVC.Status.ModifyVolumeStatus = nil
 	basePV := createTestPV(1, pvcName, pvcNamespace, "foobaz" /*pvcUID*/, &fsVolumeMode, testVac)
 	firstTimePV := basePV.DeepCopy()
 	firstTimePV.Spec.VolumeAttributesClassName = nil
 	firstTimePVC := basePVC.DeepCopy()
 	firstTimePVC.Status.CurrentVolumeAttributesClassName = nil
-	firstTimePVC.Status.ModifyVolumeStatus = nil
 
 	tests := []struct {
 		name          string
@@ -151,6 +151,9 @@ func TestSyncPVC(t *testing.T) {
 	pvcWithUncreatedPV := createTestPVC(pvcName, targetVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/)
 	pvcWithUncreatedPV.Spec.VolumeName = ""
 
+	inprogressPVC := createTestPVC(pvcName, "" /*vacName*/, "" /*curVacName*/, testVac /*targetVacName*/)
+	inprogressPVC.Status.ModifyVolumeStatus.Status = v1.PersistentVolumeClaimModifyVolumeInProgress
+
 	nonCSIPVC := &v1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{Name: pvcName, Namespace: pvcNamespace},
 		Spec: v1.PersistentVolumeClaimSpec{
@@ -183,16 +186,22 @@ func TestSyncPVC(t *testing.T) {
 			callCSIModify: true,
 		},
 		{
+			name:          "Should NOT modify when rollback to empty VACName",
+			pvc:           createTestPVC(pvcName, "" /*vacName*/, "" /*curVacName*/, testVac /*targetVacName*/),
+			pv:            basePV,
+			callCSIModify: false,
+		},
+		{
 			name:          "Should NOT modify if PVC managed by another CSI Driver",
 			pvc:           basePVC,
 			pv:            otherDriverPV,
 			callCSIModify: false,
 		},
 		{
-			name:          "Should NOT modify if PVC has empty Spec.VACName",
-			pvc:           createTestPVC(pvcName, "" /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/),
+			name:          "Should execute ModifyVolume for InProgress target if PVC has empty Spec.VACName",
+			pvc:           inprogressPVC,
 			pv:            basePV,
-			callCSIModify: false,
+			callCSIModify: true,
 		},
 		{
 			name:          "Should NOT modify if PVC not in bound state",
