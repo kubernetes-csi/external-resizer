@@ -293,7 +293,7 @@ func (ctrl *resizeController) Run(workers int, ctx context.Context, wg *sync.Wai
 	}
 
 	if utilfeature.DefaultFeatureGate.Enabled(features.ReleaseLeaderElectionOnExit) {
-		for i := 0; i < workers; i++ {
+		for range workers {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
@@ -301,7 +301,7 @@ func (ctrl *resizeController) Run(workers int, ctx context.Context, wg *sync.Wai
 			}()
 		}
 	} else {
-		for i := 0; i < workers; i++ {
+		for range workers {
 			go wait.Until(ctrl.syncPVCs, 0, stopCh)
 		}
 	}
