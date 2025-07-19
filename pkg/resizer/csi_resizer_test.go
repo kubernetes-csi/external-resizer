@@ -72,7 +72,7 @@ func TestNewResizer(t *testing.T) {
 			Error: resizeNotSupportErr,
 		},
 	} {
-		client := csi.NewMockClient("mock", c.SupportsNodeResize, c.SupportsControllerResize, false, c.SupportsPluginControllerService, c.SupportsControllerSingleNodeMultiWriter, false)
+		client := csi.NewMockClient("mock", c.SupportsNodeResize, c.SupportsControllerResize, false, c.SupportsPluginControllerService, c.SupportsControllerSingleNodeMultiWriter)
 		driverName := "mock-driver"
 		k8sClient := fake.NewSimpleClientset()
 		resizer, err := NewResizerFromClient(client, 0, k8sClient, driverName)
@@ -106,7 +106,7 @@ func TestResizeWithSecret(t *testing.T) {
 		},
 	}
 	for _, tc := range tests {
-		client := csi.NewMockClient("mock", true, true, false, true, true, false)
+		client := csi.NewMockClient("mock", true, true, false, true, true)
 		secret := makeSecret("some-secret", "secret-namespace")
 		k8sClient := fake.NewSimpleClientset(secret)
 		pv := makeTestPV("test-csi", 2, "ebs-csi", "vol-abcde", tc.hasExpansionSecret)
@@ -164,7 +164,7 @@ func TestResizeMigratedPV(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			driverName := tc.driverName
-			client := csi.NewMockClient(driverName, true, true, false, true, true, false)
+			client := csi.NewMockClient(driverName, true, true, false, true, true)
 			client.SetCheckMigratedLabel()
 			k8sClient := fake.NewSimpleClientset()
 			resizer, err := NewResizerFromClient(client, 0, k8sClient, driverName)
@@ -433,7 +433,7 @@ func TestCanSupport(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			driverName := tc.driverName
-			client := csi.NewMockClient(driverName, true, true, false, true, true, false)
+			client := csi.NewMockClient(driverName, true, true, false, true, true)
 			k8sClient := fake.NewSimpleClientset()
 			resizer, err := NewResizerFromClient(client, 0, k8sClient, driverName)
 			if err != nil {

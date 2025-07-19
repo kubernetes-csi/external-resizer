@@ -63,7 +63,7 @@ func TestController(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			// Setup
-			client := csi.NewMockClient(testDriverName, true, true, true, true, true, false)
+			client := csi.NewMockClient(testDriverName, true, true, true, true, true)
 
 			initialObjects := []runtime.Object{test.pvc, test.pv, testVacObject, targetVacObject}
 			ctrlInstance := setupFakeK8sEnvironment(t, client, initialObjects)
@@ -114,7 +114,7 @@ func TestModifyPVC(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			client := csi.NewMockClient(testDriverName, true, true, true, true, true, false)
+			client := csi.NewMockClient(testDriverName, true, true, true, true, true)
 			if test.modifyFailure {
 				client.SetModifyError(fmt.Errorf("fake modification error"))
 			}
@@ -215,7 +215,7 @@ func TestSyncPVC(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			client := csi.NewMockClient(testDriverName, true, true, true, true, true, false)
+			client := csi.NewMockClient(testDriverName, true, true, true, true, true)
 
 			initialObjects := []runtime.Object{test.pvc, test.pv, testVacObject, targetVacObject}
 			ctrlInstance := setupFakeK8sEnvironment(t, client, initialObjects)
@@ -275,7 +275,7 @@ func TestInfeasibleRetry(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			// Setup
-			client := csi.NewMockClient(testDriverName, true, true, true, true, true, false)
+			client := csi.NewMockClient(testDriverName, true, true, true, true, true)
 			if test.csiModifyError != nil {
 				client.SetModifyError(test.csiModifyError)
 			}
@@ -339,7 +339,7 @@ func TestConcurrentSync(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			client := csi.NewMockClient(testDriverName, true, true, true, true, true, false)
+			client := csi.NewMockClient(testDriverName, true, true, true, true, true)
 			client.SetModifyError(tc.err)
 
 			initialObjects := []runtime.Object{testVacObject, targetVacObject}
