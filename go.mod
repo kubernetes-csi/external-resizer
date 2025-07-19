@@ -16,9 +16,8 @@ require (
 	k8s.io/component-base v0.34.0
 	k8s.io/csi-translation-lib v0.34.0
 	k8s.io/klog/v2 v2.130.1
+	k8s.io/utils v0.0.0-20250604170112-4c0f3b243397
 )
-
-require k8s.io/utils v0.0.0-20250604170112-4c0f3b243397
 
 require (
 	cel.dev/expr v0.24.0 // indirect

@@ -1,6 +1,8 @@
 package modifycontroller
 
 import (
+	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -151,6 +153,44 @@ func TestModify(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestModifyUncertain(t *testing.T) {
+	basePVC := createTestPVC(pvcName, targetVac /*vacName*/, testVac /*curVacName*/, targetVac /*targetVacName*/)
+	basePVC.Status.ModifyVolumeStatus.Status = v1.PersistentVolumeClaimModifyVolumeInProgress
+	basePV := createTestPV(1, pvcName, pvcNamespace, "foobaz" /*pvcUID*/, &fsVolumeMode, testVac)
+
+	client := csi.NewMockClient(testDriverName, true, true, true, true, true, false)
+	initialObjects := []runtime.Object{testVacObject, targetVacObject, basePVC, basePV}
+	ctrlInstance := setupFakeK8sEnvironment(t, client, initialObjects)
+
+	pvcKey := fmt.Sprintf("%s/%s", pvcNamespace, pvcName)
+	assertUncertain := func(uncertain bool) {
+		t.Helper()
+		_, ok := ctrlInstance.uncertainPVCs.Load(pvcKey)
+		if ok != uncertain {
+			t.Fatalf("expected uncertain state to be %v, got %v", uncertain, ok)
+		}
+	}
+
+	// initialized to uncertain
+	assertUncertain(true)
+
+	client.SetModifyError(finalErr)
+	pvc, pv, err, _ := ctrlInstance.modify(basePVC, basePV)
+	if !errors.Is(err, finalErr) {
+		t.Fatalf("expected error to be %v, got %v", finalErr, err)
+	}
+	// should clear uncertain state
+	assertUncertain(false)
+
+	client.SetModifyError(nonFinalErr)
+	_, _, err, _ = ctrlInstance.modify(pvc, pv)
+	if !errors.Is(err, nonFinalErr) {
+		t.Fatalf("expected error to be %v, got %v", nonFinalErr, err)
+	}
+	// should enter uncertain state again
+	assertUncertain(true)
 }
 
 func createTestPVC(pvcName string, vacName string, curVacName string, targetVacName string) *v1.PersistentVolumeClaim {
