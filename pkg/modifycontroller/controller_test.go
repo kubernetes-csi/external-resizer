@@ -4,25 +4,22 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/kubernetes-csi/external-resizer/pkg/util"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/tools/cache"
 	"testing"
 	"time"
 
-	"github.com/kubernetes-csi/external-resizer/pkg/features"
-
-	"k8s.io/client-go/util/workqueue"
-
 	"github.com/kubernetes-csi/external-resizer/pkg/csi"
+	"github.com/kubernetes-csi/external-resizer/pkg/features"
 	"github.com/kubernetes-csi/external-resizer/pkg/modifier"
-
+	"github.com/kubernetes-csi/external-resizer/pkg/util"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	v1 "k8s.io/api/core/v1"
 	storagev1beta1 "k8s.io/api/storage/v1beta1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
+	"k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/util/workqueue"
 	featuregatetesting "k8s.io/component-base/featuregate/testing"
 )
 
@@ -71,8 +68,7 @@ func TestController(t *testing.T) {
 			client := csi.NewMockClient(testDriverName, true, true, true, true, true, false)
 
 			initialObjects := []runtime.Object{test.pvc, test.pv, testVacObject, targetVacObject}
-			ctrlInstance, ctx := setupFakeK8sEnvironment(t, client, initialObjects)
-			defer ctx.Done()
+			ctrlInstance := setupFakeK8sEnvironment(t, client, initialObjects)
 
 			_, _, err, _ := ctrlInstance.modify(test.pvc, test.pv)
 			if err != nil {
@@ -126,8 +122,7 @@ func TestModifyPVC(t *testing.T) {
 			}
 
 			initialObjects := []runtime.Object{test.pvc, test.pv, testVacObject, targetVacObject}
-			ctrlInstance, ctx := setupFakeK8sEnvironment(t, client, initialObjects)
-			defer ctx.Done()
+			ctrlInstance := setupFakeK8sEnvironment(t, client, initialObjects)
 
 			_, _, err, _ := ctrlInstance.modify(test.pvc, test.pv)
 
@@ -225,8 +220,7 @@ func TestSyncPVC(t *testing.T) {
 			client := csi.NewMockClient(testDriverName, true, true, true, true, true, false)
 
 			initialObjects := []runtime.Object{test.pvc, test.pv, testVacObject, targetVacObject}
-			ctrlInstance, ctx := setupFakeK8sEnvironment(t, client, initialObjects)
-			defer ctx.Done()
+			ctrlInstance := setupFakeK8sEnvironment(t, client, initialObjects)
 
 			err := ctrlInstance.syncPVC(pvcNamespace + "/" + pvcName)
 			if err != nil {
@@ -289,8 +283,7 @@ func TestInfeasibleRetry(t *testing.T) {
 			}
 
 			initialObjects := []runtime.Object{test.pvc, basePV, testVacObject, targetVacObject}
-			ctrlInstance, ctx := setupFakeK8sEnvironment(t, client, initialObjects)
-			defer ctx.Done()
+			ctrlInstance := setupFakeK8sEnvironment(t, client, initialObjects)
 
 			// Attempt modification first time
 			err := ctrlInstance.syncPVC(pvcNamespace + "/" + pvcName)
@@ -329,7 +322,7 @@ func TestInfeasibleRetry(t *testing.T) {
 }
 
 // setupFakeK8sEnvironment creates fake K8s environment and starts Informers and ModifyController
-func setupFakeK8sEnvironment(t *testing.T, client *csi.MockClient, initialObjects []runtime.Object) (*modifyController, context.Context) {
+func setupFakeK8sEnvironment(t *testing.T, client *csi.MockClient, initialObjects []runtime.Object) *modifyController {
 	t.Helper()
 
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.VolumeAttributesClass, true)
@@ -356,8 +349,7 @@ func setupFakeK8sEnvironment(t *testing.T, client *csi.MockClient, initialObject
 	stopCh := make(chan struct{})
 	informerFactory.Start(stopCh)
 
-	ctx := context.TODO()
-	go controller.Run(1, ctx)
+	go controller.Run(1, t.Context())
 
 	/* Add initial objects to informer caches */
 	for _, obj := range initialObjects {
@@ -375,5 +367,5 @@ func setupFakeK8sEnvironment(t *testing.T, client *csi.MockClient, initialObject
 
 	ctrlInstance, _ := controller.(*modifyController)
 
-	return ctrlInstance, ctx
+	return ctrlInstance
 }
