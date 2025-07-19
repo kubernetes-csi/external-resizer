@@ -33,7 +33,7 @@ var (
 )
 
 func TestModify(t *testing.T) {
-	basePVC := createTestPVC(pvcName, testVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/)
+	basePVC := createTestPVC(pvcName, testVac /*vacName*/, testVac /*curVacName*/, "" /*targetVacName*/)
 	basePV := createTestPV(1, pvcName, pvcNamespace, "foobaz" /*pvcUID*/, &fsVolumeMode, testVac)
 
 	var tests = []struct {
@@ -220,9 +220,12 @@ func createTestPVC(pvcName string, vacName string, curVacName string, targetVacN
 			CurrentVolumeAttributesClassName: &curVacName,
 			ModifyVolumeStatus: &v1.ModifyVolumeStatus{
 				TargetVolumeAttributesClassName: targetVacName,
-				Status:                          "",
+				Status:                          v1.PersistentVolumeClaimModifyVolumeInfeasible,
 			},
 		},
+	}
+	if targetVacName == "" {
+		pvc.Status.ModifyVolumeStatus = nil
 	}
 	return pvc
 }
