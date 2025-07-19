@@ -18,10 +18,12 @@ package modifycontroller
 
 import (
 	"fmt"
+
 	"github.com/kubernetes-csi/external-resizer/pkg/util"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/utils/ptr"
 )
 
 // markControllerModifyVolumeStatus will mark ModifyVolumeStatus other than completed in the PVC
@@ -31,10 +33,10 @@ func (ctrl *modifyController) markControllerModifyVolumeStatus(
 	err error) (*v1.PersistentVolumeClaim, error) {
 
 	newPVC := pvc.DeepCopy()
-	if newPVC.Status.ModifyVolumeStatus == nil {
-		newPVC.Status.ModifyVolumeStatus = &v1.ModifyVolumeStatus{}
+	newPVC.Status.ModifyVolumeStatus = &v1.ModifyVolumeStatus{
+		Status:                          modifyVolumeStatus,
+		TargetVolumeAttributesClassName: ptr.Deref(pvc.Spec.VolumeAttributesClassName, ""),
 	}
-	newPVC.Status.ModifyVolumeStatus.Status = modifyVolumeStatus
 	// Update PVC's Condition to indicate modification
 	pvcCondition := v1.PersistentVolumeClaimCondition{
 		Type:               v1.PersistentVolumeClaimVolumeModifyingVolume,
@@ -45,7 +47,6 @@ func (ctrl *modifyController) markControllerModifyVolumeStatus(
 	switch modifyVolumeStatus {
 	case v1.PersistentVolumeClaimModifyVolumeInProgress:
 		conditionMessage = "ModifyVolume operation in progress."
-		newPVC.Status.ModifyVolumeStatus.TargetVolumeAttributesClassName = *pvc.Spec.VolumeAttributesClassName
 	case v1.PersistentVolumeClaimModifyVolumeInfeasible:
 		conditionMessage = "ModifyVolume failed with error" + err.Error() + ". Waiting for retry."
 	}
