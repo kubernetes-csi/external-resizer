@@ -109,8 +109,7 @@ func TestModify(t *testing.T) {
 			if test.vacExists {
 				initialObjects = append(initialObjects, targetVacObject)
 			}
-			ctrlInstance, ctx := setupFakeK8sEnvironment(t, client, initialObjects)
-			defer ctx.Done()
+			ctrlInstance := setupFakeK8sEnvironment(t, client, initialObjects)
 
 			// Action
 			pvc, pv, err, modifyCalled := ctrlInstance.modify(test.pvc, test.pv)

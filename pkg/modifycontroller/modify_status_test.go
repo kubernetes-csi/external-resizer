@@ -322,9 +322,7 @@ func TestRemovePVCFromModifyVolumeUncertainCache(t *testing.T) {
 			stopCh := make(chan struct{})
 			informerFactory.Start(stopCh)
 
-			ctx := context.TODO()
-			defer ctx.Done()
-			success := ctrlInstance.init(ctx)
+			success := ctrlInstance.init(t.Context())
 			if !success {
 				t.Fatal("failed to init controller")
 			}
