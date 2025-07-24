@@ -25,7 +25,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	v1 "k8s.io/api/core/v1"
-	storagev1beta1 "k8s.io/api/storage/v1beta1"
+	storagev1 "k8s.io/api/storage/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
@@ -112,7 +112,7 @@ func (ctrl *modifyController) validateVACAndModifyVolumeWithTarget(
 func (ctrl *modifyController) controllerModifyVolumeWithTarget(
 	pvc *v1.PersistentVolumeClaim,
 	pv *v1.PersistentVolume,
-	vacObj *storagev1beta1.VolumeAttributesClass,
+	vacObj *storagev1.VolumeAttributesClass,
 	pvcSpecVacName *string) (*v1.PersistentVolumeClaim, *v1.PersistentVolume, error, bool) {
 	var err error
 	pvc, pv, err = ctrl.callModifyVolumeOnPlugin(pvc, pv, vacObj)
@@ -160,7 +160,7 @@ func (ctrl *modifyController) controllerModifyVolumeWithTarget(
 func (ctrl *modifyController) callModifyVolumeOnPlugin(
 	pvc *v1.PersistentVolumeClaim,
 	pv *v1.PersistentVolume,
-	vac *storagev1beta1.VolumeAttributesClass) (*v1.PersistentVolumeClaim, *v1.PersistentVolume, error) {
+	vac *storagev1.VolumeAttributesClass) (*v1.PersistentVolumeClaim, *v1.PersistentVolume, error) {
 	if ctrl.extraModifyMetadata {
 		vac.Parameters[pvcNameKey] = pvc.GetName()
 		vac.Parameters[pvcNamespaceKey] = pvc.GetNamespace()
