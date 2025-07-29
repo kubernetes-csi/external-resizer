@@ -281,3 +281,18 @@ func IsInfeasibleError(err error) bool {
 	// even start or failed. It is for sure not in progress.
 	return false
 }
+
+func IsVacRolledBack(pvc *v1.PersistentVolumeClaim) bool {
+	pvcSpecVacName := pvc.Spec.VolumeAttributesClassName
+	curVacName := pvc.Status.CurrentVolumeAttributesClassName
+	targetVacName := pvc.Status.ModifyVolumeStatus.TargetVolumeAttributesClassName
+	// Case 1: rollback to nil or empty string
+	// Case 2: rollback to previous VAC
+	return ((pvcSpecVacName == nil || *pvcSpecVacName == "") && (curVacName == nil || *curVacName == "") && targetVacName != "") ||
+		(pvcSpecVacName != nil && curVacName != nil &&
+			*pvcSpecVacName == *curVacName && targetVacName != *curVacName)
+}
+
+func CurrentModificationInfeasible(pvc *v1.PersistentVolumeClaim) bool {
+	return pvc.Status.ModifyVolumeStatus != nil && pvc.Status.ModifyVolumeStatus.Status == v1.PersistentVolumeClaimModifyVolumeInfeasible
+}
