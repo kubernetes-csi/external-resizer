@@ -14,7 +14,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	v1 "k8s.io/api/core/v1"
-	storagev1beta1 "k8s.io/api/storage/v1beta1"
+	storagev1 "k8s.io/api/storage/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
@@ -331,7 +331,7 @@ func setupFakeK8sEnvironment(t *testing.T, client *csi.MockClient, initialObject
 	kubeClient, informerFactory := fakeK8s(initialObjects)
 	pvInformer := informerFactory.Core().V1().PersistentVolumes()
 	pvcInformer := informerFactory.Core().V1().PersistentVolumeClaims()
-	vacInformer := informerFactory.Storage().V1beta1().VolumeAttributesClasses()
+	vacInformer := informerFactory.Storage().V1().VolumeAttributesClasses()
 
 	driverName, _ := client.GetDriverName(context.TODO())
 
@@ -358,7 +358,7 @@ func setupFakeK8sEnvironment(t *testing.T, client *csi.MockClient, initialObject
 			pvInformer.Informer().GetStore().Add(obj)
 		case *v1.PersistentVolumeClaim:
 			pvcInformer.Informer().GetStore().Add(obj)
-		case *storagev1beta1.VolumeAttributesClass:
+		case *storagev1.VolumeAttributesClass:
 			vacInformer.Informer().GetStore().Add(obj)
 		default:
 			t.Fatalf("Test %s: Unknown initalObject type: %+v", t.Name(), obj)
