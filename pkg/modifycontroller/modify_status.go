@@ -48,7 +48,7 @@ func (ctrl *modifyController) markControllerModifyVolumeStatus(
 	case v1.PersistentVolumeClaimModifyVolumeInProgress:
 		conditionMessage = "ModifyVolume operation in progress."
 	case v1.PersistentVolumeClaimModifyVolumeInfeasible:
-		conditionMessage = "ModifyVolume failed with error" + err.Error() + ". Waiting for retry."
+		conditionMessage = "ModifyVolume failed with error: " + err.Error() + ". Waiting for retry."
 	}
 	pvcCondition.Message = conditionMessage
 	// Do not change conditions for pending modifications and keep existing conditions
