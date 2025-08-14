@@ -37,8 +37,8 @@ import (
 )
 
 var (
-	controllerServiceNotSupportErr = errors.New("CSI driver does not support controller service")
-	resizeNotSupportErr            = errors.New("CSI driver neither supports controller resize nor node resize")
+	errControllerServiceNotSupport = errors.New("CSI driver does not support controller service")
+	errResizeNotSupport            = errors.New("CSI driver neither supports controller resize nor node resize")
 )
 
 func NewResizerFromClient(
@@ -53,7 +53,7 @@ func NewResizerFromClient(
 	}
 
 	if !supportControllerService {
-		return nil, controllerServiceNotSupportErr
+		return nil, errControllerServiceNotSupport
 	}
 
 	supportControllerResize, err := supportsControllerResize(csiClient, timeout)
@@ -70,7 +70,7 @@ func NewResizerFromClient(
 			klog.InfoS("The CSI driver supports node resize only, using trivial resizer to handle resize requests")
 			return newTrivialResizer(driverName), nil
 		}
-		return nil, resizeNotSupportErr
+		return nil, errResizeNotSupport
 	}
 
 	_, err = supportsControllerSingleNodeMultiWriter(csiClient, timeout)
