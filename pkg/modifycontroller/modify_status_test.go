@@ -2,7 +2,7 @@ package modifycontroller
 
 import (
 	"context"
-	"reflect"
+	"errors"
 	"testing"
 	"time"
 
@@ -37,7 +37,6 @@ var (
 	targetVac              = "target-vac"
 	testDriverName         = "mock"
 	infeasibleErr          = status.Errorf(codes.InvalidArgument, "Parameters in VolumeAttributesClass is invalid")
-	finalErr               = status.Errorf(codes.Internal, "Final error")
 	pvcConditionInProgress = v1.PersistentVolumeClaimCondition{
 		Type:    v1.PersistentVolumeClaimVolumeModifyingVolume,
 		Status:  v1.ConditionTrue,
@@ -83,7 +82,7 @@ func TestMarkControllerModifyVolumeStatus(t *testing.T) {
 			pvc:                basePVC.Get(),
 			expectedPVC:        basePVC.WithModifyVolumeStatus(v1.PersistentVolumeClaimModifyVolumeInfeasible).Get(),
 			expectedConditions: []v1.PersistentVolumeClaimCondition{pvcConditionInfeasible},
-			expectedErr:        infeasibleErr,
+			expectedErr:        nil,
 			testFunc: func(pvc *v1.PersistentVolumeClaim, ctrl *modifyController) (*v1.PersistentVolumeClaim, error) {
 				return ctrl.markControllerModifyVolumeStatus(pvc, v1.PersistentVolumeClaimModifyVolumeInfeasible, infeasibleErr)
 			},
@@ -126,14 +125,14 @@ func TestMarkControllerModifyVolumeStatus(t *testing.T) {
 			ctrlInstance, _ := controller.(*modifyController)
 
 			pvc, err = tc.testFunc(pvc, ctrlInstance)
-			if err != nil && !reflect.DeepEqual(tc.expectedErr, err) {
-				t.Errorf("Expected error to be %v but got %v", tc.expectedErr, err)
+			if !errors.Is(err, tc.expectedErr) {
+				t.Errorf("expected error: %v, got: %v", tc.expectedErr, err)
 			}
 
 			realStatus := pvc.Status.ModifyVolumeStatus.Status
 			expectedStatus := tc.expectedPVC.Status.ModifyVolumeStatus.Status
-			if !reflect.DeepEqual(realStatus, expectedStatus) {
-				t.Errorf("expected modify volume status %+v got %+v", expectedStatus, realStatus)
+			if diff := cmp.Diff(expectedStatus, realStatus); diff != "" {
+				t.Errorf("unexpected modify volume status (-want +got):\n%s", diff)
 			}
 
 			realConditions := pvc.Status.Conditions
@@ -167,8 +166,6 @@ func TestUpdateConditionBasedOnError(t *testing.T) {
 			client := csi.NewMockClient("foo", true, true, true, true, true)
 			driverName, _ := client.GetDriverName(context.TODO())
 
-			pvc := test.pvc
-
 			var initialObjects []runtime.Object
 			initialObjects = append(initialObjects, test.pvc)
 
@@ -185,9 +182,9 @@ func TestUpdateConditionBasedOnError(t *testing.T) {
 
 			ctrlInstance, _ := controller.(*modifyController)
 
-			pvc, err = ctrlInstance.updateConditionBasedOnError(tc.pvc, err)
-			if err != nil && !reflect.DeepEqual(tc.expectedErr, err) {
-				t.Errorf("Expected error to be %v but got %v", tc.expectedErr, err)
+			pvc, err := ctrlInstance.updateConditionBasedOnError(tc.pvc, err)
+			if !errors.Is(err, tc.expectedErr) {
+				t.Errorf("expected error: %v, got: %v", tc.expectedErr, err)
 			}
 
 			if !testutil.CompareConditions(pvc.Status.Conditions, tc.expectedConditions) {
@@ -254,8 +251,8 @@ func TestMarkControllerModifyVolumeCompleted(t *testing.T) {
 			ctrlInstance, _ := controller.(*modifyController)
 
 			actualPVC, pv, err := ctrlInstance.markControllerModifyVolumeCompleted(tc.pvc, tc.pv)
-			if err != nil && !reflect.DeepEqual(tc.expectedErr, err) {
-				t.Errorf("Expected error to be %v but got %v", tc.expectedErr, err)
+			if !errors.Is(err, tc.expectedErr) {
+				t.Errorf("expected error: %v, got: %v", tc.expectedErr, err)
 			}
 
 			if len(actualPVC.Status.Conditions) == 0 {
@@ -263,11 +260,11 @@ func TestMarkControllerModifyVolumeCompleted(t *testing.T) {
 			}
 
 			if diff := cmp.Diff(tc.expectedPVC, actualPVC); diff != "" {
-				t.Errorf("expected pvc %+v got %+v, diff is: %v", tc.expectedPVC, actualPVC, diff)
+				t.Errorf("unexpected pvc (-want +got):\n%s", diff)
 			}
 
 			if diff := cmp.Diff(tc.expectedPV, pv); diff != "" {
-				t.Errorf("expected pvc %+v got %+v, diff is: %v", tc.expectedPV, pv, diff)
+				t.Errorf("unexpected pv (-want +got):\n%s", diff)
 			}
 		})
 	}

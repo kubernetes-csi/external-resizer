@@ -143,7 +143,7 @@ func (ctrl *modifyController) initUncertainPVCs() error {
 	return nil
 }
 
-func (ctrl *modifyController) addPVC(obj interface{}) {
+func (ctrl *modifyController) addPVC(obj any) {
 	objKey, err := util.GetObjectKey(obj)
 	if err != nil {
 		return
@@ -151,7 +151,7 @@ func (ctrl *modifyController) addPVC(obj interface{}) {
 	ctrl.claimQueue.Add(objKey)
 }
 
-func (ctrl *modifyController) updatePVC(oldObj, newObj interface{}) {
+func (ctrl *modifyController) updatePVC(oldObj, newObj any) {
 	oldPVC, ok := oldObj.(*v1.PersistentVolumeClaim)
 	if !ok || oldPVC == nil {
 		return
@@ -181,7 +181,7 @@ func (ctrl *modifyController) updatePVC(oldObj, newObj interface{}) {
 	}
 }
 
-func (ctrl *modifyController) deletePVC(obj interface{}) {
+func (ctrl *modifyController) deletePVC(obj any) {
 	objKey, err := util.GetObjectKey(obj)
 	if err != nil {
 		return
@@ -278,7 +278,7 @@ func (ctrl *modifyController) syncPVC(key string) error {
 
 	pv, err := ctrl.pvLister.Get(pvc.Spec.VolumeName)
 	if err != nil {
-		return fmt.Errorf("Get PV %q of pvc %q in PVInformer cache failed: %v", pvc.Spec.VolumeName, klog.KObj(pvc), err)
+		return fmt.Errorf("get pv %q of pvc %q in PVInformer cache failed: %v", pvc.Spec.VolumeName, klog.KObj(pvc), err)
 	}
 
 	// Only trigger modify volume if the following conditions are met

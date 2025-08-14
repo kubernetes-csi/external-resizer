@@ -60,13 +60,13 @@ func TestGetPVCPatchData(t *testing.T) {
 			t.Errorf("Case %d: Get patch data failed: %v", i, err)
 		}
 
-		var patchMap map[string]interface{}
+		var patchMap map[string]any
 		err = json.Unmarshal(patchBytes, &patchMap)
 		if err != nil {
 			t.Errorf("Case %d: unmarshalling json patch failed: %v", i, err)
 		}
 
-		metadata, exist := patchMap["metadata"].(map[string]interface{})
+		metadata, exist := patchMap["metadata"].(map[string]any)
 		if !exist {
 			t.Errorf("Case %d: ResourceVersion should exist in patch data", i)
 		}

@@ -100,7 +100,7 @@ func (c *MockClient) Expand(
 		additionalInfoVal := additionalInfo.(connection.AdditionalInfo)
 		migrated := additionalInfoVal.Migrated
 		if migrated != "true" {
-			err := fmt.Errorf("Expected value of migrated label: true, Actual value: %s", migrated)
+			err := fmt.Errorf("migrated label expected value: true, actual value: %s", migrated)
 			return requestBytes, c.supportsNodeResize, err
 		}
 	}
