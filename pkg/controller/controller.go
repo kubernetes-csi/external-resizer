@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/kubernetes-csi/csi-lib-utils/slowset"
@@ -53,7 +54,7 @@ import (
 // If requested, it will resize according PVs and update PVCs' status to reflect the new size.
 type ResizeController interface {
 	// Run starts the controller.
-	Run(workers int, ctx context.Context)
+	Run(workers int, ctx context.Context, wg *sync.WaitGroup)
 }
 
 type resizeController struct {
@@ -270,7 +271,7 @@ func (ctrl *resizeController) deletePVC(obj interface{}) {
 }
 
 // Run starts the controller.
-func (ctrl *resizeController) Run(workers int, ctx context.Context) {
+func (ctrl *resizeController) Run(workers int, ctx context.Context, wg *sync.WaitGroup) {
 	defer ctrl.claimQueue.ShutDown()
 
 	klog.InfoS("Starting external resizer", "controller", ctrl.name)
@@ -291,8 +292,18 @@ func (ctrl *resizeController) Run(workers int, ctx context.Context) {
 		go ctrl.slowSet.Run(stopCh)
 	}
 
-	for i := 0; i < workers; i++ {
-		go wait.Until(ctrl.syncPVCs, 0, stopCh)
+	if utilfeature.DefaultFeatureGate.Enabled(features.ReleaseLeaderElectionOnExit) {
+		for i := 0; i < workers; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				wait.Until(ctrl.syncPVCs, 0, stopCh)
+			}()
+		}
+	} else {
+		for i := 0; i < workers; i++ {
+			go wait.Until(ctrl.syncPVCs, 0, stopCh)
+		}
 	}
 
 	<-stopCh

@@ -40,6 +40,12 @@ const (
 	//
 	// Pass VolumeAttributesClass parameters to supporting CSI drivers during ModifyVolume
 	VolumeAttributesClass featuregate.Feature = "VolumeAttributesClass"
+
+	// owner: @rhrmo
+	// alpha: v1.35
+	//
+	// Releases leader election lease on sigterm / sigint.
+	ReleaseLeaderElectionOnExit featuregate.Feature = "ReleaseLeaderElectionOnExit"
 )
 
 func init() {
@@ -50,4 +56,5 @@ var defaultResizerFeatureGates = map[featuregate.Feature]featuregate.FeatureSpec
 	AnnotateFsResize:              {Default: false, PreRelease: featuregate.Alpha},
 	RecoverVolumeExpansionFailure: {Default: true, PreRelease: featuregate.Beta},
 	VolumeAttributesClass:         {Default: false, PreRelease: featuregate.Beta},
+	ReleaseLeaderElectionOnExit:   {Default: false, PreRelease: featuregate.Alpha},
 }
