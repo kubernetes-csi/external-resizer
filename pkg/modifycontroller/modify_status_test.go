@@ -46,7 +46,7 @@ var (
 	pvcConditionInfeasible = v1.PersistentVolumeClaimCondition{
 		Type:    v1.PersistentVolumeClaimVolumeModifyingVolume,
 		Status:  v1.ConditionTrue,
-		Message: "ModifyVolume failed with errorrpc error: code = InvalidArgument desc = Parameters in VolumeAttributesClass is invalid. Waiting for retry.",
+		Message: "ModifyVolume failed with error rpc error: code = InvalidArgument desc = Parameters in VolumeAttributesClass is invalid. Waiting for retry.",
 	}
 
 	pvcConditionError = v1.PersistentVolumeClaimCondition{
