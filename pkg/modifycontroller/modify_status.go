@@ -22,7 +22,6 @@ import (
 	"github.com/kubernetes-csi/external-resizer/pkg/util"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/tools/cache"
 	"k8s.io/utils/ptr"
 )
 
@@ -48,7 +47,8 @@ func (ctrl *modifyController) markControllerModifyVolumeStatus(
 	case v1.PersistentVolumeClaimModifyVolumeInProgress:
 		conditionMessage = "ModifyVolume operation in progress."
 	case v1.PersistentVolumeClaimModifyVolumeInfeasible:
-		conditionMessage = "ModifyVolume failed with error" + err.Error() + ". Waiting for retry."
+		newPVC.Status.ModifyVolumeStatus.TargetVolumeAttributesClassName = pvc.Status.ModifyVolumeStatus.TargetVolumeAttributesClassName
+		conditionMessage = "ModifyVolume failed with error " + err.Error() + ". Waiting for retry."
 	}
 	pvcCondition.Message = conditionMessage
 	// Do not change conditions for pending modifications and keep existing conditions
@@ -60,16 +60,6 @@ func (ctrl *modifyController) markControllerModifyVolumeStatus(
 	updatedPVC, err := util.PatchClaim(ctrl.kubeClient, pvc, newPVC, true /* addResourceVersionCheck */)
 	if err != nil {
 		return pvc, fmt.Errorf("mark PVC %q as modify volume failed, errored with: %v", pvc.Name, err)
-	}
-	// Remove this PVC from the uncertain cache since the status is known now
-	if modifyVolumeStatus == v1.PersistentVolumeClaimModifyVolumeInfeasible {
-		pvcKey, err := cache.MetaNamespaceKeyFunc(pvc)
-		if err != nil {
-			return pvc, err
-		}
-
-		ctrl.removePVCFromModifyVolumeUncertainCache(pvcKey)
-		ctrl.markForSlowRetry(pvc, pvcKey)
 	}
 	return updatedPVC, nil
 }
@@ -143,16 +133,4 @@ func clearModifyVolumeConditions(conditions []v1.PersistentVolumeClaimCondition)
 		}
 	}
 	return knownConditions
-}
-
-// removePVCFromModifyVolumeUncertainCache removes the pvc from the uncertain cache
-func (ctrl *modifyController) removePVCFromModifyVolumeUncertainCache(pvcKey string) {
-	if ctrl.uncertainPVCs == nil {
-		return
-	}
-	// Format of the key of the uncertainPVCs is NAMESPACE/NAME of the pvc
-	_, ok := ctrl.uncertainPVCs[pvcKey]
-	if ok {
-		delete(ctrl.uncertainPVCs, pvcKey)
-	}
 }
