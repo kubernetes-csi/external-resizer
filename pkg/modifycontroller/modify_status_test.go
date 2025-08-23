@@ -44,15 +44,15 @@ var (
 	}
 
 	pvcConditionInfeasible = v1.PersistentVolumeClaimCondition{
-		Type:    v1.PersistentVolumeClaimVolumeModifyingVolume,
+		Type:    v1.PersistentVolumeClaimVolumeModifyVolumeError,
 		Status:  v1.ConditionTrue,
-		Message: "ModifyVolume failed with errorrpc error: code = InvalidArgument desc = Parameters in VolumeAttributesClass is invalid. Waiting for retry.",
+		Message: "ModifyVolume failed with error: rpc error: code = InvalidArgument desc = Parameters in VolumeAttributesClass is invalid. Waiting for retry.",
 	}
 
 	pvcConditionError = v1.PersistentVolumeClaimCondition{
 		Type:    v1.PersistentVolumeClaimVolumeModifyVolumeError,
 		Status:  v1.ConditionTrue,
-		Message: "ModifyVolume failed with error. Waiting for retry.",
+		Message: "ModifyVolume failed with error: rpc error: code = Internal desc = Final error. Waiting for retry.",
 	}
 )
 
@@ -75,6 +75,16 @@ func TestMarkControllerModifyVolumeStatus(t *testing.T) {
 			expectedErr:        nil,
 			testFunc: func(pvc *v1.PersistentVolumeClaim, ctrl *modifyController) (*v1.PersistentVolumeClaim, error) {
 				return ctrl.markControllerModifyVolumeStatus(pvc, v1.PersistentVolumeClaimModifyVolumeInProgress, nil)
+			},
+		},
+		{
+			name:               "mark modify volume as failed",
+			pvc:                basePVC.Get(),
+			expectedPVC:        basePVC.WithModifyVolumeStatus(v1.PersistentVolumeClaimModifyVolumeInProgress).Get(),
+			expectedConditions: []v1.PersistentVolumeClaimCondition{pvcConditionError},
+			expectedErr:        nil,
+			testFunc: func(pvc *v1.PersistentVolumeClaim, ctrl *modifyController) (*v1.PersistentVolumeClaim, error) {
+				return ctrl.markControllerModifyVolumeStatus(pvc, v1.PersistentVolumeClaimModifyVolumeInProgress, finalErr)
 			},
 		},
 		{
@@ -138,59 +148,6 @@ func TestMarkControllerModifyVolumeStatus(t *testing.T) {
 			realConditions := pvc.Status.Conditions
 			if !testutil.CompareConditions(realConditions, tc.expectedConditions) {
 				t.Errorf("expected conditions %+v got %+v", tc.expectedConditions, realConditions)
-			}
-		})
-	}
-}
-
-func TestUpdateConditionBasedOnError(t *testing.T) {
-	basePVC := testutil.MakeTestPVC([]v1.PersistentVolumeClaimCondition{})
-
-	tests := []struct {
-		name               string
-		pvc                *v1.PersistentVolumeClaim
-		expectedConditions []v1.PersistentVolumeClaimCondition
-		expectedErr        error
-	}{
-		{
-			name:               "update condition based on error",
-			pvc:                basePVC.Get(),
-			expectedConditions: []v1.PersistentVolumeClaimCondition{pvcConditionError},
-		},
-	}
-
-	for _, test := range tests {
-		tc := test
-		t.Run(tc.name, func(t *testing.T) {
-			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.VolumeAttributesClass, true)
-			client := csi.NewMockClient("foo", true, true, true, true, true)
-			driverName, _ := client.GetDriverName(context.TODO())
-
-			pvc := test.pvc
-
-			var initialObjects []runtime.Object
-			initialObjects = append(initialObjects, test.pvc)
-
-			kubeClient, informerFactory := fakeK8s(initialObjects)
-
-			csiModifier, err := modifier.NewModifierFromClient(client, 15*time.Second, kubeClient, informerFactory, false, driverName)
-			if err != nil {
-				t.Fatalf("Test %s: Unable to create modifier: %v", test.name, err)
-			}
-			controller := NewModifyController(driverName,
-				csiModifier, kubeClient,
-				time.Second, 2*time.Minute, false, informerFactory,
-				workqueue.DefaultTypedControllerRateLimiter[string]())
-
-			ctrlInstance, _ := controller.(*modifyController)
-
-			pvc, err = ctrlInstance.updateConditionBasedOnError(tc.pvc, err)
-			if err != nil && !reflect.DeepEqual(tc.expectedErr, err) {
-				t.Errorf("Expected error to be %v but got %v", tc.expectedErr, err)
-			}
-
-			if !testutil.CompareConditions(pvc.Status.Conditions, tc.expectedConditions) {
-				t.Errorf("expected conditions %+v got %+v", tc.expectedConditions, pvc.Status.Conditions)
 			}
 		})
 	}

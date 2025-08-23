@@ -36,53 +36,28 @@ func (ctrl *modifyController) markControllerModifyVolumeStatus(
 		Status:                          modifyVolumeStatus,
 		TargetVolumeAttributesClassName: ptr.Deref(pvc.Spec.VolumeAttributesClassName, ""),
 	}
-	// Update PVC's Condition to indicate modification
-	pvcCondition := v1.PersistentVolumeClaimCondition{
-		Type:               v1.PersistentVolumeClaimVolumeModifyingVolume,
-		Status:             v1.ConditionTrue,
-		LastTransitionTime: metav1.Now(),
-	}
-	conditionMessage := ""
-	switch modifyVolumeStatus {
-	case v1.PersistentVolumeClaimModifyVolumeInProgress:
-		conditionMessage = "ModifyVolume operation in progress."
-	case v1.PersistentVolumeClaimModifyVolumeInfeasible:
+	if err != nil {
 		newPVC.Status.ModifyVolumeStatus.TargetVolumeAttributesClassName = pvc.Status.ModifyVolumeStatus.TargetVolumeAttributesClassName
-		conditionMessage = "ModifyVolume failed with error" + err.Error() + ". Waiting for retry."
 	}
-	pvcCondition.Message = conditionMessage
 	// Do not change conditions for pending modifications and keep existing conditions
 	if modifyVolumeStatus != v1.PersistentVolumeClaimModifyVolumePending {
-		newPVC.Status.Conditions = util.MergeModifyVolumeConditionsOfPVC(newPVC.Status.Conditions,
-			[]v1.PersistentVolumeClaimCondition{pvcCondition})
+		newCondition := v1.PersistentVolumeClaimCondition{
+			Status:             v1.ConditionTrue,
+			LastTransitionTime: metav1.Now(),
+		}
+		if err == nil {
+			newCondition.Type = v1.PersistentVolumeClaimVolumeModifyingVolume
+			newCondition.Message = "ModifyVolume operation in progress."
+		} else {
+			newCondition.Type = v1.PersistentVolumeClaimVolumeModifyVolumeError
+			newCondition.Message = "ModifyVolume failed with error: " + err.Error() + ". Waiting for retry."
+		}
+		newPVC.Status.Conditions = util.MergeModifyVolumeConditionsOfPVC(newPVC.Status.Conditions, []v1.PersistentVolumeClaimCondition{newCondition})
 	}
 
 	updatedPVC, err := util.PatchClaim(ctrl.kubeClient, pvc, newPVC, true /* addResourceVersionCheck */)
 	if err != nil {
 		return pvc, fmt.Errorf("mark PVC %q as modify volume failed, errored with: %v", pvc.Name, err)
-	}
-	return updatedPVC, nil
-}
-
-func (ctrl *modifyController) updateConditionBasedOnError(pvc *v1.PersistentVolumeClaim, err error) (*v1.PersistentVolumeClaim, error) {
-	newPVC := pvc.DeepCopy()
-	pvcCondition := v1.PersistentVolumeClaimCondition{
-		Type:               v1.PersistentVolumeClaimVolumeModifyVolumeError,
-		Status:             v1.ConditionTrue,
-		LastTransitionTime: metav1.Now(),
-		Message:            "ModifyVolume failed with error. Waiting for retry.",
-	}
-
-	if err != nil {
-		pvcCondition.Message = "ModifyVolume failed with error: " + err.Error() + ". Waiting for retry."
-	}
-
-	newPVC.Status.Conditions = util.MergeModifyVolumeConditionsOfPVC(newPVC.Status.Conditions,
-		[]v1.PersistentVolumeClaimCondition{pvcCondition})
-
-	updatedPVC, err := util.PatchClaim(ctrl.kubeClient, pvc, newPVC, false /* addResourceVersionCheck */)
-	if err != nil {
-		return pvc, fmt.Errorf("mark PVC %q as controller expansion failed, errored with: %v", pvc.Name, err)
 	}
 	return updatedPVC, nil
 }

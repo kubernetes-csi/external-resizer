@@ -149,10 +149,7 @@ func (ctrl *modifyController) controllerModifyVolumeWithTarget(
 	} else {
 		errStatus, ok := status.FromError(err)
 		if ok {
-			pvc, updateConditionErr := ctrl.updateConditionBasedOnError(pvc, err)
-			if updateConditionErr != nil {
-				return nil, nil, err, false
-			}
+			targetStatus := v1.PersistentVolumeClaimModifyVolumeInProgress
 			pvcKey, keyErr := cache.MetaNamespaceKeyFunc(pvc)
 			if keyErr != nil {
 				return pvc, pv, keyErr, false
@@ -164,15 +161,16 @@ func (ctrl *modifyController) controllerModifyVolumeWithTarget(
 				// Only InvalidArgument can be set to Infeasible state
 				// Final errors other than InvalidArgument will still be in InProgress state
 				if errStatus.Code() == codes.InvalidArgument {
-					// Mark pvc.Status.ModifyVolumeStatus as infeasible
-					pvc, markModifyVolumeInfeasibleError := ctrl.markControllerModifyVolumeStatus(pvc, v1.PersistentVolumeClaimModifyVolumeInfeasible, err)
-					if markModifyVolumeInfeasibleError != nil {
-						return pvc, pv, markModifyVolumeInfeasibleError, false
-					}
-					ctrl.markForSlowRetry(pvc, pvcKey)
+					targetStatus = v1.PersistentVolumeClaimModifyVolumeInfeasible
 				}
 				ctrl.uncertainPVCs.Delete(pvcKey)
 			}
+			var markErr error
+			pvc, markErr = ctrl.markControllerModifyVolumeStatus(pvc, targetStatus, err)
+			if markErr != nil {
+				return pvc, pv, markErr, false
+			}
+			ctrl.markForSlowRetry(pvc, pvcKey)
 		} else {
 			return pvc, pv, fmt.Errorf("cannot get error status from modify volume err: %v", err), false
 		}
