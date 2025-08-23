@@ -59,14 +59,15 @@ func (ctrl *modifyController) modify(pvc *v1.PersistentVolumeClaim, pv *v1.Persi
 	} else if pvcSpecVacName != nil && curVacName != nil && *pvcSpecVacName != *curVacName {
 		// Check if PVC in uncertain state
 		_, inUncertainState := ctrl.uncertainPVCs.Load(pvcKey)
-		if !inUncertainState {
-			klog.V(3).InfoS("previous operation on the PVC failed with a final error, retrying")
+		status := pvc.Status.ModifyVolumeStatus
+		if !inUncertainState || status == nil {
+			klog.V(3).InfoS("previous operation on the PVC succeeded or failed with a final error, retrying")
 			return ctrl.validateVACAndModifyVolumeWithTarget(pvc, pv)
 		} else {
-			vac, err := ctrl.vacLister.Get(*pvcSpecVacName)
+			vac, err := ctrl.vacLister.Get(status.TargetVolumeAttributesClassName)
 			if err != nil {
 				if apierrors.IsNotFound(err) {
-					ctrl.eventRecorder.Eventf(pvc, v1.EventTypeWarning, util.VolumeModifyFailed, "VAC "+*pvcSpecVacName+" does not exist.")
+					ctrl.eventRecorder.Eventf(pvc, v1.EventTypeWarning, util.VolumeModifyFailed, "VAC "+status.TargetVolumeAttributesClassName+" does not exist.")
 				}
 				return pvc, pv, err, false
 			}

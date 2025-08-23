@@ -15,6 +15,7 @@ import (
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
+	"k8s.io/utils/ptr"
 )
 
 var (
@@ -177,12 +178,22 @@ func TestModifyUncertain(t *testing.T) {
 	assertUncertain(false)
 
 	client.SetModifyError(nonFinalErr)
-	_, _, err, _ = ctrlInstance.modify(pvc, pv)
+	pvc, pv, err, _ = ctrlInstance.modify(pvc, pv)
 	if !errors.Is(err, nonFinalErr) {
 		t.Fatalf("expected error to be %v, got %v", nonFinalErr, err)
 	}
 	// should enter uncertain state again
 	assertUncertain(true)
+
+	pvc.Spec.VolumeAttributesClassName = ptr.To("yet-another-vac")
+	pvc, _, err, _ = ctrlInstance.modify(pvc, pv)
+	if !errors.Is(err, nonFinalErr) {
+		t.Fatalf("expected error to be %v, got %v", nonFinalErr, err)
+	}
+	// target should not change, yet-another-vac should be ignored
+	if pvc.Status.ModifyVolumeStatus.TargetVolumeAttributesClassName != targetVac {
+		t.Fatalf("expected target to be %v, got %v", targetVac, pvc.Status.ModifyVolumeStatus.TargetVolumeAttributesClassName)
+	}
 }
 
 func createTestPVC(pvcName string, vacName string, curVacName string, targetVacName string) *v1.PersistentVolumeClaim {
