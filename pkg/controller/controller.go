@@ -291,7 +291,7 @@ func (ctrl *resizeController) Run(workers int, ctx context.Context) {
 		go ctrl.slowSet.Run(stopCh)
 	}
 
-	for i := 0; i < workers; i++ {
+	for range workers {
 		go wait.Until(ctrl.syncPVCs, 0, stopCh)
 	}
 
