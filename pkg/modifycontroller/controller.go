@@ -19,8 +19,10 @@ package modifycontroller
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
+	"github.com/kubernetes-csi/external-resizer/pkg/features"
 	"github.com/kubernetes-csi/external-resizer/pkg/util"
 
 	"github.com/kubernetes-csi/csi-lib-utils/slowset"
@@ -28,6 +30,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/wait"
+	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -44,7 +47,7 @@ import (
 // If requested, it will modify the volume according to parameters in VolumeAttributesClass
 type ModifyController interface {
 	// Run starts the controller.
-	Run(workers int, ctx context.Context)
+	Run(workers int, ctx context.Context, wg *sync.WaitGroup)
 }
 
 type modifyController struct {
@@ -205,7 +208,7 @@ func (ctrl *modifyController) init(ctx context.Context) bool {
 
 // Run starts the controller.
 func (ctrl *modifyController) Run(
-	workers int, ctx context.Context) {
+	workers int, ctx context.Context, wg *sync.WaitGroup) {
 	defer ctrl.claimQueue.ShutDown()
 
 	klog.InfoS("Starting external resizer for modify volume", "controller", ctrl.name)
@@ -220,8 +223,18 @@ func (ctrl *modifyController) Run(
 	// Starts go-routine that deletes expired slowSet entries.
 	go ctrl.slowSet.Run(stopCh)
 
-	for i := 0; i < workers; i++ {
-		go wait.Until(ctrl.sync, 0, stopCh)
+	if utilfeature.DefaultFeatureGate.Enabled(features.ReleaseLeaderElectionOnExit) {
+		for i := 0; i < workers; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				wait.Until(ctrl.sync, 0, stopCh)
+			}()
+		}
+	} else {
+		for i := 0; i < workers; i++ {
+			go wait.Until(ctrl.sync, 0, stopCh)
+		}
 	}
 
 	<-stopCh

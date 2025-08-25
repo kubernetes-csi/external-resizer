@@ -349,7 +349,7 @@ func setupFakeK8sEnvironment(t *testing.T, client *csi.MockClient, initialObject
 	stopCh := make(chan struct{})
 	informerFactory.Start(stopCh)
 
-	go controller.Run(1, t.Context())
+	go controller.Run(1, t.Context(), nil)
 
 	/* Add initial objects to informer caches */
 	for _, obj := range initialObjects {

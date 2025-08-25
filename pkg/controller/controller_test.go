@@ -261,7 +261,7 @@ func TestController(t *testing.T) {
 		stopCh := make(chan struct{})
 		informerFactory.Start(stopCh)
 
-		go controller.Run(1, t.Context())
+		go controller.Run(1, t.Context(), nil)
 
 		for _, obj := range initialObjects {
 			switch obj.(type) {
