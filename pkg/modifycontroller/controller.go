@@ -28,6 +28,7 @@ import (
 	"github.com/kubernetes-csi/csi-lib-utils/slowset"
 	"github.com/kubernetes-csi/external-resizer/pkg/modifier"
 	v1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/wait"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
@@ -177,6 +178,7 @@ func (ctrl *modifyController) updatePVC(oldObj, newObj interface{}) {
 			return
 		}
 		// Handle modify volume by adding to the claimQueue to avoid race conditions
+		klog.V(4).InfoS("Enqueueing PVC for modify", "PVC", klog.KObj(newPVC))
 		ctrl.addPVC(newObj)
 	} else {
 		klog.V(4).InfoS("No need to modify PVC", "PVC", klog.KObj(newPVC))
@@ -267,6 +269,10 @@ func (ctrl *modifyController) syncPVC(key string) error {
 
 	pvc, err := ctrl.pvcLister.PersistentVolumeClaims(namespace).Get(name)
 	if err != nil {
+		if apierrors.IsNotFound(err) {
+			klog.V(3).InfoS("PVC is deleted or does not exist", "PVC", klog.KRef(namespace, name))
+			return nil
+		}
 		return fmt.Errorf("getting PVC %s/%s failed: %v", namespace, name, err)
 	}
 

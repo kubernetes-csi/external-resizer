@@ -204,6 +204,11 @@ func TestSyncPVC(t *testing.T) {
 			callCSIModify: true,
 		},
 		{
+			name:          "Should NOT modify if PVC deleted",
+			pvc:           nil,
+			callCSIModify: false,
+		},
+		{
 			name:          "Should NOT modify if PVC not in bound state",
 			pvc:           unboundPVC,
 			pv:            basePV,
@@ -227,7 +232,13 @@ func TestSyncPVC(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			client := csi.NewMockClient(testDriverName, true, true, true, true, true)
 
-			initialObjects := []runtime.Object{test.pvc, test.pv, testVacObject, targetVacObject}
+			initialObjects := []runtime.Object{testVacObject, targetVacObject}
+			if test.pvc != nil {
+				initialObjects = append(initialObjects, test.pvc)
+			}
+			if test.pv != nil {
+				initialObjects = append(initialObjects, test.pv)
+			}
 			ctrlInstance := setupFakeK8sEnvironment(t, client, initialObjects)
 
 			err := ctrlInstance.syncPVC(pvcNamespace + "/" + pvcName)
