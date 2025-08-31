@@ -368,8 +368,8 @@ func (ctrl *resizeController) syncPVC(key string) error {
 		return fmt.Errorf("get PV %q of pvc %q failed: %v", pvc.Spec.VolumeName, klog.KObj(pvc), err)
 	}
 	if !exists {
-		klog.InfoS("PV bound to PVC not found", "PV", pvc.Spec.VolumeName, "PVC", klog.KObj(pvc))
-		return nil
+		// requeue since the informer probably just didn't pick up the PV yet
+		return fmt.Errorf("PV %q bound to pvc %q not found", pvc.Spec.VolumeName, klog.KObj(pvc))
 	}
 
 	pv, ok := volumeObj.(*v1.PersistentVolume)
