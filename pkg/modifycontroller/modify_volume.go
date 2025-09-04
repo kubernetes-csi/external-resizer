@@ -57,15 +57,16 @@ func (ctrl *modifyController) modify(pvc *v1.PersistentVolumeClaim, pv *v1.Persi
 		return ctrl.validateVACAndModifyVolumeWithTarget(pvc, pv)
 	} else if pvcSpecVacName != nil && curVacName != nil && *pvcSpecVacName != *curVacName {
 		// Check if PVC in uncertain state
-		_, inUncertainState := ctrl.uncertainPVCs[pvcKey]
-		if !inUncertainState {
-			klog.V(3).InfoS("previous operation on the PVC failed with a final error, retrying")
+		_, inUncertainState := ctrl.uncertainPVCs.Load(pvcKey)
+		status := pvc.Status.ModifyVolumeStatus
+		if !inUncertainState || status == nil {
+			klog.V(3).InfoS("previous operation on the PVC succeeded or failed with a final error, retrying")
 			return ctrl.validateVACAndModifyVolumeWithTarget(pvc, pv)
 		} else {
-			vac, err := ctrl.vacLister.Get(*pvcSpecVacName)
+			vac, err := ctrl.vacLister.Get(status.TargetVolumeAttributesClassName)
 			if err != nil {
 				if apierrors.IsNotFound(err) {
-					ctrl.eventRecorder.Eventf(pvc, v1.EventTypeWarning, util.VolumeModifyFailed, "VAC "+*pvcSpecVacName+" does not exist.")
+					ctrl.eventRecorder.Eventf(pvc, v1.EventTypeWarning, util.VolumeModifyFailed, "VAC "+status.TargetVolumeAttributesClassName+" does not exist.")
 				}
 				return pvc, pv, err, false
 			}
@@ -119,7 +120,7 @@ func (ctrl *modifyController) controllerModifyVolumeWithTarget(
 	if err == nil {
 		klog.V(4).Infof("Update volumeAttributesClass of PV %q to %s succeeded", pv.Name, *pvcSpecVacName)
 		// Record an event to indicate that modify operation is successful.
-		ctrl.eventRecorder.Eventf(pvc, v1.EventTypeNormal, util.VolumeModifySuccess, fmt.Sprintf("external resizer modified volume %s with vac %s successfully ", pvc.Name, vacObj.Name))
+		ctrl.eventRecorder.Eventf(pvc, v1.EventTypeNormal, util.VolumeModifySuccess, fmt.Sprintf("external resizer modified volume %s with vac %s successfully", pvc.Name, vacObj.Name))
 		return pvc, pv, nil, true
 	} else {
 		errStatus, ok := status.FromError(err)
@@ -132,9 +133,9 @@ func (ctrl *modifyController) controllerModifyVolumeWithTarget(
 			if keyErr != nil {
 				return pvc, pv, keyErr, false
 			}
-			if !util.IsFinalError(keyErr) {
+			if !util.IsFinalError(err) {
 				// update conditions and cache pvc as uncertain
-				ctrl.uncertainPVCs[pvcKey] = *pvc
+				ctrl.uncertainPVCs.Store(pvcKey, pvc)
 			} else {
 				// Only InvalidArgument can be set to Infeasible state
 				// Final errors other than InvalidArgument will still be in InProgress state
@@ -146,10 +147,10 @@ func (ctrl *modifyController) controllerModifyVolumeWithTarget(
 					}
 					ctrl.markForSlowRetry(pvc, pvcKey)
 				}
-				ctrl.removePVCFromModifyVolumeUncertainCache(pvcKey)
+				ctrl.uncertainPVCs.Delete(pvcKey)
 			}
 		} else {
-			return pvc, pv, fmt.Errorf("cannot get error status from modify volume err: %v ", err), false
+			return pvc, pv, fmt.Errorf("cannot get error status from modify volume err: %v", err), false
 		}
 		// Record an event to indicate that modify operation is failed.
 		ctrl.eventRecorder.Eventf(pvc, v1.EventTypeWarning, util.VolumeModifyFailed, err.Error())
