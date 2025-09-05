@@ -159,7 +159,7 @@ func TestExpandAndRecover(t *testing.T) {
 		test := tests[i]
 		t.Run(test.name, func(t *testing.T) {
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.RecoverVolumeExpansionFailure, true)
-			client := csi.NewMockClient("foo", !test.disableNodeExpansion, !test.disableControllerExpansion, false, true, true, false)
+			client := csi.NewMockClient("foo", !test.disableNodeExpansion, !test.disableControllerExpansion, false, true, true)
 			driverName, _ := client.GetDriverName(context.TODO())
 			if test.expansionError != nil {
 				client.SetExpansionError(test.expansionError)
