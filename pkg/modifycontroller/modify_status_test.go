@@ -14,7 +14,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	v1 "k8s.io/api/core/v1"
-	storagev1beta1 "k8s.io/api/storage/v1beta1"
+	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -306,7 +306,7 @@ func TestRemovePVCFromModifyVolumeUncertainCache(t *testing.T) {
 			pvInformer := informerFactory.Core().V1().PersistentVolumes()
 			pvcInformer := informerFactory.Core().V1().PersistentVolumeClaims()
 			podInformer := informerFactory.Core().V1().Pods()
-			vacInformer := informerFactory.Storage().V1beta1().VolumeAttributesClasses()
+			vacInformer := informerFactory.Storage().V1().VolumeAttributesClasses()
 
 			csiModifier, err := modifier.NewModifierFromClient(client, 15*time.Second, kubeClient, informerFactory, false, driverName)
 			if err != nil {
@@ -335,7 +335,7 @@ func TestRemovePVCFromModifyVolumeUncertainCache(t *testing.T) {
 					pvcInformer.Informer().GetStore().Add(obj)
 				case *v1.Pod:
 					podInformer.Informer().GetStore().Add(obj)
-				case *storagev1beta1.VolumeAttributesClass:
+				case *storagev1.VolumeAttributesClass:
 					vacInformer.Informer().GetStore().Add(obj)
 				default:
 					t.Fatalf("Test %s: Unknown initalObject type: %+v", test.name, obj)
