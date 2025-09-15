@@ -3,6 +3,8 @@ package csi
 import (
 	"context"
 	"fmt"
+	"maps"
+	"sync"
 	"sync/atomic"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
@@ -16,7 +18,6 @@ func NewMockClient(
 	supportsControllerModify bool,
 	supportsPluginControllerService bool,
 	supportsControllerSingleNodeMultiWriter bool,
-	supportsExtraModifyMetada bool,
 ) *MockClient {
 	return &MockClient{
 		name:                                    name,
@@ -25,7 +26,7 @@ func NewMockClient(
 		supportsControllerModify:                supportsControllerModify,
 		supportsPluginControllerService:         supportsPluginControllerService,
 		supportsControllerSingleNodeMultiWriter: supportsControllerSingleNodeMultiWriter,
-		extraModifyMetadata:                     supportsExtraModifyMetada,
+		modifiedParameters:                      make(map[string]string),
 	}
 }
 
@@ -43,7 +44,8 @@ type MockClient struct {
 	checkMigratedLabel                      bool
 	usedSecrets                             atomic.Pointer[map[string]string]
 	usedCapability                          atomic.Pointer[csi.VolumeCapability]
-	extraModifyMetadata                     bool
+	modifyMu                                sync.Mutex
+	modifiedParameters                      map[string]string
 }
 
 func (c *MockClient) GetDriverName(context.Context) (string, error) {
@@ -116,6 +118,12 @@ func (c *MockClient) GetModifyCount() int {
 	return int(c.modifyCalled.Load())
 }
 
+func (c *MockClient) GetModifiedParameters() map[string]string {
+	c.modifyMu.Lock()
+	defer c.modifyMu.Unlock()
+	return maps.Clone(c.modifiedParameters)
+}
+
 func (c *MockClient) GetCapability() *csi.VolumeCapability {
 	return c.usedCapability.Load()
 }
@@ -138,5 +146,8 @@ func (c *MockClient) Modify(
 	if c.modifyError != nil {
 		return c.modifyError
 	}
+	c.modifyMu.Lock()
+	defer c.modifyMu.Unlock()
+	maps.Copy(c.modifiedParameters, mutableParameters)
 	return nil
 }
