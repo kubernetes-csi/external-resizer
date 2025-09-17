@@ -224,7 +224,7 @@ func (ctrl *modifyController) Run(
 	go ctrl.slowSet.Run(stopCh)
 
 	if utilfeature.DefaultFeatureGate.Enabled(features.ReleaseLeaderElectionOnExit) {
-		for i := 0; i < workers; i++ {
+		for range workers {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
@@ -232,7 +232,7 @@ func (ctrl *modifyController) Run(
 			}()
 		}
 	} else {
-		for i := 0; i < workers; i++ {
+		for range workers {
 			go wait.Until(ctrl.sync, 0, stopCh)
 		}
 	}
