@@ -42,7 +42,7 @@ func TestNewResizer(t *testing.T) {
 			SupportsPluginControllerService:         false,
 			SupportsControllerSingleNodeMultiWriter: true,
 
-			Error: controllerServiceNotSupportErr,
+			Error: errControllerServiceNotSupport,
 		},
 		// Controller modify not supported.
 		{
@@ -69,7 +69,7 @@ func TestNewResizer(t *testing.T) {
 			SupportsPluginControllerService:         true,
 			SupportsControllerSingleNodeMultiWriter: true,
 
-			Error: resizeNotSupportErr,
+			Error: errResizeNotSupport,
 		},
 	} {
 		client := csi.NewMockClient("mock", c.SupportsNodeResize, c.SupportsControllerResize, false, c.SupportsPluginControllerService, c.SupportsControllerSingleNodeMultiWriter)

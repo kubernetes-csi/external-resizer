@@ -139,7 +139,7 @@ func GetPVCPatchData(oldPVC, newPVC *v1.PersistentVolumeClaim, addResourceVersio
 }
 
 func addResourceVersion(patchBytes []byte, resourceVersion string) ([]byte, error) {
-	var patchMap map[string]interface{}
+	var patchMap map[string]any
 	err := json.Unmarshal(patchBytes, &patchMap)
 	if err != nil {
 		return nil, fmt.Errorf("error unmarshalling patch with %v", err)
@@ -157,7 +157,7 @@ func addResourceVersion(patchBytes []byte, resourceVersion string) ([]byte, erro
 	return versionBytes, nil
 }
 
-func GetPatchData(oldObj, newObj interface{}) ([]byte, error) {
+func GetPatchData(oldObj, newObj any) ([]byte, error) {
 	oldData, err := json.Marshal(oldObj)
 	if err != nil {
 		return nil, fmt.Errorf("marshal old object failed: %v", err)
@@ -195,7 +195,7 @@ func SanitizeName(name string) string {
 	return name
 }
 
-func GetObjectKey(obj interface{}) (string, error) {
+func GetObjectKey(obj any) (string, error) {
 	if unknown, ok := obj.(cache.DeletedFinalStateUnknown); ok && unknown.Obj != nil {
 		obj = unknown.Obj
 	}

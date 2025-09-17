@@ -1,17 +1,12 @@
 package modifier
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/kubernetes-csi/external-resizer/pkg/csi"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
-)
-
-var (
-	controllerServiceNotSupportErr = errors.New("CSI driver does not support controller service")
 )
 
 func TestNewModifier(t *testing.T) {
