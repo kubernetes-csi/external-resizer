@@ -30,16 +30,16 @@ func TestResizeFunctions(t *testing.T) {
 	}{
 		{
 			name:        "mark fs resize, with no other conditions",
-			pvc:         basePVC.Get(),
-			expectedPVC: basePVC.WithStorageResourceStatus(v1.PersistentVolumeClaimNodeResizePending).Get(),
+			pvc:         basePVC().Get(),
+			expectedPVC: basePVC().WithStorageResourceStatus(v1.PersistentVolumeClaimNodeResizePending).Get(),
 			testFunc: func(pvc *v1.PersistentVolumeClaim, ctrl *resizeController, size resource.Quantity) (*v1.PersistentVolumeClaim, error) {
 				return ctrl.markForPendingNodeExpansion(pvc)
 			},
 		},
 		{
 			name: "mark fs resize, when other resource statuses are present",
-			pvc:  basePVC.WithResourceStatus(v1.ResourceCPU, v1.PersistentVolumeClaimControllerResizeInfeasible).Get(),
-			expectedPVC: basePVC.WithResourceStatus(v1.ResourceCPU, v1.PersistentVolumeClaimControllerResizeInfeasible).
+			pvc:  basePVC().WithResourceStatus(v1.ResourceCPU, v1.PersistentVolumeClaimControllerResizeInfeasible).Get(),
+			expectedPVC: basePVC().WithResourceStatus(v1.ResourceCPU, v1.PersistentVolumeClaimControllerResizeInfeasible).
 				WithStorageResourceStatus(v1.PersistentVolumeClaimNodeResizePending).Get(),
 			testFunc: func(pvc *v1.PersistentVolumeClaim, ctrl *resizeController, _ resource.Quantity) (*v1.PersistentVolumeClaim, error) {
 				return ctrl.markForPendingNodeExpansion(pvc)
@@ -47,25 +47,25 @@ func TestResizeFunctions(t *testing.T) {
 		},
 		{
 			name:        "mark controller resize in-progress",
-			pvc:         basePVC.Get(),
-			expectedPVC: basePVC.WithStorageResourceStatus(v1.PersistentVolumeClaimControllerResizeInProgress).Get(),
+			pvc:         basePVC().Get(),
+			expectedPVC: basePVC().WithStorageResourceStatus(v1.PersistentVolumeClaimControllerResizeInProgress).Get(),
 			testFunc: func(pvc *v1.PersistentVolumeClaim, ctrl *resizeController, q resource.Quantity) (*v1.PersistentVolumeClaim, error) {
 				return ctrl.markControllerResizeInProgress(pvc, q, true)
 			},
 		},
 		{
 			name:        "mark controller resize failed",
-			pvc:         basePVC.Get(),
-			expectedPVC: basePVC.WithStorageResourceStatus(v1.PersistentVolumeClaimControllerResizeInfeasible).Get(),
+			pvc:         basePVC().Get(),
+			expectedPVC: basePVC().WithStorageResourceStatus(v1.PersistentVolumeClaimControllerResizeInfeasible).Get(),
 			testFunc: func(pvc *v1.PersistentVolumeClaim, ctrl *resizeController, q resource.Quantity) (*v1.PersistentVolumeClaim, error) {
 				return ctrl.markControllerExpansionInfeasible(pvc, fmt.Errorf("things failed"))
 			},
 		},
 		{
 			name: "mark resize finished",
-			pvc: basePVC.WithResourceStatus(v1.ResourceCPU, v1.PersistentVolumeClaimControllerResizeInfeasible).
+			pvc: basePVC().WithResourceStatus(v1.ResourceCPU, v1.PersistentVolumeClaimControllerResizeInfeasible).
 				WithStorageResourceStatus(v1.PersistentVolumeClaimNodeResizePending).Get(),
-			expectedPVC: basePVC.WithResourceStatus(v1.ResourceCPU, v1.PersistentVolumeClaimControllerResizeInfeasible).
+			expectedPVC: basePVC().WithResourceStatus(v1.ResourceCPU, v1.PersistentVolumeClaimControllerResizeInfeasible).
 				WithStorageResourceStatus("").Get(),
 			testFunc: func(pvc *v1.PersistentVolumeClaim, ctrl *resizeController, q resource.Quantity) (*v1.PersistentVolumeClaim, error) {
 				return ctrl.markOverallExpansionAsFinished(pvc, q)

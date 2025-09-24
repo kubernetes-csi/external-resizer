@@ -69,8 +69,8 @@ func TestMarkControllerModifyVolumeStatus(t *testing.T) {
 	}{
 		{
 			name:               "mark modify volume as in progress",
-			pvc:                basePVC.Get(),
-			expectedPVC:        basePVC.WithModifyVolumeStatus(v1.PersistentVolumeClaimModifyVolumeInProgress).Get(),
+			pvc:                basePVC().Get(),
+			expectedPVC:        basePVC().WithModifyVolumeStatus(v1.PersistentVolumeClaimModifyVolumeInProgress).Get(),
 			expectedConditions: []v1.PersistentVolumeClaimCondition{pvcConditionInProgress},
 			expectedErr:        nil,
 			testFunc: func(pvc *v1.PersistentVolumeClaim, ctrl *modifyController) (*v1.PersistentVolumeClaim, error) {
@@ -79,8 +79,8 @@ func TestMarkControllerModifyVolumeStatus(t *testing.T) {
 		},
 		{
 			name:               "mark modify volume as failed",
-			pvc:                basePVC.Get(),
-			expectedPVC:        basePVC.WithModifyVolumeStatus(v1.PersistentVolumeClaimModifyVolumeInProgress).Get(),
+			pvc:                basePVC().WithConditions([]v1.PersistentVolumeClaimCondition{pvcConditionInProgress}).Get(),
+			expectedPVC:        basePVC().WithModifyVolumeStatus(v1.PersistentVolumeClaimModifyVolumeInProgress).Get(),
 			expectedConditions: []v1.PersistentVolumeClaimCondition{pvcConditionError},
 			expectedErr:        nil,
 			testFunc: func(pvc *v1.PersistentVolumeClaim, ctrl *modifyController) (*v1.PersistentVolumeClaim, error) {
@@ -89,8 +89,8 @@ func TestMarkControllerModifyVolumeStatus(t *testing.T) {
 		},
 		{
 			name:               "mark modify volume as infeasible",
-			pvc:                basePVC.Get(),
-			expectedPVC:        basePVC.WithModifyVolumeStatus(v1.PersistentVolumeClaimModifyVolumeInfeasible).Get(),
+			pvc:                basePVC().WithConditions([]v1.PersistentVolumeClaimCondition{pvcConditionInProgress}).Get(),
+			expectedPVC:        basePVC().WithModifyVolumeStatus(v1.PersistentVolumeClaimModifyVolumeInfeasible).Get(),
 			expectedConditions: []v1.PersistentVolumeClaimCondition{pvcConditionInfeasible},
 			expectedErr:        infeasibleErr,
 			testFunc: func(pvc *v1.PersistentVolumeClaim, ctrl *modifyController) (*v1.PersistentVolumeClaim, error) {
@@ -99,9 +99,9 @@ func TestMarkControllerModifyVolumeStatus(t *testing.T) {
 		},
 		{
 			name:               "mark modify volume as pending",
-			pvc:                basePVC.Get(),
-			expectedPVC:        basePVC.WithModifyVolumeStatus(v1.PersistentVolumeClaimModifyVolumePending).Get(),
-			expectedConditions: nil,
+			pvc:                basePVC().WithConditions([]v1.PersistentVolumeClaimCondition{pvcConditionInfeasible}).Get(),
+			expectedPVC:        basePVC().WithModifyVolumeStatus(v1.PersistentVolumeClaimModifyVolumePending).Get(),
+			expectedConditions: []v1.PersistentVolumeClaimCondition{pvcConditionInfeasible}, // not touched
 			expectedErr:        nil,
 			testFunc: func(pvc *v1.PersistentVolumeClaim, ctrl *modifyController) (*v1.PersistentVolumeClaim, error) {
 				return ctrl.markControllerModifyVolumeStatus(pvc, v1.PersistentVolumeClaimModifyVolumePending, nil)
@@ -158,7 +158,7 @@ func TestMarkControllerModifyVolumeCompleted(t *testing.T) {
 	basePV := createTestPV(1, pvcName, pvcNamespace, "foobaz" /*pvcUID*/, &fsVolumeMode, testVac)
 	expectedPV := basePV.DeepCopy()
 	expectedPV.Spec.VolumeAttributesClassName = &targetVac
-	expectedPVC := basePVC.WithCurrentVolumeAttributesClassName(targetVac).Get()
+	expectedPVC := basePVC().WithCurrentVolumeAttributesClassName(targetVac).Get()
 	expectedPVC.Status.ModifyVolumeStatus = nil
 
 	tests := []struct {
@@ -171,14 +171,14 @@ func TestMarkControllerModifyVolumeCompleted(t *testing.T) {
 	}{
 		{
 			name:        "update modify volume status to completed",
-			pvc:         basePVC.Get(),
+			pvc:         basePVC().Get(),
 			pv:          basePV,
 			expectedPVC: expectedPVC,
 			expectedPV:  expectedPV,
 		},
 		{
 			name:        "update modify volume status to completed, and clear conditions",
-			pvc:         basePVC.WithConditions([]v1.PersistentVolumeClaimCondition{pvcConditionInProgress}).Get(),
+			pvc:         basePVC().WithConditions([]v1.PersistentVolumeClaimCondition{pvcConditionInProgress}).Get(),
 			pv:          basePV,
 			expectedPVC: expectedPVC,
 			expectedPV:  expectedPV,
