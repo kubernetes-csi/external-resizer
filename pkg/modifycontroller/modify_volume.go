@@ -148,6 +148,7 @@ func (ctrl *modifyController) controllerModifyVolumeWithTarget(
 		return pvc, pv, nil, true
 	} else {
 		errStatus, ok := status.FromError(err)
+		errMsg := err.Error()
 		if ok {
 			targetStatus := v1.PersistentVolumeClaimModifyVolumeInProgress
 			pvcKey, keyErr := cache.MetaNamespaceKeyFunc(pvc)
@@ -157,6 +158,7 @@ func (ctrl *modifyController) controllerModifyVolumeWithTarget(
 			if !util.IsFinalError(err) {
 				// update conditions and cache pvc as uncertain
 				ctrl.uncertainPVCs.Store(pvcKey, pvc)
+				errMsg += ". Still modifying to VAC " + vacObj.Name
 			} else {
 				// Only InvalidArgument can be set to Infeasible state
 				// Final errors other than InvalidArgument will still be in InProgress state
@@ -175,7 +177,7 @@ func (ctrl *modifyController) controllerModifyVolumeWithTarget(
 			return pvc, pv, fmt.Errorf("cannot get error status from modify volume err: %v", err), false
 		}
 		// Record an event to indicate that modify operation is failed.
-		ctrl.eventRecorder.Eventf(pvc, v1.EventTypeWarning, util.VolumeModifyFailed, err.Error())
+		ctrl.eventRecorder.Event(pvc, v1.EventTypeWarning, util.VolumeModifyFailed, errMsg)
 		return pvc, pv, err, false
 	}
 }
