@@ -143,7 +143,8 @@ func CompareConditions(realConditions, expectedConditions []v1.PersistentVolumeC
 	}
 
 	for i, condition := range realConditions {
-		if condition.Type != expectedConditions[i].Type || condition.Message != expectedConditions[i].Message || condition.Status != expectedConditions[i].Status {
+		if condition.Type != expectedConditions[i].Type || condition.Message != expectedConditions[i].Message ||
+			condition.Status != expectedConditions[i].Status || condition.Reason != expectedConditions[i].Reason {
 			return false
 		}
 	}

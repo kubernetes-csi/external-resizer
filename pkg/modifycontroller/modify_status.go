@@ -20,6 +20,7 @@ import (
 	"fmt"
 
 	"github.com/kubernetes-csi/external-resizer/pkg/util"
+	"google.golang.org/grpc/status"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
@@ -31,28 +32,45 @@ func (ctrl *modifyController) markControllerModifyVolumeStatus(
 	modifyVolumeStatus v1.PersistentVolumeClaimModifyVolumeStatus,
 	err error) (*v1.PersistentVolumeClaim, error) {
 
+	targetVAC := ptr.Deref(pvc.Spec.VolumeAttributesClassName, "")
+	if err != nil {
+		targetVAC = pvc.Status.ModifyVolumeStatus.TargetVolumeAttributesClassName
+	}
+
 	newPVC := pvc.DeepCopy()
 	newPVC.Status.ModifyVolumeStatus = &v1.ModifyVolumeStatus{
 		Status:                          modifyVolumeStatus,
-		TargetVolumeAttributesClassName: ptr.Deref(pvc.Spec.VolumeAttributesClassName, ""),
-	}
-	if err != nil {
-		newPVC.Status.ModifyVolumeStatus.TargetVolumeAttributesClassName = pvc.Status.ModifyVolumeStatus.TargetVolumeAttributesClassName
+		TargetVolumeAttributesClassName: targetVAC,
 	}
 	// Do not change conditions for pending modifications and keep existing conditions
 	if modifyVolumeStatus != v1.PersistentVolumeClaimModifyVolumePending {
-		newCondition := v1.PersistentVolumeClaimCondition{
-			Status:             v1.ConditionTrue,
-			LastTransitionTime: metav1.Now(),
-		}
+		now := metav1.Now()
+		conditions := []v1.PersistentVolumeClaimCondition{{
+			Type:          v1.PersistentVolumeClaimVolumeModifyingVolume,
+			Status:        v1.ConditionTrue,
+			LastProbeTime: now,
+		}}
+		modifying := &conditions[0]
+
 		if err == nil {
-			newCondition.Type = v1.PersistentVolumeClaimVolumeModifyingVolume
-			newCondition.Message = "ModifyVolume operation in progress."
+			modifying.Message = fmt.Sprintf("Modifying volume to %q is in progress.", targetVAC)
 		} else {
-			newCondition.Type = v1.PersistentVolumeClaimVolumeModifyVolumeError
-			newCondition.Message = "ModifyVolume failed with error: " + err.Error() + ". Waiting for retry."
+			if util.IsFinalError(err) {
+				modifying.Message = fmt.Sprintf("Modifying volume to %q failed. Waiting for retry.", targetVAC)
+			} else {
+				modifying.Message = fmt.Sprintf("Modifying volume to %q is still in progress.", targetVAC)
+			}
+
+			grpcStatus, _ := status.FromError(err)
+			conditions = append(conditions, v1.PersistentVolumeClaimCondition{
+				Type:          v1.PersistentVolumeClaimVolumeModifyVolumeError,
+				Status:        v1.ConditionTrue,
+				Reason:        grpcStatus.Code().String(),
+				Message:       grpcStatus.Message(),
+				LastProbeTime: now,
+			})
 		}
-		newPVC.Status.Conditions = util.MergeModifyVolumeConditionsOfPVC(newPVC.Status.Conditions, []v1.PersistentVolumeClaimCondition{newCondition})
+		newPVC.Status.Conditions = util.MergePVCConditions(newPVC.Status.Conditions, conditions)
 	}
 
 	updatedPVC, err := util.PatchClaim(ctrl.kubeClient, pvc, newPVC, true /* addResourceVersionCheck */)
