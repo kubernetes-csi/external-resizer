@@ -119,14 +119,9 @@ func (ctrl *modifyController) markControllerModifyVolumeCompleted(pvc *v1.Persis
 // markControllerModifyVolumeStatus clears all the conditions related to modify volume and only
 // leave other condition types
 func clearModifyVolumeConditions(conditions []v1.PersistentVolumeClaimCondition) []v1.PersistentVolumeClaimCondition {
-	knownConditions := []v1.PersistentVolumeClaimCondition{}
-	for _, value := range conditions {
-		// Only keep conditions that are not related to modify volume
-		if value.Type != v1.PersistentVolumeClaimVolumeModifyVolumeError && value.Type != v1.PersistentVolumeClaimVolumeModifyingVolume {
-			knownConditions = append(knownConditions, value)
-		}
-	}
-	return knownConditions
+	return slices.DeleteFunc(conditions, func(c v1.PersistentVolumeClaimCondition) bool {
+		return c.Type == v1.PersistentVolumeClaimVolumeModifyVolumeError || c.Type == v1.PersistentVolumeClaimVolumeModifyingVolume
+	})
 }
 
 // markRolledBack will clear the modifying conditions
