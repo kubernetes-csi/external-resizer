@@ -19,6 +19,7 @@ package modifycontroller
 import (
 	"fmt"
 	"maps"
+	"slices"
 	"time"
 
 	"github.com/kubernetes-csi/csi-lib-utils/slowset"
@@ -68,10 +69,8 @@ func (ctrl *modifyController) modify(pvc *v1.PersistentVolumeClaim, pv *v1.Persi
 		// User don't care the target state, and we've reached a relatively stable state. Just keep it here.
 		// Note: APIServer generally not allowing setting pvcSpecVacName to empty when curVacName is not empty.
 		klog.V(4).InfoS("stop reconcile for rolled back PVC", "PV", klog.KObj(pv))
-		// Don't try to revert anything here, because we only record the result of the last modification.
-		// We don't know what happened before. User can switch between InProgress/Infeasible/Pending status
-		// freely by modifying the spec.
-		return pvc, pv, nil, false
+		pvc, err := ctrl.rolledBack(pvc)
+		return pvc, pv, err, false
 	}
 
 	inUncertainState := false
@@ -94,6 +93,19 @@ func (ctrl *modifyController) modify(pvc *v1.PersistentVolumeClaim, pv *v1.Persi
 	}
 
 	return ctrl.validateVACAndModifyVolumeWithTarget(pvc, pv)
+}
+
+func (ctrl *modifyController) rolledBack(pvc *v1.PersistentVolumeClaim) (*v1.PersistentVolumeClaim, error) {
+	if slices.ContainsFunc(pvc.Status.Conditions, func(condition v1.PersistentVolumeClaimCondition) bool {
+		return condition.Type == v1.PersistentVolumeClaimVolumeModifyingVolume
+	}) {
+		ctrl.eventRecorder.Eventf(pvc, v1.EventTypeNormal, util.VolumeModifyCancelled, "Cancelled modify.")
+		return ctrl.markRolledBack(pvc)
+	}
+	// Don't try to revert Status.ModifyVolumeStatus here, because we only record the result of the last modification.
+	// We don't know what happened before. User can switch between InProgress/Infeasible/Pending status
+	// freely by modifying the spec.
+	return pvc, nil
 }
 
 func (ctrl *modifyController) getTargetVAC(pvc *v1.PersistentVolumeClaim, vacName string) (*storagev1.VolumeAttributesClass, error) {

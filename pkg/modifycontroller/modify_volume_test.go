@@ -3,6 +3,7 @@ package modifycontroller
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -193,6 +194,39 @@ func TestModifyUncertain(t *testing.T) {
 	// target should not change, yet-another-vac should be ignored
 	if pvc.Status.ModifyVolumeStatus.TargetVolumeAttributesClassName != targetVac {
 		t.Fatalf("expected target to be %v, got %v", targetVac, pvc.Status.ModifyVolumeStatus.TargetVolumeAttributesClassName)
+	}
+}
+
+func TestCancel(t *testing.T) {
+	basePVC := createTestPVC(pvcName, "" /*vacName*/, testVac /*curVacName*/, targetVac /*targetVacName*/)
+	basePVC.Status.ModifyVolumeStatus.Status = v1.PersistentVolumeClaimModifyVolumeInProgress
+	basePVC.Status.Conditions = []v1.PersistentVolumeClaimCondition{
+		{
+			Type:   v1.PersistentVolumeClaimVolumeModifyingVolume,
+			Status: v1.ConditionTrue,
+		},
+	}
+	basePV := createTestPV(1, pvcName, pvcNamespace, "foobaz" /*pvcUID*/, &fsVolumeMode, testVac)
+
+	client := csi.NewMockClient(testDriverName, true, true, true, true, true)
+	initialObjects := []runtime.Object{testVacObject, targetVacObject, basePVC, basePV}
+	ctrlInstance := setupFakeK8sEnvironment(t, client, initialObjects)
+
+	client.SetModifyError(infeasibleErr)
+	// InProgress, so still tried
+	pvc, pv, err, _ := ctrlInstance.modify(basePVC, basePV)
+	if !errors.Is(err, infeasibleErr) {
+		t.Fatalf("expected error to be %v, got %v", finalErr, err)
+	}
+	// Got infeasibleErr error, should cancel
+	pvc, _, err, _ = ctrlInstance.modify(pvc, pv)
+	if err != nil {
+		t.Fatalf("expected modify cancelled, got %v", err)
+	}
+	if slices.ContainsFunc(pvc.Status.Conditions, func(c v1.PersistentVolumeClaimCondition) bool {
+		return c.Type == v1.PersistentVolumeClaimVolumeModifyingVolume
+	}) {
+		t.Fatalf("expected modify volume condition to be cleared, got %v", pvc.Status.Conditions)
 	}
 }
 

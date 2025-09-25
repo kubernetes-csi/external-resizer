@@ -24,6 +24,7 @@ const (
 	VolumeModify             = "VolumeModify"
 	VolumeModifyFailed       = "VolumeModifyFailed"
 	VolumeModifySuccess      = "VolumeModifySuccessful"
+	VolumeModifyCancelled    = "VolumeModifyCanceled"
 	FileSystemResizeRequired = "FileSystemResizeRequired"
 )
 

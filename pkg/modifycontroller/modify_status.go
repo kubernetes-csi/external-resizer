@@ -18,6 +18,7 @@ package modifycontroller
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/kubernetes-csi/external-resizer/pkg/util"
 	"google.golang.org/grpc/status"
@@ -126,4 +127,17 @@ func clearModifyVolumeConditions(conditions []v1.PersistentVolumeClaimCondition)
 		}
 	}
 	return knownConditions
+}
+
+// markRolledBack will clear the modifying conditions
+func (ctrl *modifyController) markRolledBack(pvc *v1.PersistentVolumeClaim) (*v1.PersistentVolumeClaim, error) {
+	newPVC := pvc.DeepCopy()
+	newPVC.Status.Conditions = slices.DeleteFunc(newPVC.Status.Conditions, func(condition v1.PersistentVolumeClaimCondition) bool {
+		return condition.Type == v1.PersistentVolumeClaimVolumeModifyingVolume
+	})
+	newPVC, err := util.PatchClaim(ctrl.kubeClient, pvc, newPVC, false /* addResourceVersionCheck */)
+	if err != nil {
+		return nil, fmt.Errorf("mark PVC %q as rolled back failed: %v", pvc.Name, err)
+	}
+	return newPVC, nil
 }
