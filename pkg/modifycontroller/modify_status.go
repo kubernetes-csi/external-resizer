@@ -33,16 +33,12 @@ func (ctrl *modifyController) markControllerModifyVolumeStatus(
 	modifyVolumeStatus v1.PersistentVolumeClaimModifyVolumeStatus,
 	err error) (*v1.PersistentVolumeClaim, error) {
 
-	targetVAC := ptr.Deref(pvc.Spec.VolumeAttributesClassName, "")
-	if err != nil {
-		targetVAC = pvc.Status.ModifyVolumeStatus.TargetVolumeAttributesClassName
-	}
-
 	newPVC := pvc.DeepCopy()
-	newPVC.Status.ModifyVolumeStatus = &v1.ModifyVolumeStatus{
-		Status:                          modifyVolumeStatus,
-		TargetVolumeAttributesClassName: targetVAC,
+	if newPVC.Status.ModifyVolumeStatus == nil {
+		newPVC.Status.ModifyVolumeStatus = &v1.ModifyVolumeStatus{}
 	}
+	newPVC.Status.ModifyVolumeStatus.Status = modifyVolumeStatus
+
 	// Do not change conditions for pending modifications and keep existing conditions
 	if modifyVolumeStatus != v1.PersistentVolumeClaimModifyVolumePending {
 		now := metav1.Now()
@@ -53,7 +49,10 @@ func (ctrl *modifyController) markControllerModifyVolumeStatus(
 		}}
 		modifying := &conditions[0]
 
+		targetVAC := newPVC.Status.ModifyVolumeStatus.TargetVolumeAttributesClassName
 		if err == nil {
+			targetVAC := ptr.Deref(pvc.Spec.VolumeAttributesClassName, "")
+			newPVC.Status.ModifyVolumeStatus.TargetVolumeAttributesClassName = targetVAC
 			modifying.Message = fmt.Sprintf("Modifying volume to %q is in progress.", targetVAC)
 		} else {
 			if util.IsFinalError(err) {

@@ -60,11 +60,11 @@ func TestModify(t *testing.T) {
 		},
 		{
 			name:             "vac does not exist, no modification and set ModifyVolumeStatus to pending",
-			pvc:              createTestPVC(pvcName, targetVac /*vacName*/, testVac /*curVacName*/, "" /*targetVacName*/),
+			pvc:              createTestPVC(pvcName, targetVac /*vacName*/, testVac /*curVacName*/, "whatever" /*targetVacName*/),
 			pv:               basePV,
 			expectModifyCall: false,
 			expectedModifyVolumeStatus: &v1.ModifyVolumeStatus{
-				TargetVolumeAttributesClassName: targetVac,
+				TargetVolumeAttributesClassName: "whatever",
 				Status:                          v1.PersistentVolumeClaimModifyVolumePending,
 			},
 			expectedCurrentVolumeAttributesClassName: &testVac,
