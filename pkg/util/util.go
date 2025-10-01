@@ -43,11 +43,6 @@ var (
 		v1.PersistentVolumeClaimNodeResizeError:         true,
 	}
 
-	knownModifyVolumeConditions = map[v1.PersistentVolumeClaimConditionType]bool{
-		v1.PersistentVolumeClaimVolumeModifyingVolume:   true,
-		v1.PersistentVolumeClaimVolumeModifyVolumeError: true,
-	}
-
 	// AnnPreResizeCapacity annotation is added to a PV when expanding volume.
 	// Its value is status capacity of the PVC prior to the volume expansion
 	// Its value will be set by the external-resizer when it deems that filesystem resize is required after resizing volume.
@@ -92,34 +87,42 @@ func MergeResizeConditionsOfPVC(oldConditions, newConditions []v1.PersistentVolu
 	return resultConditions
 }
 
-// MergeModifyVolumeConditionsOfPVC updates pvc with requested modify volume conditions
-// leaving other conditions untouched.
-func MergeModifyVolumeConditionsOfPVC(oldConditions, newConditions []v1.PersistentVolumeClaimCondition) []v1.PersistentVolumeClaimCondition {
+// MergePVCConditions updates pvc with requested conditions
+// leaving unmentioned conditions untouched.
+// It is responsible for setting LastTransitionTime.
+func MergePVCConditions(oldConditions, newConditions []v1.PersistentVolumeClaimCondition) []v1.PersistentVolumeClaimCondition {
 	newConditionSet := make(map[v1.PersistentVolumeClaimConditionType]v1.PersistentVolumeClaimCondition, len(newConditions))
 	for _, condition := range newConditions {
 		newConditionSet[condition.Type] = condition
 	}
 
 	resultConditions := []v1.PersistentVolumeClaimCondition{}
-	for _, condition := range oldConditions {
-		// If Condition is not modifyVolume type, we keep it.
-		if _, ok := knownModifyVolumeConditions[condition.Type]; !ok {
-			resultConditions = append(resultConditions, condition)
+	for _, old := range oldConditions {
+		// If Condition is not changed, we keep it.
+		new, ok := newConditionSet[old.Type]
+		if !ok {
+			resultConditions = append(resultConditions, old)
 			continue
 		}
-		if newCondition, ok := newConditionSet[condition.Type]; ok {
-			// Use the new condition to replace old condition with same type.
-			resultConditions = append(resultConditions, newCondition)
-			delete(newConditionSet, condition.Type)
+		// Use the new condition to replace old condition with same type.
+		// Update LastTransitionTime if Reason/Status changed.
+		if new.Reason != old.Reason || new.Status != old.Status {
+			new.LastTransitionTime = new.LastProbeTime
+		} else {
+			new.LastTransitionTime = old.LastTransitionTime
 		}
-		// Drop other modify volume conditions that are not in the newConditionSet
+		resultConditions = append(resultConditions, new)
+		delete(newConditionSet, old.Type)
 	}
 
 	// Append remains modify volume conditions.
-	for _, condition := range newConditionSet {
-		resultConditions = append(resultConditions, condition)
+	// Iterate over slice for deterministic ordering.
+	for _, new := range newConditions {
+		if _, ok := newConditionSet[new.Type]; ok {
+			new.LastTransitionTime = new.LastProbeTime
+			resultConditions = append(resultConditions, new)
+		}
 	}
-
 	return resultConditions
 }
 

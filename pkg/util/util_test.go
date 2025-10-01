@@ -4,44 +4,58 @@ import (
 	"encoding/json"
 	"reflect"
 	"testing"
+	"time"
 
+	"github.com/google/go-cmp/cmp"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 var (
+	now = metav1.Now()
+	old = metav1.Date(2019, 1, 1, 0, 0, 0, 0, time.UTC)
+
 	pvcWithResizePendingCondition = v1.PersistentVolumeClaimCondition{
 		Type:               v1.PersistentVolumeClaimFileSystemResizePending,
 		Status:             v1.ConditionTrue,
-		LastTransitionTime: metav1.Now(),
+		LastTransitionTime: now,
 		Message:            "Waiting for user to (re-)start a pod to finish file system resize of volume on node.",
 	}
 	pvcWithControllerResizeError = v1.PersistentVolumeClaimCondition{
 		Type:               v1.PersistentVolumeClaimControllerResizeError,
 		Status:             v1.ConditionTrue,
-		LastTransitionTime: metav1.Now(),
+		LastTransitionTime: now,
 		Message:            "controller resize failed",
 	}
 
 	pvcWithControllerResizeError2 = v1.PersistentVolumeClaimCondition{
 		Type:               v1.PersistentVolumeClaimControllerResizeError,
 		Status:             v1.ConditionTrue,
-		LastTransitionTime: metav1.Now(),
+		LastTransitionTime: now,
 		Message:            "controller resize failed with error2",
 	}
 
 	pvcWithModifyVolumeProgressCondition = v1.PersistentVolumeClaimCondition{
-		Type:               v1.PersistentVolumeClaimVolumeModifyingVolume,
-		Status:             v1.ConditionTrue,
-		LastTransitionTime: metav1.Now(),
-		Message:            "ModifyVolume operation in progress.",
+		Type:          v1.PersistentVolumeClaimVolumeModifyingVolume,
+		Status:        v1.ConditionTrue,
+		LastProbeTime: now,
+		Message:       "ModifyVolume operation in progress.",
 	}
 
 	pvcConditionInfeasible = v1.PersistentVolumeClaimCondition{
-		Type:               v1.PersistentVolumeClaimVolumeModifyingVolume,
-		Status:             v1.ConditionTrue,
-		LastTransitionTime: metav1.Now(),
-		Message:            "ModifyVolume operation in progress.",
+		Type:          v1.PersistentVolumeClaimVolumeModifyVolumeError,
+		Status:        v1.ConditionTrue,
+		LastProbeTime: now,
+		Reason:        "InvalidParameter",
+		Message:       "invalid parameter",
+	}
+
+	pvcConditionTimeout = v1.PersistentVolumeClaimCondition{
+		Type:          v1.PersistentVolumeClaimVolumeModifyVolumeError,
+		Status:        v1.ConditionTrue,
+		LastProbeTime: now,
+		Reason:        "DeadlineExceeded",
+		Message:       "Progress: 10%",
 	}
 )
 
@@ -120,7 +134,12 @@ func TestMergeResizeConditionsOfPVC(t *testing.T) {
 	}
 }
 
-func TestMergeModifyVolumeConditionsOfPVC(t *testing.T) {
+func transit(condition v1.PersistentVolumeClaimCondition, t metav1.Time) v1.PersistentVolumeClaimCondition {
+	condition.LastTransitionTime = t
+	return condition
+}
+
+func TestMergePVCConditions(t *testing.T) {
 	tests := []struct {
 		name               string
 		oldConditions      []v1.PersistentVolumeClaimCondition
@@ -128,31 +147,58 @@ func TestMergeModifyVolumeConditionsOfPVC(t *testing.T) {
 		expectedConditions []v1.PersistentVolumeClaimCondition
 	}{
 		{
-			name:               "merge new modify volume condition with old resize condition",
-			oldConditions:      []v1.PersistentVolumeClaimCondition{pvcWithResizePendingCondition},
-			newConditions:      []v1.PersistentVolumeClaimCondition{pvcWithModifyVolumeProgressCondition},
-			expectedConditions: []v1.PersistentVolumeClaimCondition{pvcWithResizePendingCondition, pvcWithModifyVolumeProgressCondition},
+			name:          "merge new into irrelevant",
+			oldConditions: []v1.PersistentVolumeClaimCondition{pvcWithResizePendingCondition},
+			newConditions: []v1.PersistentVolumeClaimCondition{pvcWithModifyVolumeProgressCondition},
+			expectedConditions: []v1.PersistentVolumeClaimCondition{
+				pvcWithResizePendingCondition,
+				transit(pvcWithModifyVolumeProgressCondition, now),
+			},
 		},
 		{
-			name:               "merge new modify volume condition with old modify volume condition",
-			oldConditions:      []v1.PersistentVolumeClaimCondition{pvcWithModifyVolumeProgressCondition},
-			newConditions:      []v1.PersistentVolumeClaimCondition{pvcConditionInfeasible},
-			expectedConditions: []v1.PersistentVolumeClaimCondition{pvcConditionInfeasible},
+			name: "no transition",
+			oldConditions: []v1.PersistentVolumeClaimCondition{
+				transit(pvcWithModifyVolumeProgressCondition, old),
+				transit(pvcConditionInfeasible, old),
+			},
+			newConditions: []v1.PersistentVolumeClaimCondition{pvcConditionInfeasible},
+			expectedConditions: []v1.PersistentVolumeClaimCondition{
+				transit(pvcWithModifyVolumeProgressCondition, old),
+				transit(pvcConditionInfeasible, old),
+			},
 		},
 		{
-			name:               "merge empty condition with old modify volume condition",
+			name: "transit",
+			oldConditions: []v1.PersistentVolumeClaimCondition{
+				transit(pvcWithModifyVolumeProgressCondition, old),
+				transit(pvcConditionInfeasible, old),
+			},
+			newConditions: []v1.PersistentVolumeClaimCondition{pvcConditionTimeout},
+			expectedConditions: []v1.PersistentVolumeClaimCondition{
+				transit(pvcWithModifyVolumeProgressCondition, old),
+				transit(pvcConditionTimeout, now),
+			},
+		},
+		{
+			name:               "merge empty",
 			oldConditions:      []v1.PersistentVolumeClaimCondition{pvcWithModifyVolumeProgressCondition},
 			newConditions:      []v1.PersistentVolumeClaimCondition{},
-			expectedConditions: []v1.PersistentVolumeClaimCondition{},
-		},
-		{
-			name:               "merge new condition with old empty volume condition",
-			oldConditions:      []v1.PersistentVolumeClaimCondition{},
-			newConditions:      []v1.PersistentVolumeClaimCondition{pvcWithModifyVolumeProgressCondition},
 			expectedConditions: []v1.PersistentVolumeClaimCondition{pvcWithModifyVolumeProgressCondition},
 		},
 		{
-			name:               "should not remove previous non-resize conditions",
+			name:          "merge new into empty",
+			oldConditions: []v1.PersistentVolumeClaimCondition{},
+			newConditions: []v1.PersistentVolumeClaimCondition{
+				pvcWithModifyVolumeProgressCondition,
+				pvcConditionInfeasible,
+			},
+			expectedConditions: []v1.PersistentVolumeClaimCondition{
+				transit(pvcWithModifyVolumeProgressCondition, now),
+				transit(pvcConditionInfeasible, now),
+			},
+		},
+		{
+			name:               "noop",
 			oldConditions:      []v1.PersistentVolumeClaimCondition{},
 			newConditions:      []v1.PersistentVolumeClaimCondition{},
 			expectedConditions: []v1.PersistentVolumeClaimCondition{},
@@ -162,9 +208,9 @@ func TestMergeModifyVolumeConditionsOfPVC(t *testing.T) {
 	for _, test := range tests {
 		tc := test
 		t.Run(tc.name, func(t *testing.T) {
-			resultConditions := MergeModifyVolumeConditionsOfPVC(tc.oldConditions, tc.newConditions)
-			if !reflect.DeepEqual(resultConditions, tc.expectedConditions) {
-				t.Errorf("expected conditions %+v got %+v", tc.expectedConditions, resultConditions)
+			resultConditions := MergePVCConditions(tc.oldConditions, tc.newConditions)
+			if diff := cmp.Diff(tc.expectedConditions, resultConditions); diff != "" {
+				t.Errorf("conditions diff (-expected, +got): %v", diff)
 			}
 		})
 	}

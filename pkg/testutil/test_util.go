@@ -54,7 +54,7 @@ type pvcModifier struct {
 	pvc *v1.PersistentVolumeClaim
 }
 
-func MakePVC(conditions []v1.PersistentVolumeClaimCondition) pvcModifier {
+func MakePVC(conditions []v1.PersistentVolumeClaimCondition) func() pvcModifier {
 	pvc := &v1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "resize"},
 		Spec: v1.PersistentVolumeClaimSpec{
@@ -76,10 +76,12 @@ func MakePVC(conditions []v1.PersistentVolumeClaimCondition) pvcModifier {
 			},
 		},
 	}
-	return pvcModifier{pvc}
+	return func() pvcModifier {
+		return pvcModifier{pvc.DeepCopy()}
+	}
 }
 
-func MakeTestPVC(conditions []v1.PersistentVolumeClaimCondition) pvcModifier {
+func MakeTestPVC(conditions []v1.PersistentVolumeClaimCondition) func() pvcModifier {
 	pvc := &v1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{Name: pvcName, Namespace: "modify"},
 		Spec: v1.PersistentVolumeClaimSpec{
@@ -106,7 +108,9 @@ func MakeTestPVC(conditions []v1.PersistentVolumeClaimCondition) pvcModifier {
 			},
 		},
 	}
-	return pvcModifier{pvc}
+	return func() pvcModifier {
+		return pvcModifier{pvc.DeepCopy()}
+	}
 }
 
 func (m pvcModifier) WithModifyVolumeStatus(status v1.PersistentVolumeClaimModifyVolumeStatus) pvcModifier {
@@ -139,7 +143,8 @@ func CompareConditions(realConditions, expectedConditions []v1.PersistentVolumeC
 	}
 
 	for i, condition := range realConditions {
-		if condition.Type != expectedConditions[i].Type || condition.Message != expectedConditions[i].Message || condition.Status != expectedConditions[i].Status {
+		if condition.Type != expectedConditions[i].Type || condition.Message != expectedConditions[i].Message ||
+			condition.Status != expectedConditions[i].Status || condition.Reason != expectedConditions[i].Reason {
 			return false
 		}
 	}
@@ -147,7 +152,7 @@ func CompareConditions(realConditions, expectedConditions []v1.PersistentVolumeC
 }
 
 func (m pvcModifier) Get() *v1.PersistentVolumeClaim {
-	return m.pvc.DeepCopy()
+	return m.pvc
 }
 
 func (m pvcModifier) WithStorageResourceStatus(status v1.ClaimResourceStatus) pvcModifier {
