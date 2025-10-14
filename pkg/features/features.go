@@ -17,7 +17,12 @@ limitations under the License.
 package features
 
 import (
+	"slices"
+
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
+	"k8s.io/client-go/discovery"
 	"k8s.io/component-base/featuregate"
 )
 
@@ -58,4 +63,22 @@ var defaultResizerFeatureGates = map[featuregate.Feature]featuregate.FeatureSpec
 	RecoverVolumeExpansionFailure: {Default: true, PreRelease: featuregate.Beta},
 	VolumeAttributesClass:         {Default: true, PreRelease: featuregate.GA},
 	ReleaseLeaderElectionOnExit:   {Default: false, PreRelease: featuregate.Alpha},
+}
+
+// IsVolumeAttributesClassV1Enabled checks if the VolumeAttributesClass v1 API is enabled.
+func IsVolumeAttributesClassV1Enabled(d discovery.DiscoveryInterface) (bool, error) {
+	return resourceExists(d, "storage.k8s.io/v1", "VolumeAttributesClass")
+}
+
+func resourceExists(d discovery.DiscoveryInterface, groupVersion, kind string) (bool, error) {
+	res, err := d.ServerResourcesForGroupVersion(groupVersion)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return slices.ContainsFunc(res.APIResources, func(r metav1.APIResource) bool {
+		return r.Kind == kind
+	}), nil
 }
