@@ -150,6 +150,21 @@ func main() {
 		klog.ErrorS(err, "Failed to create kube client")
 		klog.FlushAndExit(klog.ExitFlushTimeout, 1)
 	}
+	// if feature gate is not explicitly set, probe if we have VAC API available
+	if !utilfeature.DefaultMutableFeatureGate.ExplicitlySet(features.VolumeAttributesClass) {
+		enabled, err := features.IsVolumeAttributesClassV1Enabled(kubeClient.Discovery())
+		switch {
+		case err != nil:
+			klog.ErrorS(err, "Failed to check VolumeAttributesClass V1 API availability")
+		case enabled:
+			klog.InfoS("VolumeAttributesClass v1 API is available")
+		default:
+			klog.InfoS("Disabling VolumeAttributesClass feature gate because the VolumeAttributesClass v1 API is not available")
+			if err := utilfeature.DefaultMutableFeatureGate.OverrideDefault(features.VolumeAttributesClass, false); err != nil {
+				klog.Fatalf("Failed to disable VolumeAttributesClass feature gate: %v", err)
+			}
+		}
+	}
 
 	informerFactory := informers.NewSharedInformerFactory(kubeClient, *resyncPeriod)
 
