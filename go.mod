@@ -3,7 +3,7 @@ module github.com/kubernetes-csi/external-resizer
 go 1.24.6
 
 require (
-	github.com/container-storage-interface/spec v1.11.0
+	github.com/container-storage-interface/spec v1.12.0
 	github.com/google/go-cmp v0.7.0
 	github.com/kubernetes-csi/csi-lib-utils v0.22.0
 	google.golang.org/grpc v1.72.1
