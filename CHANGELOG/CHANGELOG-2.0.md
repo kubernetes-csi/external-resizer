@@ -12,10 +12,6 @@
 
 ## Changes by Kind
 
-### API Change
-
-- TargetVolumeAttributesClassName is now valid for Pending status ([#510](https://github.com/kubernetes-csi/external-resizer/pull/510), [@huww98](https://github.com/huww98))
-
 ### Feature
 
 - Annotate PVCs that don't require node expansion, so as kubelet can skip them ([#496](https://github.com/kubernetes-csi/external-resizer/pull/496), [@gnufied](https://github.com/gnufied))
