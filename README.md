@@ -14,7 +14,7 @@ This information reflects the head of this branch.
 
 | Compatible with CSI Version                                                                 | Container Image                    | [Min K8s Version](https://kubernetes-csi.github.io/docs/kubernetes-compatibility.html#minimum-version) | [Recommended K8s Version](https://kubernetes-csi.github.io/docs/kubernetes-compatibility.html#recommended-version) |
 |---------------------------------------------------------------------------------------------|------------------------------------|--------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------|
-| [CSI Spec v1.10.0](https://github.com/container-storage-interface/spec/releases/tag/v1.5.0) | k8s.gcr.io/sig-storage/csi-resizer | 1.16                                                                                                   | 1.32                                                                                                               |
+| [CSI Spec v1.12.0](https://github.com/container-storage-interface/spec/releases/tag/v2.0.0) | k8s.gcr.io/sig-storage/csi-resizer | 1.16                                                                                                   | 1.34                                                                                                   |
 
 ## Feature status
 
