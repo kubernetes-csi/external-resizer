@@ -69,7 +69,7 @@ func TestNewResizer(t *testing.T) {
 			SupportsPluginControllerService:         true,
 			SupportsControllerSingleNodeMultiWriter: true,
 
-			Error: resizeNotSupportErr,
+			Error: ResizeNotSupportErr,
 		},
 	} {
 		client := csi.NewMockClient("mock", c.SupportsNodeResize, c.SupportsControllerResize, false, c.SupportsPluginControllerService, c.SupportsControllerSingleNodeMultiWriter)

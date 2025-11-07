@@ -28,6 +28,8 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
+var ModifyNotSupportErr = errors.New("CSI driver does not support controller modify")
+
 func NewModifierFromClient(
 	csiClient csi.Client,
 	timeout time.Duration,
@@ -36,9 +38,12 @@ func NewModifierFromClient(
 	extraModifyMetadata bool,
 	driverName string) (Modifier, error) {
 
-	_, err := supportsControllerModify(csiClient, timeout)
+	supported, err := supportsControllerModify(csiClient, timeout)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check if plugin supports controller modify: %v", err)
+	}
+	if !supported {
+		return nil, ModifyNotSupportErr
 	}
 
 	return &csiModifier{

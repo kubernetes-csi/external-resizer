@@ -26,6 +26,7 @@ func TestNewModifier(t *testing.T) {
 		// Controller modify not supported.
 		{
 			SupportsControllerModify: false,
+			Error:                    ModifyNotSupportErr,
 		},
 	} {
 		client := csi.NewMockClient("mock", false, false, c.SupportsControllerModify, false, false)
