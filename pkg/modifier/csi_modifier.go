@@ -24,8 +24,15 @@ import (
 
 	"github.com/kubernetes-csi/external-resizer/pkg/csi"
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
+)
+
+const (
+	// annotations set by the external-provisioner when a modify secret is configured
+	modifySecretNameAnn      = "volume.kubernetes.io/controller-modify-secret-name"
+	modifySecretNamespaceAnn = "volume.kubernetes.io/controller-modify-secret-namespace"
 )
 
 var ModifyNotSupportErr = errors.New("CSI driver does not support controller modify")
@@ -86,16 +93,46 @@ func (r *csiModifier) Modify(pv *v1.PersistentVolume, mutableParameters map[stri
 		return errors.New("empty volume handle")
 	}
 
-	var secrets map[string]string
-
-	ctx, cancel := timeoutCtx(r.timeout)
-
-	defer cancel()
-	err := r.client.Modify(ctx, volumeID, secrets, mutableParameters)
+	secrets, err := r.getModifyCredentials(source.ControllerExpandSecretRef, pv.Annotations)
 	if err != nil {
 		return err
 	}
+
+	ctx, cancel := timeoutCtx(r.timeout)
+	defer cancel()
+
+	err = r.client.Modify(ctx, volumeID, secrets, mutableParameters)
+	if err != nil {
+		return err
+	}
+
 	return nil
+}
+
+// getModifyCredentials fetches the credential from the secret referenced in the annotations. When missing,
+// the default secretRef (CSIPersistentVolumeSource.ControllerExpandSecretRef) is used.
+func (r *csiModifier) getModifyCredentials(secretRef *v1.SecretReference, annotations map[string]string) (map[string]string, error) {
+	secretName := annotations[modifySecretNameAnn]
+	secretNamespace := annotations[modifySecretNamespaceAnn]
+	if secretNamespace == "" || secretName == "" {
+		if secretRef == nil {
+			return nil, nil
+		}
+
+		secretName = secretRef.Name
+		secretNamespace = secretRef.Namespace
+	}
+
+	secret, err := r.k8sClient.CoreV1().Secrets(secretNamespace).Get(context.TODO(), secretName, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("error getting secret %s in namespace %s: %v", secretName, secretNamespace, err)
+	}
+
+	credentials := map[string]string{}
+	for key, value := range secret.Data {
+		credentials[key] = string(value)
+	}
+	return credentials, nil
 }
 
 func supportsControllerModify(client csi.Client, timeout time.Duration) (bool, error) {
