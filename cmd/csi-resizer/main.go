@@ -18,6 +18,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"net/http"
@@ -207,7 +208,9 @@ func main() {
 		*timeout,
 		kubeClient,
 		driverName)
-	if err != nil {
+	if err != nil && errors.Is(err, resizer.ResizeNotSupportErr) {
+		klog.InfoS("Resize not supported", "message", err)
+	} else if err != nil {
 		klog.ErrorS(err, "Failed to create CSI resizer")
 		klog.FlushAndExit(klog.ExitFlushTimeout, 1)
 	}
@@ -219,9 +222,15 @@ func main() {
 		informerFactory,
 		*extraModifyMetadata,
 		driverName)
-	if err != nil {
+	if err != nil && errors.Is(err, modifier.ModifyNotSupportErr) {
+		klog.InfoS("Modify not supported", "message", err)
+	} else if err != nil {
 		klog.ErrorS(err, "Failed to create CSI modifier")
 		klog.FlushAndExit(klog.ExitFlushTimeout, 1)
+	}
+
+	if csiResizer == nil && csiModifier == nil {
+		klog.Fatalf("CSI driver does not support resize nor modify")
 	}
 
 	// Start HTTP server for metrics + leader election healthz
@@ -238,17 +247,30 @@ func main() {
 		}()
 	}
 
-	resizerName := csiResizer.Name()
-	rc := controller.NewResizeController(resizerName, csiResizer, kubeClient, *resyncPeriod, informerFactory,
-		workqueue.NewTypedItemExponentialFailureRateLimiter[string](*retryIntervalStart, *retryIntervalMax),
-		*handleVolumeInUseError, *retryIntervalMax)
+	leaseHolder := ""
+	var rc controller.ResizeController
+	if csiResizer != nil {
+		resizerName := csiResizer.Name()
+		rc = controller.NewResizeController(resizerName, csiResizer, kubeClient, *resyncPeriod, informerFactory,
+			workqueue.NewTypedItemExponentialFailureRateLimiter[string](*retryIntervalStart, *retryIntervalMax),
+			*handleVolumeInUseError, *retryIntervalMax)
 
-	modifierName := csiModifier.Name()
+		leaseHolder = resizerName
+	}
+
 	var mc modifycontroller.ModifyController
-	// Add modify controller only if the feature gate is enabled
-	if utilfeature.DefaultFeatureGate.Enabled(features.VolumeAttributesClass) {
-		mc = modifycontroller.NewModifyController(modifierName, csiModifier, kubeClient, *resyncPeriod, *retryIntervalMax, *extraModifyMetadata, informerFactory,
-			workqueue.NewTypedItemExponentialFailureRateLimiter[string](*retryIntervalStart, *retryIntervalMax))
+	if csiModifier != nil {
+		modifierName := csiModifier.Name()
+		// Add modify controller only if the feature gate is enabled
+		if utilfeature.DefaultFeatureGate.Enabled(features.VolumeAttributesClass) {
+			mc = modifycontroller.NewModifyController(modifierName, csiModifier, kubeClient, *resyncPeriod,
+				*retryIntervalMax, *extraModifyMetadata, informerFactory,
+				workqueue.NewTypedItemExponentialFailureRateLimiter[string](*retryIntervalStart, *retryIntervalMax))
+		}
+
+		if leaseHolder == "" {
+			leaseHolder = modifierName
+		}
 	}
 
 	// handle SIGTERM and SIGINT by cancelling the context.
@@ -278,16 +300,20 @@ func main() {
 		informerFactory.Start(ctx.Done())
 		if utilfeature.DefaultFeatureGate.Enabled(features.ReleaseLeaderElectionOnExit) {
 			var wg sync.WaitGroup
-			go rc.Run(*workers, controllerCtx, &wg)
-			if utilfeature.DefaultFeatureGate.Enabled(features.VolumeAttributesClass) {
+			if rc != nil {
+				go rc.Run(*workers, controllerCtx, &wg)
+			}
+			if mc != nil && utilfeature.DefaultFeatureGate.Enabled(features.VolumeAttributesClass) {
 				go mc.Run(*workers, controllerCtx, &wg)
 			}
 			<-controllerCtx.Done()
 			wg.Wait()
 			terminate()
 		} else {
-			go rc.Run(*workers, ctx, nil)
-			if utilfeature.DefaultFeatureGate.Enabled(features.VolumeAttributesClass) {
+			if rc != nil {
+				go rc.Run(*workers, ctx, nil)
+			}
+			if mc != nil && utilfeature.DefaultFeatureGate.Enabled(features.VolumeAttributesClass) {
 				go mc.Run(*workers, ctx, nil)
 			}
 			<-ctx.Done()
@@ -297,7 +323,7 @@ func main() {
 	if !*enableLeaderElection {
 		run(ctx)
 	} else {
-		lockName := "external-resizer-" + util.SanitizeName(resizerName)
+		lockName := "external-resizer-" + util.SanitizeName(leaseHolder)
 		leKubeClient, err := kubernetes.NewForConfig(config)
 		if err != nil {
 			klog.ErrorS(err, "Failed to create leKubeClient")
