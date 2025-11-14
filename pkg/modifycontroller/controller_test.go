@@ -64,7 +64,7 @@ func TestController(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			// Setup
-			client := csi.NewMockClient(testDriverName, true, true, true, true, true)
+			client := csi.NewMockClient(testDriverName, false, false, true, true, true)
 
 			initialObjects := []runtime.Object{test.pvc, test.pv, testVacObject, targetVacObject}
 			ctrlInstance := setupFakeK8sEnvironment(t, client, initialObjects)

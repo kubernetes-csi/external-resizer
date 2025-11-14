@@ -14,7 +14,7 @@ This information reflects the head of this branch.
 
 | Compatible with CSI Version                                                                 | Container Image                    | [Min K8s Version](https://kubernetes-csi.github.io/docs/kubernetes-compatibility.html#minimum-version) | [Recommended K8s Version](https://kubernetes-csi.github.io/docs/kubernetes-compatibility.html#recommended-version) |
 |---------------------------------------------------------------------------------------------|------------------------------------|--------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------|
-| [CSI Spec v1.10.0](https://github.com/container-storage-interface/spec/releases/tag/v1.5.0) | k8s.gcr.io/sig-storage/csi-resizer | 1.16                                                                                                   | 1.32                                                                                                               |
+| [CSI Spec v1.12.0](https://github.com/container-storage-interface/spec/releases/tag/v2.0.0) | k8s.gcr.io/sig-storage/csi-resizer | 1.16                                                                                                   | 1.34                                                                                                   |
 
 ## Feature status
 
@@ -27,7 +27,7 @@ The following table reflects the head of this branch.
 | VolumeExpansion               | Stable | On      | [Support for expanding CSI volumes](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#csi-volume-expansion).                              |
 | ReadWriteOncePod              | Stable | On      | [Single pod access mode for PersistentVolumes](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#access-modes).                           |
 | RecoverVolumeExpansionFailure | Beta   | On      | [Recover from volume expansion failure](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#recovering-from-failure-when-expanding-volumes) |
-| VolumeAttributesClass         | Beta   | Off     | [Volume Attributes Classes](https://kubernetes.io/docs/concepts/storage/volume-attributes-classes).                                                     |
+| VolumeAttributesClass         | Stable | On     | [Volume Attributes Classes](https://kubernetes.io/docs/concepts/storage/volume-attributes-classes).                                                     |
 
 
 ## Usage
