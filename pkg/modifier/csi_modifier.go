@@ -76,7 +76,7 @@ func (r *csiModifier) Name() string {
 	return r.name
 }
 
-func (r *csiModifier) Modify(pv *v1.PersistentVolume, mutableParameters map[string]string) error {
+func (r *csiModifier) Modify(ctx context.Context, pv *v1.PersistentVolume, mutableParameters map[string]string) error {
 
 	var volumeID string
 	var source *v1.CSIPersistentVolumeSource
@@ -93,7 +93,7 @@ func (r *csiModifier) Modify(pv *v1.PersistentVolume, mutableParameters map[stri
 		return errors.New("empty volume handle")
 	}
 
-	secrets, err := r.getModifyCredentials(source.ControllerExpandSecretRef, pv.Annotations)
+	secrets, err := r.getModifyCredentials(ctx, source.ControllerExpandSecretRef, pv.Annotations)
 	if err != nil {
 		return err
 	}
@@ -111,7 +111,7 @@ func (r *csiModifier) Modify(pv *v1.PersistentVolume, mutableParameters map[stri
 
 // getModifyCredentials fetches the credential from the secret referenced in the annotations. When missing,
 // the default secretRef (CSIPersistentVolumeSource.ControllerExpandSecretRef) is used.
-func (r *csiModifier) getModifyCredentials(secretRef *v1.SecretReference, annotations map[string]string) (map[string]string, error) {
+func (r *csiModifier) getModifyCredentials(ctx context.Context, secretRef *v1.SecretReference, annotations map[string]string) (map[string]string, error) {
 	secretName := annotations[modifySecretNameAnn]
 	secretNamespace := annotations[modifySecretNamespaceAnn]
 	if secretNamespace == "" || secretName == "" {
@@ -123,7 +123,7 @@ func (r *csiModifier) getModifyCredentials(secretRef *v1.SecretReference, annota
 		secretNamespace = secretRef.Namespace
 	}
 
-	secret, err := r.k8sClient.CoreV1().Secrets(secretNamespace).Get(context.TODO(), secretName, metav1.GetOptions{})
+	secret, err := r.k8sClient.CoreV1().Secrets(secretNamespace).Get(ctx, secretName, metav1.GetOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("error getting secret %s in namespace %s: %v", secretName, secretNamespace, err)
 	}
