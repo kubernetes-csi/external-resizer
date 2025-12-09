@@ -17,6 +17,7 @@ limitations under the License.
 package modifycontroller
 
 import (
+	"context"
 	"fmt"
 	"maps"
 	"slices"
@@ -73,6 +74,7 @@ func (ctrl *modifyController) modify(pvc *v1.PersistentVolumeClaim, pv *v1.Persi
 		return pvc, pv, err, false
 	}
 
+	ctx := context.TODO()
 	inUncertainState := false
 	if inProgress {
 		_, inUncertainState = ctrl.uncertainPVCs.Load(pvcKey)
@@ -89,10 +91,10 @@ func (ctrl *modifyController) modify(pvc *v1.PersistentVolumeClaim, pv *v1.Persi
 		if err != nil {
 			return pvc, pv, err, false
 		}
-		return ctrl.controllerModifyVolumeWithTarget(pvc, pv, vac)
+		return ctrl.controllerModifyVolumeWithTarget(ctx, pvc, pv, vac)
 	}
 
-	return ctrl.validateVACAndModifyVolumeWithTarget(pvc, pv)
+	return ctrl.validateVACAndModifyVolumeWithTarget(ctx, pvc, pv)
 }
 
 func (ctrl *modifyController) rolledBack(pvc *v1.PersistentVolumeClaim) (*v1.PersistentVolumeClaim, error) {
@@ -123,6 +125,7 @@ func (ctrl *modifyController) getTargetVAC(pvc *v1.PersistentVolumeClaim, vacNam
 // func validateVACAndModifyVolumeWithTarget validate the VAC. The function sets pvc.Status.ModifyVolumeStatus
 // to Pending if VAC does not exist and proceeds to trigger ModifyVolume if VAC exists
 func (ctrl *modifyController) validateVACAndModifyVolumeWithTarget(
+	ctx context.Context,
 	pvc *v1.PersistentVolumeClaim,
 	pv *v1.PersistentVolume) (*v1.PersistentVolumeClaim, *v1.PersistentVolume, error, bool) {
 
@@ -141,18 +144,19 @@ func (ctrl *modifyController) validateVACAndModifyVolumeWithTarget(
 	// Record an event to indicate that external resizer is modifying this volume.
 	ctrl.eventRecorder.Event(pvc, v1.EventTypeNormal, util.VolumeModify,
 		fmt.Sprintf("external resizer is modifying volume %s with vac %s", pvc.Name, vac.Name))
-	return ctrl.controllerModifyVolumeWithTarget(pvc, pv, vac)
+	return ctrl.controllerModifyVolumeWithTarget(ctx, pvc, pv, vac)
 }
 
 // func controllerModifyVolumeWithTarget trigger the CSI ControllerModifyVolume API call
 // and handle both success and error scenarios
 func (ctrl *modifyController) controllerModifyVolumeWithTarget(
+	ctx context.Context,
 	pvc *v1.PersistentVolumeClaim,
 	pv *v1.PersistentVolume,
 	vacObj *storagev1.VolumeAttributesClass,
 ) (*v1.PersistentVolumeClaim, *v1.PersistentVolume, error, bool) {
 	var err error
-	pvc, pv, err = ctrl.callModifyVolumeOnPlugin(pvc, pv, vacObj)
+	pvc, pv, err = ctrl.callModifyVolumeOnPlugin(ctx, pvc, pv, vacObj)
 	if err == nil {
 		klog.V(4).Infof("Update volumeAttributesClass of PV %q to %s succeeded", pv.Name, vacObj.Name)
 		// Record an event to indicate that modify operation is successful.
@@ -195,6 +199,7 @@ func (ctrl *modifyController) controllerModifyVolumeWithTarget(
 }
 
 func (ctrl *modifyController) callModifyVolumeOnPlugin(
+	ctx context.Context,
 	pvc *v1.PersistentVolumeClaim,
 	pv *v1.PersistentVolume,
 	vac *storagev1.VolumeAttributesClass) (*v1.PersistentVolumeClaim, *v1.PersistentVolume, error) {
@@ -209,7 +214,7 @@ func (ctrl *modifyController) callModifyVolumeOnPlugin(
 		parameters[pvcNamespaceKey] = pvc.GetNamespace()
 		parameters[pvNameKey] = pv.GetName()
 	}
-	err := ctrl.modifier.Modify(pv, parameters)
+	err := ctrl.modifier.Modify(ctx, pv, parameters)
 
 	if err != nil {
 		return pvc, pv, err

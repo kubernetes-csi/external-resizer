@@ -17,6 +17,8 @@ limitations under the License.
 package modifier
 
 import (
+	"context"
+
 	v1 "k8s.io/api/core/v1"
 )
 
@@ -25,5 +27,5 @@ type Modifier interface {
 	// Name returns the modifier's name.
 	Name() string
 	// Modify executes the modify operation of this PVC.
-	Modify(pv *v1.PersistentVolume, mutableParameters map[string]string) error
+	Modify(ctx context.Context, pv *v1.PersistentVolume, mutableParameters map[string]string) error
 }
