@@ -24,7 +24,7 @@ import (
 	"time"
 
 	"github.com/kubernetes-csi/csi-lib-utils/slowset"
-	"github.com/kubernetes-csi/external-resizer/pkg/util"
+	"github.com/kubernetes-csi/external-resizer/v2/pkg/util"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	v1 "k8s.io/api/core/v1"
