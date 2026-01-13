@@ -1,4 +1,4 @@
-module github.com/kubernetes-csi/external-resizer
+module github.com/kubernetes-csi/external-resizer/v2
 
 go 1.25.5
 

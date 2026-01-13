@@ -8,8 +8,8 @@ import (
 	"time"
 
 	csilib "github.com/container-storage-interface/spec/lib/go/csi"
-	"github.com/kubernetes-csi/external-resizer/pkg/csi"
-	"github.com/kubernetes-csi/external-resizer/pkg/util"
+	"github.com/kubernetes-csi/external-resizer/v2/pkg/csi"
+	"github.com/kubernetes-csi/external-resizer/v2/pkg/util"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

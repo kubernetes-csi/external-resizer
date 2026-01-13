@@ -6,16 +6,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kubernetes-csi/external-resizer/pkg/features"
+	"github.com/kubernetes-csi/external-resizer/v2/pkg/features"
 	"k8s.io/client-go/tools/record"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/util/workqueue"
 
-	"github.com/kubernetes-csi/external-resizer/pkg/csi"
-	"github.com/kubernetes-csi/external-resizer/pkg/resizer"
-	"github.com/kubernetes-csi/external-resizer/pkg/util"
+	"github.com/kubernetes-csi/external-resizer/v2/pkg/csi"
+	"github.com/kubernetes-csi/external-resizer/v2/pkg/resizer"
+	"github.com/kubernetes-csi/external-resizer/v2/pkg/util"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"

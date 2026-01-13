@@ -22,11 +22,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kubernetes-csi/external-resizer/pkg/features"
-	"github.com/kubernetes-csi/external-resizer/pkg/util"
+	"github.com/kubernetes-csi/external-resizer/v2/pkg/features"
+	"github.com/kubernetes-csi/external-resizer/v2/pkg/util"
 
 	"github.com/kubernetes-csi/csi-lib-utils/slowset"
-	"github.com/kubernetes-csi/external-resizer/pkg/modifier"
+	"github.com/kubernetes-csi/external-resizer/v2/pkg/modifier"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
