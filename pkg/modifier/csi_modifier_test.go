@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/kubernetes-csi/external-resizer/pkg/csi"
+	"github.com/kubernetes-csi/external-resizer/v2/pkg/csi"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"

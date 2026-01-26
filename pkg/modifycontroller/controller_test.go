@@ -1,21 +1,23 @@
 package modifycontroller
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/kubernetes-csi/external-resizer/pkg/csi"
-	"github.com/kubernetes-csi/external-resizer/pkg/features"
-	"github.com/kubernetes-csi/external-resizer/pkg/modifier"
-	"github.com/kubernetes-csi/external-resizer/pkg/util"
+	"github.com/kubernetes-csi/external-resizer/v2/pkg/csi"
+	"github.com/kubernetes-csi/external-resizer/v2/pkg/features"
+	"github.com/kubernetes-csi/external-resizer/v2/pkg/modifier"
+	"github.com/kubernetes-csi/external-resizer/v2/pkg/util"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/wait"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
@@ -260,81 +262,83 @@ func TestSyncPVC(t *testing.T) {
 
 // TestInfeasibleRetry tests that sidecar doesn't spam plugin upon infeasible error code (e.g. invalid VAC parameter)
 func TestInfeasibleRetry(t *testing.T) {
-	basePVC := createTestPVC(pvcName, targetVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/)
-	basePV := createTestPV(1, pvcName, pvcNamespace, "foobaz" /*pvcUID*/, &fsVolumeMode, testVac)
-
 	tests := []struct {
 		name                        string
-		pvc                         *v1.PersistentVolumeClaim
 		expectedModifyCallCount     int
 		csiModifyError              error
 		eventuallyRemoveFromSlowSet bool
 	}{
 		{
 			name:                        "Should retry non-infeasible error normally",
-			pvc:                         basePVC,
 			expectedModifyCallCount:     2,
 			csiModifyError:              status.Errorf(codes.Internal, "fake non-infeasible error"),
 			eventuallyRemoveFromSlowSet: false,
 		},
 		{
 			name:                        "Should NOT retry infeasible error normally",
-			pvc:                         basePVC,
 			expectedModifyCallCount:     1,
 			csiModifyError:              status.Errorf(codes.InvalidArgument, "fake infeasible error"),
 			eventuallyRemoveFromSlowSet: false,
 		},
 		{
 			name:                        "Should EVENTUALLY retry infeasible error",
-			pvc:                         basePVC,
 			expectedModifyCallCount:     2,
 			csiModifyError:              status.Errorf(codes.InvalidArgument, "fake infeasible error"),
 			eventuallyRemoveFromSlowSet: true,
 		},
 	}
 
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			testPVC := createTestPVC(pvcName, targetVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/)
+			testPV := createTestPV(1, pvcName, pvcNamespace, "foobaz" /*pvcUID*/, &fsVolumeMode, testVac)
+
 			// Setup
 			client := csi.NewMockClient(testDriverName, true, true, true, true, true)
-			if test.csiModifyError != nil {
-				client.SetModifyError(test.csiModifyError)
+			if tc.csiModifyError != nil {
+				client.SetModifyError(tc.csiModifyError)
 			}
 
-			initialObjects := []runtime.Object{test.pvc, basePV, testVacObject, targetVacObject}
+			initialObjects := []runtime.Object{testPVC, testPV, testVacObject.DeepCopy(), targetVacObject.DeepCopy()}
 			ctrlInstance := setupFakeK8sEnvironment(t, client, initialObjects)
 
+			pvcKey, _ := cache.MetaNamespaceKeyFunc(testPVC)
+
 			// Attempt modification first time
-			err := ctrlInstance.syncPVC(pvcNamespace + "/" + pvcName)
-			if !errors.Is(err, test.csiModifyError) {
-				t.Errorf("for %s, unexpected first syncPVC error: %v", test.name, err)
+			err := ctrlInstance.syncPVC(pvcKey)
+			if !errors.Is(err, tc.csiModifyError) {
+				t.Errorf("for %s, unexpected first syncPVC error: %v", tc.name, err)
+			}
+
+			// Wait for informers to sync the PVC with infeasible state in status
+			if tc.csiModifyError != nil && status.Code(tc.csiModifyError) == codes.InvalidArgument {
+				waitForErrorOnPVCStatus(t, ctrlInstance, pvcName, targetVac)
 			}
 
 			// Fake time passing by removing from SlowSet
-			if test.eventuallyRemoveFromSlowSet {
-				pvcKey, _ := cache.MetaNamespaceKeyFunc(test.pvc)
+			if tc.eventuallyRemoveFromSlowSet {
 				ctrlInstance.slowSet.Remove(pvcKey)
 			}
 
 			// Attempt modification second time
-			err2 := ctrlInstance.syncPVC(pvcNamespace + "/" + pvcName)
-			switch test.expectedModifyCallCount {
+			err2 := ctrlInstance.syncPVC(pvcKey)
+			switch tc.expectedModifyCallCount {
 			case 1:
 				if !util.IsDelayRetryError(err2) {
-					t.Errorf("for %s, unexpected second syncPVC error: %v", test.name, err)
+					t.Errorf("for %s, unexpected second syncPVC error: %v", tc.name, err)
 				}
 			case 2:
-				if !errors.Is(err2, test.csiModifyError) {
-					t.Errorf("for %s, unexpected second syncPVC error: %v", test.name, err)
+				if !errors.Is(err2, tc.csiModifyError) {
+					t.Errorf("for %s, unexpected second syncPVC error: %v", tc.name, err)
 				}
 			default:
-				t.Errorf("for %s, unexpected second syncPVC error: %v", test.name, err)
+				t.Errorf("for %s, unexpected second syncPVC error: %v", tc.name, err)
 			}
 
 			// Confirm CSI ModifyVolume was called desired amount of times
 			modifyCallCount := client.GetModifyCount()
-			if test.expectedModifyCallCount != modifyCallCount {
-				t.Fatalf("for %s: expected %d csi modify calls, but got %d", test.name, test.expectedModifyCallCount, modifyCallCount)
+			if tc.expectedModifyCallCount != modifyCallCount {
+				t.Fatalf("for %s: expected %d csi modify calls, but got %d", tc.name, tc.expectedModifyCallCount, modifyCallCount)
 			}
 		})
 	}
@@ -398,6 +402,25 @@ func TestConcurrentSync(t *testing.T) {
 				time.Sleep(20 * time.Millisecond)
 			}
 		})
+	}
+}
+
+func waitForErrorOnPVCStatus(t *testing.T, ctrlInstance *modifyController, pvcName string, expectdTargetVac string) {
+	ctx := t.Context()
+	err := wait.PollUntilContextTimeout(ctx, 100*time.Millisecond, 5*time.Second, true, func(ctx context.Context) (bool, error) {
+		cachedPVC, err := ctrlInstance.pvcLister.PersistentVolumeClaims(pvcNamespace).Get(pvcName)
+		if err != nil {
+			return false, nil
+		}
+		if cachedPVC.Status.ModifyVolumeStatus != nil &&
+			cachedPVC.Status.ModifyVolumeStatus.Status == v1.PersistentVolumeClaimModifyVolumeInfeasible &&
+			cachedPVC.Status.ModifyVolumeStatus.TargetVolumeAttributesClassName == expectdTargetVac {
+			return true, nil
+		}
+		return false, nil
+	})
+	if err != nil {
+		t.Fatalf("Timeout waiting for PVC to have infeasible status in informer cache: %v", err)
 	}
 }
 

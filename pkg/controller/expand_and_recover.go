@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/kubernetes-csi/csi-lib-utils/slowset"
-	"github.com/kubernetes-csi/external-resizer/pkg/util"
+	"github.com/kubernetes-csi/external-resizer/v2/pkg/util"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

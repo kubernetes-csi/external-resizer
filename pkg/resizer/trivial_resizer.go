@@ -17,7 +17,7 @@ limitations under the License.
 package resizer
 
 import (
-	"github.com/kubernetes-csi/external-resizer/pkg/util"
+	"github.com/kubernetes-csi/external-resizer/v2/pkg/util"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	csitrans "k8s.io/csi-translation-lib"

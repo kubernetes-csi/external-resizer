@@ -28,7 +28,7 @@ import (
 	"time"
 
 	"github.com/kubernetes-csi/csi-lib-utils/metrics"
-	"github.com/kubernetes-csi/external-resizer/pkg/csi"
+	"github.com/kubernetes-csi/external-resizer/v2/pkg/csi"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -37,12 +37,12 @@ import (
 
 	"github.com/kubernetes-csi/csi-lib-utils/leaderelection"
 	"github.com/kubernetes-csi/csi-lib-utils/standardflags"
-	"github.com/kubernetes-csi/external-resizer/pkg/controller"
-	"github.com/kubernetes-csi/external-resizer/pkg/features"
-	"github.com/kubernetes-csi/external-resizer/pkg/modifier"
-	"github.com/kubernetes-csi/external-resizer/pkg/modifycontroller"
-	"github.com/kubernetes-csi/external-resizer/pkg/resizer"
-	"github.com/kubernetes-csi/external-resizer/pkg/util"
+	"github.com/kubernetes-csi/external-resizer/v2/pkg/controller"
+	"github.com/kubernetes-csi/external-resizer/v2/pkg/features"
+	"github.com/kubernetes-csi/external-resizer/v2/pkg/modifier"
+	"github.com/kubernetes-csi/external-resizer/v2/pkg/modifycontroller"
+	"github.com/kubernetes-csi/external-resizer/v2/pkg/resizer"
+	"github.com/kubernetes-csi/external-resizer/v2/pkg/util"
 	csitrans "k8s.io/csi-translation-lib"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -309,7 +309,7 @@ func main() {
 		config,
 		standardflags.Configuration,
 		run,
-		"external-resizer-"+util.SanitizeName(resizerName),
+		"external-resizer-"+util.SanitizeName(leaseHolder),
 		mux,
 		utilfeature.DefaultFeatureGate.Enabled(features.ReleaseLeaderElectionOnExit),
 	)
