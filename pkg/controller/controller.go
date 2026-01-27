@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/kubernetes-csi/external-resizer/pkg/features"
@@ -64,8 +65,9 @@ type resizeController struct {
 	pvSynced      cache.InformerSynced
 	pvcSynced     cache.InformerSynced
 
-	usedPVCs       *inUsePVCStore
-	finalErrorPVCs sets.Set[string]
+	usedPVCs         *inUsePVCStore
+	finalErrorPVCs   sets.Set[string]
+	finalErrorPVCsMu sync.RWMutex
 
 	podLister       corelisters.PodLister
 	podListerSynced cache.InformerSynced
@@ -684,4 +686,28 @@ func inUseError(err error) bool {
 		return true
 	}
 	return false
+}
+
+// hasFinalError checks if a PVC has encountered a final (non-retryable) error.
+// This method is thread-safe.
+func (ctrl *resizeController) hasFinalError(pvcKey string) bool {
+	ctrl.finalErrorPVCsMu.RLock()
+	defer ctrl.finalErrorPVCsMu.RUnlock()
+	return ctrl.finalErrorPVCs.Has(pvcKey)
+}
+
+// addFinalError marks a PVC as having encountered a final (non-retryable) error.
+// This method is thread-safe.
+func (ctrl *resizeController) addFinalError(pvcKey string) {
+	ctrl.finalErrorPVCsMu.Lock()
+	defer ctrl.finalErrorPVCsMu.Unlock()
+	ctrl.finalErrorPVCs.Insert(pvcKey)
+}
+
+// removeFinalError removes a PVC from the final error tracking set.
+// This method is thread-safe.
+func (ctrl *resizeController) removeFinalError(pvcKey string) {
+	ctrl.finalErrorPVCsMu.Lock()
+	defer ctrl.finalErrorPVCsMu.Unlock()
+	ctrl.finalErrorPVCs.Delete(pvcKey)
 }
