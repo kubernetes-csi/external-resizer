@@ -15,6 +15,7 @@ import (
 	"google.golang.org/grpc/status"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -213,7 +214,7 @@ func TestExpandAndRecoverConcurrent(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.RecoverVolumeExpansionFailure, true)
 
 	fsVolumeMode := v1.PersistentVolumeFilesystem
-	client := csi.NewMockClient("mock-driver", true, true, false, true, true)
+	client := csi.NewMockClient("mock-driver", true, true, false, true, true, false)
 	driverName, _ := client.GetDriverName(context.TODO())
 
 	// Set expansion to fail with a final error - this triggers addFinalError()
