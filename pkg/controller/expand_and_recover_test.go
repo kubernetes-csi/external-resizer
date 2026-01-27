@@ -2,6 +2,8 @@ package controller
 
 import (
 	"context"
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -16,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	"k8s.io/client-go/tools/record"
@@ -211,4 +214,117 @@ func TestExpandAndRecover(t *testing.T) {
 
 		})
 	}
+}
+
+// TestExpandAndRecoverConcurrent verifies that concurrent calls to expandAndRecover
+// are thread-safe. This test exercises the synchronization of finalErrorPVCs access
+// when multiple workers process failing PVC resize operations simultaneously.
+func TestExpandAndRecoverConcurrent(t *testing.T) {
+	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.RecoverVolumeExpansionFailure, true)
+
+	fsVolumeMode := v1.PersistentVolumeFilesystem
+	client := csi.NewMockClient("mock-driver", true, true, false, true, true)
+	driverName, _ := client.GetDriverName(context.TODO())
+
+	// Set expansion to fail with a final error - this triggers addFinalError()
+	client.SetExpansionError(status.Errorf(codes.Internal, "simulated volume not found error"))
+
+	numPVCs := 20
+	pvcs := make([]*v1.PersistentVolumeClaim, numPVCs)
+	pvs := make([]*v1.PersistentVolume, numPVCs)
+
+	var initialObjects []runtime.Object
+	for i := 0; i < numPVCs; i++ {
+		pvcName := fmt.Sprintf("test-pvc-%d", i)
+		pvName := fmt.Sprintf("test-pv-%d", i)
+		pvcs[i] = createConcurrentTestPVC(pvcName, "2Gi", "1Gi")
+		pvcs[i].Spec.VolumeName = pvName
+		pvs[i] = createConcurrentTestPV(pvName, 1, pvcName, defaultNS, types.UID(pvcName+"-uid"), &fsVolumeMode)
+		initialObjects = append(initialObjects, pvcs[i], pvs[i])
+	}
+
+	kubeClient, informerFactory := fakeK8s(initialObjects)
+
+	csiResizer, err := resizer.NewResizerFromClient(client, 15*time.Second, kubeClient, driverName)
+	if err != nil {
+		t.Fatalf("Unable to create resizer: %v", err)
+	}
+
+	controller := NewResizeController(driverName,
+		csiResizer, kubeClient,
+		time.Second, informerFactory,
+		workqueue.DefaultTypedControllerRateLimiter[string](), true, 2*time.Minute)
+
+	ctrlInstance := controller.(*resizeController)
+	ctrlInstance.eventRecorder = record.NewFakeRecorder(1000)
+
+	var wg sync.WaitGroup
+	numWorkers := 100
+
+	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+			pvcIndex := workerID % numPVCs
+			// This exercises the thread-safe finalErrorPVCs access
+			_, _, _, _ = ctrlInstance.expandAndRecover(pvcs[pvcIndex], pvs[pvcIndex])
+		}(i)
+	}
+
+	wg.Wait()
+	t.Log("Concurrent expandAndRecover completed successfully")
+}
+
+// createConcurrentTestPVC creates a PVC for concurrent testing
+func createConcurrentTestPVC(name string, specSize, statusSize string) *v1.PersistentVolumeClaim {
+	return &v1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: defaultNS,
+			UID:       types.UID(name + "-uid"),
+		},
+		Spec: v1.PersistentVolumeClaimSpec{
+			AccessModes: []v1.PersistentVolumeAccessMode{v1.ReadWriteOnce},
+			Resources:   v1.VolumeResourceRequirements{Requests: v1.ResourceList{v1.ResourceStorage: resource.MustParse(specSize)}},
+			VolumeName:  name + "-pv",
+		},
+		Status: v1.PersistentVolumeClaimStatus{
+			Phase:    v1.ClaimBound,
+			Capacity: v1.ResourceList{v1.ResourceStorage: resource.MustParse(statusSize)},
+		},
+	}
+}
+
+// createConcurrentTestPV creates a PV for concurrent testing
+func createConcurrentTestPV(name string, capacityGB int, pvcName, pvcNamespace string, pvcUID types.UID, volumeMode *v1.PersistentVolumeMode) *v1.PersistentVolume {
+	capacity := resource.MustParse(fmt.Sprintf("%dGi", capacityGB))
+
+	pv := &v1.PersistentVolume{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        name,
+			Annotations: make(map[string]string),
+		},
+		Spec: v1.PersistentVolumeSpec{
+			AccessModes: []v1.PersistentVolumeAccessMode{v1.ReadWriteOnce},
+			Capacity: map[v1.ResourceName]resource.Quantity{
+				v1.ResourceStorage: capacity,
+			},
+			PersistentVolumeSource: v1.PersistentVolumeSource{
+				CSI: &v1.CSIPersistentVolumeSource{
+					Driver:       "mock-driver",
+					VolumeHandle: name,
+				},
+			},
+			VolumeMode: volumeMode,
+		},
+	}
+	if len(pvcName) > 0 {
+		pv.Spec.ClaimRef = &v1.ObjectReference{
+			Namespace: pvcNamespace,
+			Name:      pvcName,
+			UID:       pvcUID,
+		}
+		pv.Status.Phase = v1.VolumeBound
+	}
+	return pv
 }
