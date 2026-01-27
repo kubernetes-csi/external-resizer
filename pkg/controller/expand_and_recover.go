@@ -93,7 +93,7 @@ func (ctrl *resizeController) expandAndRecover(pvc *v1.PersistentVolumeClaim, pv
 			//	2. Or Previous operation failed with final error, but we did not update API object.
 			// For case#1 - Recovery from failure is not immediately possible, and we should let
 			// previous operation succeed or fail.
-			if ctrl.finalErrorPVCs.Has(pvcKey) {
+			if ctrl.hasFinalError(pvcKey) {
 				newSize = pvcSpecSize
 			} else if allocatedSize != nil {
 				newSize = *allocatedSize
@@ -248,7 +248,7 @@ func (ctrl *resizeController) callResizeOnPlugin(
 		}
 		if util.IsFinalError(err) {
 			var markExpansionFailedError error
-			ctrl.finalErrorPVCs.Insert(pvcKey)
+			ctrl.addFinalError(pvcKey)
 			if util.IsInfeasibleError(err) {
 				pvc, markExpansionFailedError = ctrl.markControllerExpansionInfeasible(pvc, err)
 				if markExpansionFailedError != nil {
@@ -266,12 +266,12 @@ func (ctrl *resizeController) callResizeOnPlugin(
 			// remove key from slowSet because resizer expansion failed with non-final error
 			ctrl.slowSet.Remove(pvcKey)
 			// remove key from finalErrorPVCs
-			ctrl.finalErrorPVCs.Delete(pvcKey)
+			ctrl.removeFinalError(pvcKey)
 		}
 		return pvc, pv, fmt.Errorf("resize volume %q by resizer %q failed: %v", pv.Name, ctrl.name, err)
 	}
 
-	ctrl.finalErrorPVCs.Delete(pvcKey)
+	ctrl.removeFinalError(pvcKey)
 	ctrl.slowSet.Remove(pvcKey)
 
 	klog.V(4).InfoS("Resize volume succeeded, start to update PV's capacity", "PV", klog.KObj(pv))
