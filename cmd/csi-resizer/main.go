@@ -63,32 +63,15 @@ import (
 
 var (
 	master       = flag.String("master", "", "Master URL to build a client config from. Either this or kubeconfig needs to be set if the provisioner is being run out of cluster.")
-	kubeConfig   = flag.String("kubeconfig", "", "Absolute path to the kubeconfig")
 	resyncPeriod = flag.Duration("resync-period", time.Minute*10, "Resync period for cache")
 	workers      = flag.Int("workers", 10, "Concurrency to process multiple resize requests")
 
 	extraModifyMetadata = flag.Bool("extra-modify-metadata", false, "If set, add pv/pvc metadata to plugin modify requests as parameters.")
 
-	csiAddress = flag.String("csi-address", "/run/csi/socket", "Address of the CSI driver socket.")
-	timeout    = flag.Duration("timeout", 10*time.Second, "Timeout for waiting for CSI driver socket.")
-
-	showVersion = flag.Bool("version", false, "Show version")
+	timeout = flag.Duration("timeout", 10*time.Second, "Timeout for waiting for CSI driver socket.")
 
 	retryIntervalStart = flag.Duration("retry-interval-start", time.Second, "Initial retry interval of failed volume resize. It exponentially increases with each failure, up to retry-interval-max.")
 	retryIntervalMax   = flag.Duration("retry-interval-max", 5*time.Minute, "Maximum retry interval of failed volume resize.")
-
-	enableLeaderElection        = flag.Bool("leader-election", false, "Enable leader election.")
-	leaderElectionNamespace     = flag.String("leader-election-namespace", "", "Namespace where the leader election resource lives. Defaults to the pod namespace if not set.")
-	leaderElectionLeaseDuration = flag.Duration("leader-election-lease-duration", 15*time.Second, "Duration, in seconds, that non-leader candidates will wait to force acquire leadership. Defaults to 15 seconds.")
-	leaderElectionRenewDeadline = flag.Duration("leader-election-renew-deadline", 10*time.Second, "Duration, in seconds, that the acting leader will retry refreshing leadership before giving up. Defaults to 10 seconds.")
-	leaderElectionRetryPeriod   = flag.Duration("leader-election-retry-period", 5*time.Second, "Duration, in seconds, the LeaderElector clients should wait between tries of actions. Defaults to 5 seconds.")
-
-	metricsAddress = flag.String("metrics-address", "", "(deprecated) The TCP network address where the prometheus metrics endpoint will listen (example: `:8080`). The default is empty string, which means metrics endpoint is disabled. Only one of `--metrics-address` and `--http-endpoint` can be set.")
-	httpEndpoint   = flag.String("http-endpoint", "", "The TCP network address where the HTTP server for diagnostics, including metrics and leader election health check, will listen (example: `:8080`). The default is empty string, which means the server is disabled. Only one of `--metrics-address` and `--http-endpoint` can be set.")
-	metricsPath    = flag.String("metrics-path", "/metrics", "The HTTP path where prometheus metrics will be exposed. Default is `/metrics`.")
-
-	kubeAPIQPS   = flag.Float64("kube-api-qps", 5, "QPS to use while communicating with the kubernetes apiserver. Defaults to 5.0.")
-	kubeAPIBurst = flag.Int("kube-api-burst", 10, "Burst to use while communicating with the kubernetes apiserver. Defaults to 10.")
 
 	handleVolumeInUseError = flag.Bool("handle-volume-inuse-error", true, "Flag to turn on/off capability to handle volume in use error in resizer controller. Defaults to true if not set.")
 
@@ -104,6 +87,7 @@ func main() {
 	c := logsapi.NewLoggingConfiguration()
 	logsapi.AddGoFlags(c, flag.CommandLine)
 	logs.InitLogs()
+	standardflags.RegisterCommonFlags(flag.CommandLine)
 	standardflags.AddAutomaxprocs(klog.Infof)
 	flag.Parse()
 	if err := logsapi.ValidateAndApply(c, fg); err != nil {
@@ -111,19 +95,19 @@ func main() {
 		klog.FlushAndExit(klog.ExitFlushTimeout, 1)
 	}
 
-	if *showVersion {
+	if standardflags.Configuration.ShowVersion {
 		fmt.Println(os.Args[0], version)
 		os.Exit(0)
 	}
 	klog.InfoS("Version", "version", version)
 
-	if *metricsAddress != "" && *httpEndpoint != "" {
+	if standardflags.Configuration.MetricsAddress != "" && standardflags.Configuration.HttpEndpoint != "" {
 		klog.ErrorS(nil, "Only one of `--metrics-address` and `--http-endpoint` can be set.")
 		klog.FlushAndExit(klog.ExitFlushTimeout, 1)
 	}
-	addr := *metricsAddress
+	addr := standardflags.Configuration.MetricsAddress
 	if addr == "" {
-		addr = *httpEndpoint
+		addr = standardflags.Configuration.HttpEndpoint
 	}
 	if err := utilfeature.DefaultMutableFeatureGate.SetFromMap(featureGates); err != nil {
 		klog.ErrorS(err, "Failed to set feature gates")
@@ -132,8 +116,8 @@ func main() {
 
 	var config *rest.Config
 	var err error
-	if *master != "" || *kubeConfig != "" {
-		config, err = clientcmd.BuildConfigFromFlags(*master, *kubeConfig)
+	if *master != "" || standardflags.Configuration.KubeConfig != "" {
+		config, err = clientcmd.BuildConfigFromFlags(*master, standardflags.Configuration.KubeConfig)
 	} else {
 		config, err = rest.InClusterConfig()
 	}
@@ -142,8 +126,8 @@ func main() {
 		klog.FlushAndExit(klog.ExitFlushTimeout, 1)
 	}
 
-	config.QPS = float32(*kubeAPIQPS)
-	config.Burst = *kubeAPIBurst
+	config.QPS = float32(standardflags.Configuration.KubeAPIQPS)
+	config.Burst = standardflags.Configuration.KubeAPIBurst
 	config.ContentType = runtime.ContentTypeProtobuf
 
 	kubeClient, err := kubernetes.NewForConfig(config)
@@ -174,7 +158,7 @@ func main() {
 	metricsManager := metrics.NewCSIMetricsManager("" /* driverName */)
 
 	ctx := context.Background()
-	csiClient, err := csi.New(ctx, *csiAddress, *timeout, metricsManager)
+	csiClient, err := csi.New(ctx, standardflags.Configuration.CSIAddress, *timeout, metricsManager)
 	if err != nil {
 		klog.ErrorS(err, "Failed to create CSI client")
 		klog.FlushAndExit(klog.ExitFlushTimeout, 1)
@@ -190,7 +174,7 @@ func main() {
 	translator := csitrans.New()
 	if translator.IsMigratedCSIDriverByName(driverName) {
 		metricsManager = metrics.NewCSIMetricsManagerWithOptions(driverName, metrics.WithMigration())
-		migratedCsiClient, err := csi.New(ctx, *csiAddress, *timeout, metricsManager)
+		migratedCsiClient, err := csi.New(ctx, standardflags.Configuration.CSIAddress, *timeout, metricsManager)
 		if err != nil {
 			klog.ErrorS(err, "Failed to create MigratedCSI client")
 			klog.FlushAndExit(klog.ExitFlushTimeout, 1)
@@ -235,13 +219,13 @@ func main() {
 
 	// Start HTTP server for metrics + leader election healthz
 	if addr != "" {
-		metricsManager.RegisterToServer(mux, *metricsPath)
+		metricsManager.RegisterToServer(mux, standardflags.Configuration.MetricsPath)
 		metricsManager.SetDriverName(driverName)
 		go func() {
 			klog.InfoS("ServeMux listening", "address", addr)
 			err := http.ListenAndServe(addr, mux)
 			if err != nil {
-				klog.ErrorS(err, "Failed to start HTTP server", "address", addr, "metricsPath", *metricsPath)
+				klog.ErrorS(err, "Failed to start HTTP server", "address", addr, "metricsPath", standardflags.Configuration.MetricsPath)
 				klog.FlushAndExit(klog.ExitFlushTimeout, 1)
 			}
 		}()
@@ -320,37 +304,15 @@ func main() {
 		}
 	}
 
-	if !*enableLeaderElection {
-		run(ctx)
-	} else {
-		lockName := "external-resizer-" + util.SanitizeName(leaseHolder)
-		leKubeClient, err := kubernetes.NewForConfig(config)
-		if err != nil {
-			klog.ErrorS(err, "Failed to create leKubeClient")
-			klog.FlushAndExit(klog.ExitFlushTimeout, 1)
-		}
-		le := leaderelection.NewLeaderElection(leKubeClient, lockName, run)
-		if *httpEndpoint != "" {
-			le.PrepareHealthCheck(mux, leaderelection.DefaultHealthCheckTimeout)
-		}
-
-		if *leaderElectionNamespace != "" {
-			le.WithNamespace(*leaderElectionNamespace)
-		}
-
-		le.WithLeaseDuration(*leaderElectionLeaseDuration)
-		le.WithRenewDeadline(*leaderElectionRenewDeadline)
-		le.WithRetryPeriod(*leaderElectionRetryPeriod)
-		if utilfeature.DefaultFeatureGate.Enabled(features.ReleaseLeaderElectionOnExit) {
-			le.WithReleaseOnCancel(true)
-			le.WithContext(ctx)
-		}
-
-		if err := le.Run(); err != nil {
-			klog.ErrorS(err, "Error initializing leader election")
-			klog.FlushAndExit(klog.ExitFlushTimeout, 1)
-		}
-	}
+	leaderelection.RunWithLeaderElection(
+		ctx,
+		config,
+		standardflags.Configuration,
+		run,
+		"external-resizer-"+util.SanitizeName(leaseHolder),
+		mux,
+		utilfeature.DefaultFeatureGate.Enabled(features.ReleaseLeaderElectionOnExit),
+	)
 }
 
 func getDriverName(client csi.Client, timeout time.Duration) (string, error) {
