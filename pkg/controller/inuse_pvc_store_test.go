@@ -28,7 +28,6 @@ import (
 
 const (
 	defaultNS       = "default"
-	defaultPVCName  = "pvc1"
 	defaultPodName  = "pod1"
 	defaultNodeName = "node1"
 	defaultUID      = "uid1"
