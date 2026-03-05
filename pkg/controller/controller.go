@@ -147,7 +147,7 @@ func NewResizeController(
 	return ctrl
 }
 
-func (ctrl *resizeController) addPVC(obj interface{}) {
+func (ctrl *resizeController) addPVC(obj any) {
 	objKey, err := util.GetObjectKey(obj)
 	if err != nil {
 		return
@@ -155,7 +155,7 @@ func (ctrl *resizeController) addPVC(obj interface{}) {
 	ctrl.claimQueue.Add(objKey)
 }
 
-func (ctrl *resizeController) addPod(obj interface{}) {
+func (ctrl *resizeController) addPod(obj any) {
 	pod := parsePod(obj)
 	if pod == nil {
 		return
@@ -163,7 +163,7 @@ func (ctrl *resizeController) addPod(obj interface{}) {
 	ctrl.usedPVCs.addPod(pod)
 }
 
-func (ctrl *resizeController) deletePod(obj interface{}) {
+func (ctrl *resizeController) deletePod(obj any) {
 	pod := parsePod(obj)
 	if pod == nil {
 		return
@@ -171,7 +171,7 @@ func (ctrl *resizeController) deletePod(obj interface{}) {
 	ctrl.usedPVCs.removePod(pod)
 }
 
-func (ctrl *resizeController) updatePod(oldObj, newObj interface{}) {
+func (ctrl *resizeController) updatePod(oldObj, newObj any) {
 	pod := parsePod(newObj)
 	if pod == nil {
 		return
@@ -184,7 +184,7 @@ func (ctrl *resizeController) updatePod(oldObj, newObj interface{}) {
 	}
 }
 
-func (ctrl *resizeController) updatePVC(oldObj, newObj interface{}) {
+func (ctrl *resizeController) updatePVC(oldObj, newObj any) {
 	oldPVC, ok := oldObj.(*v1.PersistentVolumeClaim)
 	if !ok || oldPVC == nil {
 		return
@@ -295,11 +295,9 @@ func (ctrl *resizeController) Run(workers int, ctx context.Context, wg *sync.Wai
 
 	if utilfeature.DefaultFeatureGate.Enabled(features.ReleaseLeaderElectionOnExit) {
 		for range workers {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				wait.Until(ctrl.syncPVCs, 0, stopCh)
-			}()
+			})
 		}
 	} else {
 		for range workers {
@@ -648,7 +646,7 @@ func (ctrl *resizeController) updatePVCapacity(
 	return updatedPV, nil
 }
 
-func parsePod(obj interface{}) *v1.Pod {
+func parsePod(obj any) *v1.Pod {
 	if obj == nil {
 		return nil
 	}
