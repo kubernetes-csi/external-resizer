@@ -58,6 +58,8 @@ Note that the external-resizer does not scale with more replicas. Only one exter
 
 * `--leader-election-retry-period <duration>`: Duration, in seconds, the LeaderElector clients should wait between tries of actions. Defaults to 5 seconds.
 
+* `--node-deployment`: Enables deploying the external-resizer together with a CSI driver on nodes to manage node-local volumes. When enabled, each resizer instance only handles resize operations for PVs whose node affinity matches the local node. Requires the `NODE_NAME` environment variable to be set and is mutually exclusive with `--leader-election`. Off by default.
+
 * `--timeout <duration>`: Timeout of all calls to CSI driver. It should be set to value that accommodates majority of `ControllerExpandVolume` calls. 10 seconds is used by default.
 
 * `-kube-api-burst <int>` : Burst to use while communicating with the kubernetes apiserver. Defaults to 10. (default 10).
@@ -103,6 +105,18 @@ Note that the external-resizer does not scale with more replicas. Only one exter
 * `--automaxprocs`:  flag to set the `GOMAXPROCS` environment variable to match the configured Linux container CPU quota.
 
 * All glog / klog arguments are supported, such as `-v <log level>` or `-alsologtostderr`.
+
+### Distributed resizing
+
+For CSI drivers that manage node-local volumes (e.g., LVM, hostpath), it is common to deploy the driver as a DaemonSet with sidecars running on each node. The `--node-deployment` flag enables this model for the external-resizer: each instance only processes resize requests for volumes whose PV node affinity matches the node it runs on.
+
+To use this feature:
+
+1. Deploy the external-resizer as a sidecar in the DaemonSet alongside the CSI driver.
+2. Set `--node-deployment=true` and do not enable `--leader-election`.
+3. Set the `NODE_NAME` environment variable to the node name (e.g., via the downward API `spec.nodeName`).
+
+This feature complements the `--node-deployment` flag available in external-provisioner and external-snapshotter.
 
 ### HTTP endpoint
 
