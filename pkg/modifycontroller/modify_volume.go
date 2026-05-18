@@ -160,7 +160,7 @@ func (ctrl *modifyController) controllerModifyVolumeWithTarget(
 	if err == nil {
 		klog.V(4).Infof("Update volumeAttributesClass of PV %q to %s succeeded", pv.Name, vacObj.Name)
 		// Record an event to indicate that modify operation is successful.
-		ctrl.eventRecorder.Eventf(pvc, v1.EventTypeNormal, util.VolumeModifySuccess, fmt.Sprintf("external resizer modified volume %s with vac %s successfully", pvc.Name, vacObj.Name))
+		ctrl.eventRecorder.Eventf(pvc, v1.EventTypeNormal, util.VolumeModifySuccess, "external resizer modified volume %s with vac %s successfully", pvc.Name, vacObj.Name)
 		return pvc, pv, nil, true
 	} else {
 		errStatus, ok := status.FromError(err)
