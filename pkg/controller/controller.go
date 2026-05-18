@@ -495,7 +495,7 @@ func (ctrl *resizeController) resizePVC(pvc *v1.PersistentVolumeClaim, pv *v1.Pe
 
 	if err != nil && !apierrors.IsConflict(err) /* ignore conflicts as they should be silently retried */ {
 		// Record an event to indicate that resize operation is failed.
-		ctrl.eventRecorder.Eventf(pvc, v1.EventTypeWarning, util.VolumeResizeFailed, err.Error())
+		ctrl.eventRecorder.Event(pvc, v1.EventTypeWarning, util.VolumeResizeFailed, err.Error())
 	}
 	return err
 }

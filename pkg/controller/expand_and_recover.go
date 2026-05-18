@@ -192,7 +192,7 @@ func (ctrl *resizeController) expandAndRecover(pvc *v1.PersistentVolumeClaim, pv
 
 	if err != nil {
 		// Record an event to indicate that resize operation is failed.
-		ctrl.eventRecorder.Eventf(pvc, v1.EventTypeWarning, util.VolumeResizeFailed, err.Error())
+		ctrl.eventRecorder.Event(pvc, v1.EventTypeWarning, util.VolumeResizeFailed, err.Error())
 		return pvc, pv, err, true
 	}
 
