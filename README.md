@@ -26,7 +26,7 @@ The following table reflects the head of this branch.
 |-------------------------------|--------|---------|---------------------------------------------------------------------------------------------------------------------------------------------------------|
 | VolumeExpansion               | Stable | On      | [Support for expanding CSI volumes](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#csi-volume-expansion).                              |
 | ReadWriteOncePod              | Stable | On      | [Single pod access mode for PersistentVolumes](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#access-modes).                           |
-| RecoverVolumeExpansionFailure | Beta   | On      | [Recover from volume expansion failure](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#recovering-from-failure-when-expanding-volumes) |
+| RecoverVolumeExpansionFailure | Stable | On      | [Recover from volume expansion failure](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#recovering-from-failure-when-expanding-volumes) |
 | VolumeAttributesClass         | Stable | On     | [Volume Attributes Classes](https://kubernetes.io/docs/concepts/storage/volume-attributes-classes).                                                     |
 
 
