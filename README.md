@@ -26,8 +26,9 @@ The following table reflects the head of this branch.
 |-------------------------------|--------|---------|---------------------------------------------------------------------------------------------------------------------------------------------------------|
 | VolumeExpansion               | Stable | On      | [Support for expanding CSI volumes](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#csi-volume-expansion).                              |
 | ReadWriteOncePod              | Stable | On      | [Single pod access mode for PersistentVolumes](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#access-modes).                           |
-| RecoverVolumeExpansionFailure | Beta   | On      | [Recover from volume expansion failure](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#recovering-from-failure-when-expanding-volumes) |
-| VolumeAttributesClass         | Stable | On     | [Volume Attributes Classes](https://kubernetes.io/docs/concepts/storage/volume-attributes-classes).                                                     |
+| RecoverVolumeExpansionFailure | Stable | On      | [Recover from volume expansion failure](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#recovering-from-failure-when-expanding-volumes) |
+| VolumeAttributesClass         | Stable | On      | [Volume Attributes Classes](https://kubernetes.io/docs/concepts/storage/volume-attributes-classes).                                                     |
+| AnnotateFsResize              | Beta   | On      | [Allow resizing operation to resume for deleted PVCs](https://github.com/kubernetes/kubernetes/issues/88683)                                            |
 
 
 ## Usage
@@ -77,10 +78,10 @@ Note that the external-resizer does not scale with more replicas. Only one exter
 * `--handle-volume-inuse-error <true/false>`: Enable or disable volume-in-use error handling in external-resizer. Defaults to `true` and resize-controller will watch for all pods in all namespaces to check if PVC being expanded is in-use by a pod or not before retrying volume expansion if CSI driver throws volume-in-use error. Setting this to `false` will cause external-resizer to ignore volume-in-use error and resize-controller will retry volume expansion even if volume is already in use by a pod and CSI driver does not support expansion of in-use volumes. If CSI driver being used supports online expansion, it might be desirable to set `handle-volume-inuse-error` to `false` - to save costs associated with watching all pods in the cluster.
 
 * `-feature-gates**: A set of key/value pairs that describe alpha/experimental features of external-resizer.
-  * `AnnotateFsResize=true|false` (ALPHA - default=false): Store current size of pvc in pv's annotation, so as if pvc is deleted while expansion was pending on the node, the size of pvc can be restored to old value. This permits
+  * `AnnotateFsResize=true|false` (BETA - default=true): Store current size of pvc in pv's annotation, so as if pvc is deleted while expansion was pending on the node, the size of pvc can be restored to old value. This permits
     expansion on the node in case pvc was deleted while expansion was pending on the node (but completed in the controller). Use of this feature depends on Kubernetes version 1.21.
 
-  * `RecoverVolumeExpansionFailure=true|false` (BETA - default=true): Allow users to reduce size of PVC if expansion to current size is failing. If the feature gate `RecoverVolumeExpansionFailure` is enabled
+  * `RecoverVolumeExpansionFailure=true|false` (GA - default=true): Allow users to reduce size of PVC if expansion to current size is failing. If the feature gate `RecoverVolumeExpansionFailure` is enabled
     and expansion has failed for a PVC, you can retry expansion with a smaller size than the previously requested value. To request a new expansion attempt with a
     smaller proposed size, edit `.spec.resources` for that PVC and choose a value that is less than the value you previously tried.
     This is useful if expansion to a higher value did not succeed because of capacity constraint.
