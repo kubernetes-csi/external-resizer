@@ -9,12 +9,12 @@
 
 ### Other (Cleanup or Flake)
 
-- Bump k8s dependencies to v1.36.1 (#578, @dfajmon)
+- Bump k8s dependencies to v1.36.1 ([#578](https://github.com/kubernetes-csi/external-resizer/pull/578), [@dfajmon](https://github/dfajmon))
 
 ### Feature
 
-- Allow resuming of resize operation if PVC is deleted while resize is pending (#581, @gnufied)
-- Move RecoverVolumeExpansionFailure to GA (#577, @gnufied)
+- Allow resuming of resize operation if PVC is deleted while resize is pending ([#581](https://github.com/kubernetes-csi/external-resizer/pull/581), [@gnufied](https://github.com/gnufied))
+- Move RecoverVolumeExpansionFailure to GA ([#577](https://github.com/kubernetes-csi/external-resizer/pull/577), [@gnufied](https://github/com/gnufied))
 
 ## Dependencies
 
