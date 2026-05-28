@@ -75,6 +75,8 @@ var (
 
 	handleVolumeInUseError = flag.Bool("handle-volume-inuse-error", true, "Flag to turn on/off capability to handle volume in use error in resizer controller. Defaults to true if not set.")
 
+	enableNodeDeployment = flag.Bool("node-deployment", false, "Enables deploying the external-resizer together with a CSI driver on nodes to manage node-local volumes. Requires NODE_NAME env var and is mutually exclusive with --leader-election.")
+
 	featureGates map[string]bool
 
 	version = "unknown"
@@ -100,6 +102,20 @@ func main() {
 		os.Exit(0)
 	}
 	klog.InfoS("Version", "version", version)
+
+	var nodeName string
+	if *enableNodeDeployment {
+		if standardflags.Configuration.LeaderElection {
+			klog.ErrorS(nil, "Cannot use --node-deployment with --leader-election")
+			klog.FlushAndExit(klog.ExitFlushTimeout, 1)
+		}
+		nodeName = os.Getenv("NODE_NAME")
+		if nodeName == "" {
+			klog.ErrorS(nil, "NODE_NAME environment variable must be set when using --node-deployment")
+			klog.FlushAndExit(klog.ExitFlushTimeout, 1)
+		}
+		klog.InfoS("Running in node-deployment mode", "nodeName", nodeName)
+	}
 
 	if standardflags.Configuration.MetricsAddress != "" && standardflags.Configuration.HttpEndpoint != "" {
 		klog.ErrorS(nil, "Only one of `--metrics-address` and `--http-endpoint` can be set.")
@@ -237,7 +253,7 @@ func main() {
 		resizerName := csiResizer.Name()
 		rc = controller.NewResizeController(resizerName, csiResizer, kubeClient, *resyncPeriod, informerFactory,
 			workqueue.NewTypedItemExponentialFailureRateLimiter[string](*retryIntervalStart, *retryIntervalMax),
-			*handleVolumeInUseError, *retryIntervalMax)
+			*handleVolumeInUseError, *retryIntervalMax, nodeName)
 
 		leaseHolder = resizerName
 	}

@@ -95,8 +95,9 @@ func TestResizeFunctions(t *testing.T) {
 				csiResizer, kubeClient,
 				time.Second, informerFactory,
 				workqueue.DefaultTypedControllerRateLimiter[string](),
-				true, /*handleVolumeInUseError*/
-				2*time.Minute /*maxRetryInterval*/)
+				true,          /*handleVolumeInUseError*/
+				2*time.Minute, /*maxRetryInterval*/
+				"" /* nodeName */)
 
 			ctrlInstance, _ := controller.(*resizeController)
 
