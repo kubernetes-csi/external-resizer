@@ -68,7 +68,14 @@ var (
 
 	extraModifyMetadata = flag.Bool("extra-modify-metadata", false, "If set, add pv/pvc metadata to plugin modify requests as parameters.")
 
-	timeout = flag.Duration("timeout", 10*time.Second, "Timeout for waiting for CSI driver socket.")
+	timeout = flag.Duration("timeout", 10*time.Second, "Timeout for waiting for CSI driver socket. "+
+		"If set explicitly on the command line, this value also overrides --resize-timeout and "+
+		"--modify-timeout as the per-call timeout for ControllerExpandVolume and ControllerModifyVolume.")
+
+	resizeTimeout = flag.Duration("resize-timeout", 10*time.Second, "Timeout for ControllerExpandVolume calls. "+
+		"Ignored if --timeout is set explicitly on the command line.")
+	modifyTimeout = flag.Duration("modify-timeout", 10*time.Second, "Timeout for ControllerModifyVolume calls. "+
+		"Ignored if --timeout is set explicitly on the command line.")
 
 	retryIntervalStart = flag.Duration("retry-interval-start", time.Second, "Initial retry interval of failed volume resize. It exponentially increases with each failure, up to retry-interval-max.")
 	retryIntervalMax   = flag.Duration("retry-interval-max", 5*time.Minute, "Maximum retry interval of failed volume resize.")
@@ -79,6 +86,25 @@ var (
 
 	version = "unknown"
 )
+
+// resolveOperationTimeouts determines the effective per-call timeouts for
+// ControllerExpandVolume and ControllerModifyVolume. --timeout only takes
+// precedence over --resize-timeout/--modify-timeout when it was explicitly
+// passed on the command line -- its default value must not mask explicitly-set
+// --resize-timeout/--modify-timeout values.
+func resolveOperationTimeouts(fs *flag.FlagSet, timeout, resizeTimeout, modifyTimeout time.Duration) (
+	effectiveResizeTimeout, effectiveModifyTimeout time.Duration) {
+	timeoutExplicit := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "timeout" {
+			timeoutExplicit = true
+		}
+	})
+	if timeoutExplicit {
+		return timeout, timeout
+	}
+	return resizeTimeout, modifyTimeout
+}
 
 func main() {
 	flag.Var(cflag.NewMapStringBool(&featureGates), "feature-gates", "A set of key=value paris that describe feature gates for alpha/experimental features for csi external resizer."+"Options are:\n"+strings.Join(utilfeature.DefaultFeatureGate.KnownFeatures(), "\n"))
@@ -94,6 +120,9 @@ func main() {
 		klog.ErrorS(err, "LoggingConfiguration is invalid")
 		klog.FlushAndExit(klog.ExitFlushTimeout, 1)
 	}
+
+	effectiveResizeTimeout, effectiveModifyTimeout := resolveOperationTimeouts(
+		flag.CommandLine, *timeout, *resizeTimeout, *modifyTimeout)
 
 	if standardflags.Configuration.ShowVersion {
 		fmt.Println(os.Args[0], version)
@@ -189,7 +218,7 @@ func main() {
 
 	csiResizer, err := resizer.NewResizerFromClient(
 		csiClient,
-		*timeout,
+		effectiveResizeTimeout,
 		kubeClient,
 		driverName)
 	if err != nil && errors.Is(err, resizer.ResizeNotSupportErr) {
@@ -201,7 +230,7 @@ func main() {
 
 	csiModifier, err := modifier.NewModifierFromClient(
 		csiClient,
-		*timeout,
+		effectiveModifyTimeout,
 		kubeClient,
 		informerFactory,
 		*extraModifyMetadata,
