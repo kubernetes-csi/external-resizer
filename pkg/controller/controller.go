@@ -82,6 +82,10 @@ type resizeController struct {
 	// a cache to store PersistentVolumeClaim objects
 	claims                 cache.Store
 	handleVolumeInUseError bool
+
+	// nodeName is set when running in node-deployment mode. When non-empty,
+	// only PVs with nodeAffinity matching this node are processed.
+	nodeName string
 }
 
 // NewResizeController returns a ResizeController.
@@ -93,7 +97,8 @@ func NewResizeController(
 	informerFactory informers.SharedInformerFactory,
 	pvcRateLimiter workqueue.TypedRateLimiter[string],
 	handleVolumeInUseError bool,
-	maxRetryInterval time.Duration) ResizeController {
+	maxRetryInterval time.Duration,
+	nodeName string) ResizeController {
 	pvInformer := informerFactory.Core().V1().PersistentVolumes()
 	pvcInformer := informerFactory.Core().V1().PersistentVolumeClaims()
 	eventBroadcaster := record.NewBroadcaster()
@@ -121,6 +126,7 @@ func NewResizeController(
 		finalErrorPVCs:         sets.New[string](),
 		usedPVCs:               newUsedPVCStore(),
 		handleVolumeInUseError: handleVolumeInUseError,
+		nodeName:               nodeName,
 	}
 
 	// Add a resync period as the PVC's request size can be resized again when we handling
@@ -416,6 +422,11 @@ func (ctrl *resizeController) pvcNeedResize(pvc *v1.PersistentVolumeClaim) bool 
 
 // pvNeedResize returns true if a pv supports and also requests resize.
 func (ctrl *resizeController) pvNeedResize(pvc *v1.PersistentVolumeClaim, pv *v1.PersistentVolume) bool {
+	if !ctrl.pvBelongsToNode(pv) {
+		klog.V(4).InfoS("PV does not belong to this node, skipping", "controller", ctrl.name, "PV", klog.KObj(pv), "nodeName", ctrl.nodeName)
+		return false
+	}
+
 	if !ctrl.resizer.CanSupport(pv, pvc) {
 		klog.V(4).InfoS("Resizer doesn't support PV", "controller", ctrl.name, "PV", klog.KObj(pv))
 		return false
@@ -446,6 +457,32 @@ func (ctrl *resizeController) pvNeedResize(pvc *v1.PersistentVolumeClaim, pv *v1
 
 	// PV size is smaller than request size, we need to resize the volume.
 	return true
+}
+
+// pvBelongsToNode returns true if the PV's nodeAffinity matches the controller's
+// nodeName, or if node filtering is disabled (nodeName is empty). PVs without
+// nodeAffinity are not processed by any instance when node filtering is enabled,
+// as they are assumed to not be node-local volumes.
+func (ctrl *resizeController) pvBelongsToNode(pv *v1.PersistentVolume) bool {
+	if ctrl.nodeName == "" {
+		return true
+	}
+	na := pv.Spec.NodeAffinity
+	if na == nil || na.Required == nil {
+		return false
+	}
+	for _, term := range na.Required.NodeSelectorTerms {
+		for _, expr := range term.MatchExpressions {
+			if expr.Operator == v1.NodeSelectorOpIn {
+				for _, v := range expr.Values {
+					if v == ctrl.nodeName {
+						return true
+					}
+				}
+			}
+		}
+	}
+	return false
 }
 
 // isNodeExpandComplete returns true if  pvc.Status.Capacity >= pv.Spec.Capacity

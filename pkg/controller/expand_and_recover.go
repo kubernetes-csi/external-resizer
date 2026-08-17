@@ -291,6 +291,11 @@ func (ctrl *resizeController) callResizeOnPlugin(
 
 // checks if pv can be expanded
 func (ctrl *resizeController) pvCanBeExpanded(pv *v1.PersistentVolume, pvc *v1.PersistentVolumeClaim) bool {
+	if !ctrl.pvBelongsToNode(pv) {
+		klog.V(4).InfoS("PV does not belong to this node, skipping", "controller", ctrl.name, "PV", klog.KObj(pv), "nodeName", ctrl.nodeName)
+		return false
+	}
+
 	if !ctrl.resizer.CanSupport(pv, pvc) {
 		klog.V(4).InfoS("Resizer doesn't support PV", "controller", ctrl.name, "PV", klog.KObj(pv))
 		return false

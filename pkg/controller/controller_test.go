@@ -247,7 +247,8 @@ func TestController(t *testing.T) {
 			kubeClient, time.Second,
 			informerFactory, workqueue.DefaultTypedControllerRateLimiter[string](),
 			!test.disableVolumeInUseErrorHandler,
-			2*time.Minute /* maxRetryInterval */)
+			2*time.Minute, /* maxRetryInterval */
+			"" /* nodeName */)
 
 		ctrlInstance, _ := controller.(*resizeController)
 
@@ -409,8 +410,9 @@ func TestResizePVC(t *testing.T) {
 			controller := NewResizeController(driverName, csiResizer,
 				kubeClient, time.Second,
 				informerFactory, workqueue.DefaultTypedControllerRateLimiter[string](),
-				true, /* disableVolumeInUseErrorHandler*/
-				2*time.Minute /* maxRetryInterval */)
+				true,          /* disableVolumeInUseErrorHandler*/
+				2*time.Minute, /* maxRetryInterval */
+				"" /* nodeName */)
 
 			ctrlInstance, _ := controller.(*resizeController)
 
@@ -547,4 +549,108 @@ func fakeK8s(objs []runtime.Object) (kubernetes.Interface, informers.SharedInfor
 	client := fake.NewSimpleClientset(objs...)
 	informerFactory := informers.NewSharedInformerFactory(client, 0)
 	return client, informerFactory
+}
+
+func TestPvBelongsToNode(t *testing.T) {
+	pvWithAffinity := func(key, value string) *v1.PersistentVolume {
+		return &v1.PersistentVolume{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-pv"},
+			Spec: v1.PersistentVolumeSpec{
+				NodeAffinity: &v1.VolumeNodeAffinity{
+					Required: &v1.NodeSelector{
+						NodeSelectorTerms: []v1.NodeSelectorTerm{
+							{
+								MatchExpressions: []v1.NodeSelectorRequirement{
+									{
+										Key:      key,
+										Operator: v1.NodeSelectorOpIn,
+										Values:   []string{value},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+	}
+
+	pvNoAffinity := &v1.PersistentVolume{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-pv"},
+		Spec:       v1.PersistentVolumeSpec{},
+	}
+
+	tests := []struct {
+		name     string
+		nodeName string
+		pv       *v1.PersistentVolume
+		expected bool
+	}{
+		{
+			name:     "node filtering disabled (empty nodeName)",
+			nodeName: "",
+			pv:       pvWithAffinity("topology.hostpath.csi/node", "node-a"),
+			expected: true,
+		},
+		{
+			name:     "matching node affinity",
+			nodeName: "node-a",
+			pv:       pvWithAffinity("topology.hostpath.csi/node", "node-a"),
+			expected: true,
+		},
+		{
+			name:     "non-matching node affinity",
+			nodeName: "node-b",
+			pv:       pvWithAffinity("topology.hostpath.csi/node", "node-a"),
+			expected: false,
+		},
+		{
+			name:     "PV without node affinity (not a node-local volume)",
+			nodeName: "node-a",
+			pv:       pvNoAffinity,
+			expected: false,
+		},
+		{
+			name:     "PV without node affinity, filtering disabled",
+			nodeName: "",
+			pv:       pvNoAffinity,
+			expected: true,
+		},
+		{
+			name:     "matching in second NodeSelectorTerm (OR semantics)",
+			nodeName: "node-a",
+			pv: &v1.PersistentVolume{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-pv"},
+				Spec: v1.PersistentVolumeSpec{
+					NodeAffinity: &v1.VolumeNodeAffinity{
+						Required: &v1.NodeSelector{
+							NodeSelectorTerms: []v1.NodeSelectorTerm{
+								{
+									MatchExpressions: []v1.NodeSelectorRequirement{
+										{Key: "topology.hostpath.csi/node", Operator: v1.NodeSelectorOpIn, Values: []string{"node-b"}},
+									},
+								},
+								{
+									MatchExpressions: []v1.NodeSelectorRequirement{
+										{Key: "topology.hostpath.csi/node", Operator: v1.NodeSelectorOpIn, Values: []string{"node-a"}},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := &resizeController{nodeName: tc.nodeName}
+			result := ctrl.pvBelongsToNode(tc.pv)
+			if result != tc.expected {
+				t.Errorf("pvBelongsToNode() = %v, expected %v", result, tc.expected)
+			}
+		})
+	}
 }

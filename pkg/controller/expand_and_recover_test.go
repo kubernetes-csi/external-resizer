@@ -182,7 +182,9 @@ func TestExpandAndRecover(t *testing.T) {
 			controller := NewResizeController(driverName,
 				csiResizer, kubeClient,
 				time.Second, informerFactory,
-				workqueue.DefaultTypedControllerRateLimiter[string](), true /*handleVolumeInUseError*/, 2*time.Minute /*maxRetryInterval*/)
+				workqueue.DefaultTypedControllerRateLimiter[string](), true, /*handleVolumeInUseError*/
+				2*time.Minute, /*maxRetryInterval*/
+				"" /* nodeName */)
 
 			ctrlInstance, _ := controller.(*resizeController)
 			recorder := record.NewFakeRecorder(10)
@@ -253,7 +255,8 @@ func TestExpandAndRecoverConcurrent(t *testing.T) {
 	controller := NewResizeController(driverName,
 		csiResizer, kubeClient,
 		time.Second, informerFactory,
-		workqueue.DefaultTypedControllerRateLimiter[string](), true, 2*time.Minute)
+		workqueue.DefaultTypedControllerRateLimiter[string](), true,
+		2*time.Minute, "" /* nodeName */)
 
 	ctrlInstance := controller.(*resizeController)
 	ctrlInstance.eventRecorder = record.NewFakeRecorder(1000)
