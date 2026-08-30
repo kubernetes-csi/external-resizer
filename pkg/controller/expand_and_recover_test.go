@@ -34,6 +34,7 @@ func TestExpandAndRecover(t *testing.T) {
 		pv                         *v1.PersistentVolume
 		disableNodeExpansion       bool
 		disableControllerExpansion bool
+		expandedCapacity           resource.Quantity
 
 		// expectations of test
 		expectedResizeStatus                     v1.ClaimResourceStatus
@@ -52,6 +53,19 @@ func TestExpandAndRecover(t *testing.T) {
 			expectNodeExpansionNotRequiredAnnotation: false,
 			expectedAllocatedSize:                    resource.MustParse("2G"),
 			expectResizeCall:                         true,
+		},
+		{
+			// The driver returns a CapacityBytes larger than the request (e.g. it
+			// rounds up to its own granularity). AllocatedResources must follow
+			// the driver-returned capacity, not the raw request, so ResourceQuota
+			// counts the real provisioned size.
+			name:                  "driver returns capacity larger than request, allocated size follows driver capacity",
+			pvc:                   testutil.GetTestPVC("test-vol0", "2G", "1G", "", ""),
+			pv:                    createPV(1, "claim01", defaultNS, "test-uid", &fsVolumeMode),
+			expandedCapacity:      resource.MustParse("3G"),
+			expectedResizeStatus:  v1.PersistentVolumeClaimNodeResizePending,
+			expectedAllocatedSize: resource.MustParse("3G"),
+			expectResizeCall:      true,
 		},
 		{
 			name:                  "pvc.spec.size = pv.spec.size, resize_status=no_expansion_inprogress",
@@ -166,6 +180,9 @@ func TestExpandAndRecover(t *testing.T) {
 			driverName, _ := client.GetDriverName(context.TODO())
 			if test.expansionError != nil {
 				client.SetExpansionError(test.expansionError)
+			}
+			if !test.expandedCapacity.IsZero() {
+				client.SetExpandedCapacity(test.expandedCapacity.Value())
 			}
 
 			var initialObjects []runtime.Object

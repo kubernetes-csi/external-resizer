@@ -41,6 +41,7 @@ type MockClient struct {
 	modifyCalled                            atomic.Int32
 	expansionError                          error
 	modifyError                             error
+	expandedCapacityBytes                   int64
 	checkMigratedLabel                      bool
 	usedSecrets                             atomic.Pointer[map[string]string]
 	usedCapability                          atomic.Pointer[csi.VolumeCapability]
@@ -84,6 +85,13 @@ func (c *MockClient) SetCheckMigratedLabel() {
 	c.checkMigratedLabel = true
 }
 
+// SetExpandedCapacity makes Expand return the given capacity as CapacityBytes
+// instead of the requested bytes, so tests can exercise a driver whose
+// realized capacity differs from the request.
+func (c *MockClient) SetExpandedCapacity(bytes int64) {
+	c.expandedCapacityBytes = bytes
+}
+
 func (c *MockClient) Expand(
 	ctx context.Context,
 	volumeID string,
@@ -107,6 +115,9 @@ func (c *MockClient) Expand(
 	c.expandCalled.Add(1)
 	c.usedSecrets.Store(&secrets)
 	c.usedCapability.Store(capability)
+	if c.expandedCapacityBytes > 0 {
+		return c.expandedCapacityBytes, c.supportsNodeResize, nil
+	}
 	return requestBytes, c.supportsNodeResize, nil
 }
 

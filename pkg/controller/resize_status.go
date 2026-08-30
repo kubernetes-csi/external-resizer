@@ -68,7 +68,9 @@ func (ctrl *resizeController) markControllerResizeInProgress(
 
 // markForPendingNodeExpansion is new set of functions designed around feature RecoverVolumeExpansionFailure
 // which correctly sets pvc.Status.ResizeStatus
-func (ctrl *resizeController) markForPendingNodeExpansion(pvc *v1.PersistentVolumeClaim) (*v1.PersistentVolumeClaim, error) {
+func (ctrl *resizeController) markForPendingNodeExpansion(
+	pvc *v1.PersistentVolumeClaim,
+	newSize resource.Quantity) (*v1.PersistentVolumeClaim, error) {
 	pvcCondition := v1.PersistentVolumeClaimCondition{
 		Type:               v1.PersistentVolumeClaimFileSystemResizePending,
 		Status:             v1.ConditionTrue,
@@ -84,6 +86,9 @@ func (ctrl *resizeController) markForPendingNodeExpansion(pvc *v1.PersistentVolu
 	newPVC = ctrl.removeNodeExpansionNotRequiredAnnotation(newPVC)
 
 	newPVC = mergeStorageResourceStatus(newPVC, v1.PersistentVolumeClaimNodeResizePending)
+	// Record the actual capacity returned by the controller so ResourceQuota
+	// counts the real provisioned size rather than the raw request.
+	newPVC = mergeStorageAllocatedResources(newPVC, newSize)
 	updatedPVC, err := util.PatchClaim(ctrl.kubeClient, pvc, newPVC, true /* addResourceVersionCheck */)
 
 	if err != nil {
@@ -167,6 +172,9 @@ func (ctrl *resizeController) markOverallExpansionAsFinished(
 
 	newPVC := pvc.DeepCopy()
 	newPVC.Status.Capacity[v1.ResourceStorage] = newSize
+	// Record the actual capacity returned by the controller so ResourceQuota
+	// counts the real provisioned size rather than the raw request.
+	newPVC = mergeStorageAllocatedResources(newPVC, newSize)
 	newPVC.Status.Conditions = util.MergeResizeConditionsOfPVC(pvc.Status.Conditions,
 		[]v1.PersistentVolumeClaimCondition{}, false /*keepOldResizeConditions*/)
 

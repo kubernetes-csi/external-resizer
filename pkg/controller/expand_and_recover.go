@@ -282,7 +282,7 @@ func (ctrl *resizeController) callResizeOnPlugin(
 	}
 
 	if fsResizeRequired {
-		pvc, err = ctrl.markForPendingNodeExpansion(pvc)
+		pvc, err = ctrl.markForPendingNodeExpansion(pvc, updatedSize)
 		return pvc, pv, err
 	}
 	pvc, err = ctrl.markOverallExpansionAsFinished(pvc, updatedSize)

@@ -33,7 +33,7 @@ func TestResizeFunctions(t *testing.T) {
 			pvc:         basePVC().Get(),
 			expectedPVC: basePVC().WithStorageResourceStatus(v1.PersistentVolumeClaimNodeResizePending).Get(),
 			testFunc: func(pvc *v1.PersistentVolumeClaim, ctrl *resizeController, size resource.Quantity) (*v1.PersistentVolumeClaim, error) {
-				return ctrl.markForPendingNodeExpansion(pvc)
+				return ctrl.markForPendingNodeExpansion(pvc, size)
 			},
 		},
 		{
@@ -41,8 +41,8 @@ func TestResizeFunctions(t *testing.T) {
 			pvc:  basePVC().WithResourceStatus(v1.ResourceCPU, v1.PersistentVolumeClaimControllerResizeInfeasible).Get(),
 			expectedPVC: basePVC().WithResourceStatus(v1.ResourceCPU, v1.PersistentVolumeClaimControllerResizeInfeasible).
 				WithStorageResourceStatus(v1.PersistentVolumeClaimNodeResizePending).Get(),
-			testFunc: func(pvc *v1.PersistentVolumeClaim, ctrl *resizeController, _ resource.Quantity) (*v1.PersistentVolumeClaim, error) {
-				return ctrl.markForPendingNodeExpansion(pvc)
+			testFunc: func(pvc *v1.PersistentVolumeClaim, ctrl *resizeController, size resource.Quantity) (*v1.PersistentVolumeClaim, error) {
+				return ctrl.markForPendingNodeExpansion(pvc, size)
 			},
 		},
 		{
