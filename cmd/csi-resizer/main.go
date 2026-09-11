@@ -272,18 +272,17 @@ func main() {
 	}
 
 	var mc modifycontroller.ModifyController
-	if csiModifier != nil {
-		modifierName := csiModifier.Name()
-		// Add modify controller only if the feature gate is enabled
-		if utilfeature.DefaultFeatureGate.Enabled(features.VolumeAttributesClass) {
-			mc = modifycontroller.NewModifyController(modifierName, csiModifier, kubeClient, *resyncPeriod,
-				*retryIntervalMax, *extraModifyMetadata, informerFactory,
-				workqueue.NewTypedItemExponentialFailureRateLimiter[string](*retryIntervalStart, *retryIntervalMax))
-		}
+	// Add modify controller only if the feature gate is enabled. It is started even
+	// when the driver does not support ControllerModifyVolume, so that it can report
+	// PVCs requesting a VolumeAttributesClass the driver cannot apply.
+	if utilfeature.DefaultFeatureGate.Enabled(features.VolumeAttributesClass) {
+		mc = modifycontroller.NewModifyController(driverName, csiModifier, csiModifier != nil, kubeClient, *resyncPeriod,
+			*retryIntervalMax, *extraModifyMetadata, informerFactory,
+			workqueue.NewTypedItemExponentialFailureRateLimiter[string](*retryIntervalStart, *retryIntervalMax))
+	}
 
-		if leaseHolder == "" {
-			leaseHolder = modifierName
-		}
+	if csiModifier != nil && leaseHolder == "" {
+		leaseHolder = csiModifier.Name()
 	}
 
 	// handle SIGTERM and SIGINT by cancelling the context.
