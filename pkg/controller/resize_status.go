@@ -66,8 +66,7 @@ func (ctrl *resizeController) markControllerResizeInProgress(
 	return updatedPVC, nil
 }
 
-// markForPendingNodeExpansion is new set of functions designed around feature RecoverVolumeExpansionFailure
-// which correctly sets pvc.Status.ResizeStatus
+// markForPendingNodeExpansion sets pvc.Status.ResizeStatus for node expansion.
 func (ctrl *resizeController) markForPendingNodeExpansion(pvc *v1.PersistentVolumeClaim) (*v1.PersistentVolumeClaim, error) {
 	pvcCondition := v1.PersistentVolumeClaimCondition{
 		Type:               v1.PersistentVolumeClaimFileSystemResizePending,

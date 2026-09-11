@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/kubernetes-csi/external-resizer/v2/pkg/csi"
-	"github.com/kubernetes-csi/external-resizer/v2/pkg/features"
 	"github.com/kubernetes-csi/external-resizer/v2/pkg/resizer"
 	"github.com/kubernetes-csi/external-resizer/v2/pkg/testutil"
 	"github.com/kubernetes-csi/external-resizer/v2/pkg/util"
@@ -20,10 +19,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
-	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
-	featuregatetesting "k8s.io/component-base/featuregate/testing"
 )
 
 func TestExpandAndRecover(t *testing.T) {
@@ -161,7 +158,6 @@ func TestExpandAndRecover(t *testing.T) {
 	for i := range tests {
 		test := tests[i]
 		t.Run(test.name, func(t *testing.T) {
-			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.RecoverVolumeExpansionFailure, true)
 			client := csi.NewMockClient("foo", !test.disableNodeExpansion, !test.disableControllerExpansion, false, true, true)
 			driverName, _ := client.GetDriverName(context.TODO())
 			if test.expansionError != nil {
@@ -220,8 +216,6 @@ func TestExpandAndRecover(t *testing.T) {
 // are thread-safe. This test exercises the synchronization of finalErrorPVCs access
 // when multiple workers process failing PVC resize operations simultaneously.
 func TestExpandAndRecoverConcurrent(t *testing.T) {
-	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.RecoverVolumeExpansionFailure, true)
-
 	fsVolumeMode := v1.PersistentVolumeFilesystem
 	client := csi.NewMockClient("mock-driver", true, true, false, true, true)
 	driverName, _ := client.GetDriverName(context.TODO())

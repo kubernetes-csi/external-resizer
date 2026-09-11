@@ -8,15 +8,12 @@ import (
 	"time"
 
 	"github.com/kubernetes-csi/external-resizer/v2/pkg/csi"
-	"github.com/kubernetes-csi/external-resizer/v2/pkg/features"
 	"github.com/kubernetes-csi/external-resizer/v2/pkg/resizer"
 	"github.com/kubernetes-csi/external-resizer/v2/pkg/testutil"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
-	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	"k8s.io/client-go/util/workqueue"
-	featuregatetesting "k8s.io/component-base/featuregate/testing"
 )
 
 func TestResizeFunctions(t *testing.T) {
@@ -76,7 +73,6 @@ func TestResizeFunctions(t *testing.T) {
 	for _, test := range tests {
 		tc := test
 		t.Run(tc.name, func(t *testing.T) {
-			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.RecoverVolumeExpansionFailure, true)
 			client := csi.NewMockClient("foo", true, true, false, true, true)
 			driverName, _ := client.GetDriverName(context.TODO())
 

@@ -81,14 +81,6 @@ Note that the external-resizer does not scale with more replicas. Only one exter
   * `AnnotateFsResize=true|false` (BETA - default=true): Store current size of pvc in pv's annotation, so as if pvc is deleted while expansion was pending on the node, the size of pvc can be restored to old value. This permits
     expansion on the node in case pvc was deleted while expansion was pending on the node (but completed in the controller). Use of this feature depends on Kubernetes version 1.21.
 
-  * `RecoverVolumeExpansionFailure=true|false` (GA - default=true): Allow users to reduce size of PVC if expansion to current size is failing. If the feature gate `RecoverVolumeExpansionFailure` is enabled
-    and expansion has failed for a PVC, you can retry expansion with a smaller size than the previously requested value. To request a new expansion attempt with a
-    smaller proposed size, edit `.spec.resources` for that PVC and choose a value that is less than the value you previously tried.
-    This is useful if expansion to a higher value did not succeed because of capacity constraint.
-    If that has happened, or you suspect that it might have, you can retry expansion by specifying a
-    size that is within the capacity limits of underlying storage provider. You can monitor status of resize operation by watching `.status.resizeStatus` and events on the PVC. Use of this feature-gate requires Kubernetes 1.32.
-
-
 #### Other recognized arguments
 
 * `--kubeconfig <path>`: Path to Kubernetes client configuration that the external-resizer uses to connect to Kubernetes API server. When omitted, default token provided by Kubernetes will be used. This option is useful only when the external-resizer does not run as a Kubernetes pod, e.g. for debugging. Either this or `--master` needs to be set if the external-resizer is being run out of cluster.
