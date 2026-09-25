@@ -16,6 +16,7 @@
 ### Other (Cleanup or Flake)
 
 - Bump k8s dependencies to v1.36.1 (#578, @dfajmon)
+- Bump kubernetes dependencies to v1.37.1 (#619, @gnufied)
 - Bump up golang.org/x/crypto to v0.53.0 to address the vulnerability - CVE-2026-42508 (#587, @chethanv28)
 - Remove RecoverVolumeExpansionFailure feature gate, the feature has been GA for awhile now (#613, @gnufied)
 
@@ -45,6 +46,7 @@
 - buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go: 8976f5b → 52f3232
 - buf.build/go/protovalidate: v0.12.0 → v1.0.0
 - cel.dev/expr: v0.25.1 → v0.25.3
+- github.com/Azure/go-ansiterm: [306776e → faa5f7b](https://github.com/Azure/go-ansiterm/compare/306776e...faa5f7b)
 - github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp: [v1.30.0 → v1.33.0](https://github.com/GoogleCloudPlatform/opentelemetry-operations-go/compare/detectors/gcp/v1.30.0...detectors/gcp/v1.33.0)
 - github.com/cncf/xds/go: [ee656c7 → dba9d58](https://github.com/cncf/xds/compare/ee656c7...dba9d58)
 - github.com/container-storage-interface/spec: [v1.12.0 → v1.13.0](https://github.com/container-storage-interface/spec/compare/v1.12.0...v1.13.0)
@@ -76,15 +78,22 @@
 - github.com/grpc-ecosystem/go-grpc-middleware/v2: [v2.3.3 → v2.3.4](https://github.com/grpc-ecosystem/go-grpc-middleware/compare/v2.3.3...v2.3.4)
 - github.com/grpc-ecosystem/grpc-gateway/v2: [v2.27.7 → v2.30.0](https://github.com/grpc-ecosystem/grpc-gateway/compare/v2.27.7...v2.30.0)
 - github.com/klauspost/compress: [v1.18.0 → v1.19.1](https://github.com/klauspost/compress/compare/v1.18.0...v1.19.1)
+- github.com/moby/term: [v0.5.0 → v0.5.2](https://github.com/moby/term/compare/v0.5.0...v0.5.2)
 - github.com/prometheus/client_golang: [v1.23.2 → v1.24.1](https://github.com/prometheus/client_golang/compare/v1.23.2...v1.24.1)
 - github.com/prometheus/client_model: [v0.6.2 → v0.6.3](https://github.com/prometheus/client_model/compare/v0.6.2...v0.6.3)
 - github.com/prometheus/common: [v0.67.5 → v0.70.1](https://github.com/prometheus/common/compare/v0.67.5...v0.70.1)
 - github.com/prometheus/procfs: [v0.19.2 → v0.21.1](https://github.com/prometheus/procfs/compare/v0.19.2...v0.21.1)
+- github.com/sirupsen/logrus: [v1.9.3 → v1.9.4](https://github.com/sirupsen/logrus/compare/v1.9.3...v1.9.4)
 - github.com/spiffe/go-spiffe/v2: [v2.6.0 → v2.7.0](https://github.com/spiffe/go-spiffe/compare/v2.6.0...v2.7.0)
+- github.com/stretchr/objx: [v0.5.2 → v0.5.3](https://github.com/stretchr/objx/compare/v0.5.2...v0.5.3)
 - github.com/stretchr/testify: [v1.11.1 → v1.12.1](https://github.com/stretchr/testify/compare/v1.11.1...v1.12.1)
+- go.etcd.io/bbolt: v1.4.3 → v1.5.0
 - go.etcd.io/etcd/api/v3: v3.6.8 → v3.7.1
 - go.etcd.io/etcd/client/pkg/v3: v3.6.8 → v3.7.1
 - go.etcd.io/etcd/client/v3: v3.6.8 → v3.7.1
+- go.etcd.io/etcd/pkg/v3: v3.6.8 → v3.7.0
+- go.etcd.io/etcd/server/v3: v3.6.8 → v3.7.0
+- go.etcd.io/raft/v3: v3.6.0 → v3.7.0
 - go.opentelemetry.io/contrib/detectors/gcp: v1.39.0 → v1.44.0
 - go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc: v0.65.0 → v0.70.0
 - go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp: v0.65.0 → v0.70.0
@@ -100,6 +109,7 @@
 - go.yaml.in/yaml/v2: v2.4.3 → v2.4.4
 - go.yaml.in/yaml/v3: v3.0.4 → v3.0.5
 - golang.org/x/crypto: v0.47.0 → v0.56.0
+- golang.org/x/exp: 944ab1f → 746e56f
 - golang.org/x/mod: v0.31.0 → v0.38.0
 - golang.org/x/net: v0.49.0 → v0.58.0
 - golang.org/x/oauth2: v0.34.0 → v0.36.0
@@ -114,12 +124,24 @@
 - google.golang.org/genproto/googleapis/rpc: 8636f87 → 08b0e42
 - google.golang.org/grpc: v1.79.3 → v1.83.2
 - google.golang.org/protobuf: f2248ac → v1.36.12
-- sigs.k8s.io/apiserver-network-proxy/konnectivity-client: v0.34.0 → v0.35.0
-- sigs.k8s.io/structured-merge-diff/v6: v6.3.2 → v6.4.0
+- k8s.io/api: v0.36.1 → v0.37.1
+- k8s.io/apimachinery: v0.36.1 → v0.37.1
+- k8s.io/apiserver: v0.36.1 → v0.37.1
+- k8s.io/client-go: v0.36.1 → v0.37.1
+- k8s.io/component-base: v0.36.1 → v0.37.1
+- k8s.io/csi-translation-lib: v0.36.1 → v0.37.1
+- k8s.io/gengo/v2: 85fd79d → ec3ebc5
+- k8s.io/kms: v0.36.1 → v0.37.1
+- k8s.io/kube-openapi: 43fb72c → d427ff9
+- k8s.io/streaming: v0.36.1 → v0.37.1
+- k8s.io/utils: b8788ab → be93311
+- sigs.k8s.io/apiserver-network-proxy/konnectivity-client: v0.34.0 → v0.36.0
+- sigs.k8s.io/structured-merge-diff/v6: v6.3.2 → v6.4.2
 
 ### Removed
 - github.com/antihax/optional: [v1.0.0](https://github.com/antihax/optional/tree/v1.0.0)
 - github.com/go-openapi/swag/jsonname: [v0.25.4](https://github.com/go-openapi/swag/tree/jsonname/v0.25.4)
+- github.com/gogo/protobuf: [v1.3.2](https://github.com/gogo/protobuf/tree/v1.3.2)
 - github.com/kisielk/errcheck: [v1.5.0](https://github.com/kisielk/errcheck/tree/v1.5.0)
 - github.com/kisielk/gotool: [v1.0.0](https://github.com/kisielk/gotool/tree/v1.0.0)
 - github.com/yuin/goldmark: [v1.2.1](https://github.com/yuin/goldmark/tree/v1.2.1)
