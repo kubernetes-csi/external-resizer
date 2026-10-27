@@ -53,8 +53,12 @@ type ModifyController interface {
 }
 
 type modifyController struct {
-	name                string
-	modifier            modifier.Modifier
+	name     string
+	modifier modifier.Modifier
+	// modifySupported is false when the CSI driver does not implement
+	// ControllerModifyVolume. The controller still runs in that case so that it
+	// can report PVCs asking for a VolumeAttributesClass the driver cannot apply.
+	modifySupported     bool
 	kubeClient          kubernetes.Interface
 	claimQueue          workqueue.TypedRateLimitingInterface[string]
 	eventRecorder       record.EventRecorder
@@ -78,6 +82,7 @@ type modifyController struct {
 func NewModifyController(
 	name string,
 	modifier modifier.Modifier,
+	modifySupported bool,
 	kubeClient kubernetes.Interface,
 	resyncPeriod time.Duration,
 	maxRetryInterval time.Duration,
@@ -101,6 +106,7 @@ func NewModifyController(
 	ctrl := &modifyController{
 		name:                name,
 		modifier:            modifier,
+		modifySupported:     modifySupported,
 		kubeClient:          kubeClient,
 		pvListerSynced:      pvInformer.Informer().HasSynced,
 		pvLister:            pvInformer.Lister(),
@@ -294,6 +300,14 @@ func (ctrl *modifyController) syncPVC(key string) error {
 		return nil
 	}
 
+	if !ctrl.modifySupported {
+		// The driver cannot modify volumes at all, so there is nothing to reconcile.
+		// Report it on the PVC instead, otherwise a VolumeAttributesClass set by the
+		// user is silently never applied.
+		ctrl.reportModifyNotSupported(pvc)
+		return nil
+	}
+
 	if pvc.Status.Phase == v1.ClaimBound {
 		_, _, err, _ := ctrl.modify(pvc, pv)
 		if err != nil {
@@ -304,4 +318,22 @@ func (ctrl *modifyController) syncPVC(key string) error {
 	}
 
 	return nil
+}
+
+// reportModifyNotSupported emits a warning event on pvc when it asks for a
+// VolumeAttributesClass the driver can never apply. It stays quiet unless the PVC
+// is actually asking for something new, so the event is tied to a user action
+// rather than repeated for every PVC this driver owns.
+func (ctrl *modifyController) reportModifyNotSupported(pvc *v1.PersistentVolumeClaim) {
+	specVacName := ptr.Deref(pvc.Spec.VolumeAttributesClassName, "")
+	curVacName := ptr.Deref(pvc.Status.CurrentVolumeAttributesClassName, "")
+	if specVacName == "" || specVacName == curVacName {
+		return
+	}
+
+	klog.V(4).InfoS("Driver does not support ControllerModifyVolume, skipping PVC",
+		"PVC", klog.KObj(pvc), "VolumeAttributesClass", specVacName)
+	ctrl.eventRecorder.Eventf(pvc, v1.EventTypeWarning, util.VolumeModifyNotSupported,
+		"CSI driver %s does not support ControllerModifyVolume, VolumeAttributesClass %q will not be applied.",
+		ctrl.name, specVacName)
 }

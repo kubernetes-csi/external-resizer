@@ -168,7 +168,8 @@ func TestMarkControllerModifyVolumeStatus(t *testing.T) {
 				t.Fatalf("Test %s: Unable to create modifier: %v", test.name, err)
 			}
 			controller := NewModifyController(driverName,
-				csiModifier, kubeClient,
+				csiModifier,
+				true, kubeClient,
 				time.Second, 2*time.Minute, false, informerFactory,
 				workqueue.DefaultTypedControllerRateLimiter[string]())
 
@@ -243,7 +244,8 @@ func TestMarkControllerModifyVolumeCompleted(t *testing.T) {
 				t.Fatalf("Test %s: Unable to create modifier: %v", test.name, err)
 			}
 			controller := NewModifyController(driverName,
-				csiModifier, kubeClient,
+				csiModifier,
+				true, kubeClient,
 				time.Second, 2*time.Minute, false, informerFactory,
 				workqueue.DefaultTypedControllerRateLimiter[string]())
 
