@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -20,6 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
 	featuregatetesting "k8s.io/component-base/featuregate/testing"
 )
@@ -436,13 +438,15 @@ func setupFakeK8sEnvironment(t *testing.T, client *csi.MockClient, initialObject
 	ctx := t.Context()
 	driverName, _ := client.GetDriverName(ctx)
 
+	// Mirror main.go: a driver without ControllerModifyVolume yields a nil modifier
+	// and the controller is started anyway, so it can report on such PVCs.
 	csiModifier, err := modifier.NewModifierFromClient(client, 15*time.Second, kubeClient, informerFactory, false, driverName)
-	if err != nil {
+	if err != nil && !errors.Is(err, modifier.ModifyNotSupportErr) {
 		t.Fatalf("Test %s: Unable to create modifier: %v", t.Name(), err)
 	}
 
 	controller := NewModifyController(driverName,
-		csiModifier, kubeClient,
+		csiModifier, csiModifier != nil, kubeClient,
 		0 /* resyncPeriod */, 2*time.Minute, false, informerFactory,
 		workqueue.DefaultTypedControllerRateLimiter[string]())
 
@@ -453,4 +457,86 @@ func setupFakeK8sEnvironment(t *testing.T, client *csi.MockClient, initialObject
 	ctrlInstance.init(ctx)
 
 	return ctrlInstance
+}
+
+// TestSyncPVCUnsupportedModify checks that a driver without ControllerModifyVolume
+// reports an unsatisfiable VolumeAttributesClass on the PVC instead of silently
+// ignoring it, and that it stays quiet when the user has not asked for anything.
+func TestSyncPVCUnsupportedModify(t *testing.T) {
+	basePV := createTestPV(1, pvcName, pvcNamespace, "foobaz" /*pvcUID*/, &fsVolumeMode, testVac)
+	otherDriverPV := createTestPV(1, pvcName, pvcNamespace, "foobaz" /*pvcUID*/, &fsVolumeMode, testVac)
+	otherDriverPV.Spec.PersistentVolumeSource.CSI.Driver = "some-other-driver"
+
+	tests := []struct {
+		name          string
+		pvc           *v1.PersistentVolumeClaim
+		pv            *v1.PersistentVolume
+		expectedEvent string
+	}{
+		{
+			name:          "Should report when PVC asks for a VAC the driver cannot apply",
+			pvc:           createTestPVC(pvcName, targetVac /*vacName*/, testVac /*curVacName*/, "" /*targetVacName*/),
+			pv:            basePV,
+			expectedEvent: util.VolumeModifyNotSupported,
+		},
+		{
+			name: "Should NOT report when the requested VAC is already the current one",
+			pvc:  createTestPVC(pvcName, testVac /*vacName*/, testVac /*curVacName*/, "" /*targetVacName*/),
+			pv:   basePV,
+		},
+		{
+			name: "Should NOT report when PVC asks for no VAC at all",
+			pvc:  createTestPVC(pvcName, "" /*vacName*/, "" /*curVacName*/, "" /*targetVacName*/),
+			pv:   basePV,
+		},
+		{
+			name: "Should NOT report for a PV provisioned by another CSI driver",
+			pvc:  createTestPVC(pvcName, targetVac /*vacName*/, testVac /*curVacName*/, "" /*targetVacName*/),
+			pv:   otherDriverPV,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			// supportsControllerModify is false: NewModifierFromClient returns ModifyNotSupportErr.
+			client := csi.NewMockClient(testDriverName, true, true, false, true, true)
+
+			initialObjects := []runtime.Object{testVacObject, targetVacObject, test.pvc, test.pv}
+			ctrlInstance := setupFakeK8sEnvironment(t, client, initialObjects)
+			if ctrlInstance.modifySupported {
+				t.Fatalf("expected modify to be unsupported for %s", test.name)
+			}
+			recorder := record.NewFakeRecorder(10)
+			ctrlInstance.eventRecorder = recorder
+
+			if err := ctrlInstance.syncPVC(pvcNamespace + "/" + pvcName); err != nil {
+				t.Fatalf("for %s, unexpected error: %v", test.name, err)
+			}
+
+			if count := client.GetModifyCount(); count > 0 {
+				t.Fatalf("for %s: expected no csi modify call, got %d", test.name, count)
+			}
+
+			if test.expectedEvent == "" {
+				if len(recorder.Events) != 0 {
+					t.Fatalf("for %s: expected no event, got %q", test.name, <-recorder.Events)
+				}
+				return
+			}
+
+			if len(recorder.Events) != 1 {
+				t.Fatalf("for %s: expected exactly 1 event, got %d", test.name, len(recorder.Events))
+			}
+			event := <-recorder.Events
+			if !strings.Contains(event, test.expectedEvent) {
+				t.Errorf("for %s: expected event to mention %q, got %q", test.name, test.expectedEvent, event)
+			}
+			if !strings.Contains(event, v1.EventTypeWarning) {
+				t.Errorf("for %s: expected a Warning event, got %q", test.name, event)
+			}
+			if !strings.Contains(event, targetVac) {
+				t.Errorf("for %s: expected event to name the requested VAC %q, got %q", test.name, targetVac, event)
+			}
+		})
+	}
 }
