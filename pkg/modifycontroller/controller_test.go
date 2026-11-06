@@ -140,6 +140,25 @@ func TestModifyPVC(t *testing.T) {
 	}
 }
 
+func TestUpdatePVCResyncEnqueuesPendingModify(t *testing.T) {
+	pvc := createTestPVC(pvcName, targetVac /*vacName*/, testVac /*curVacName*/, targetVac /*targetVacName*/)
+	pvc.Status.ModifyVolumeStatus.Status = v1.PersistentVolumeClaimModifyVolumePending
+	pv := createTestPV(1, pvcName, pvcNamespace, "foobaz" /*pvcUID*/, &fsVolumeMode, testVac)
+	client := csi.NewMockClient(testDriverName, true, true, true, true, true)
+	ctrl := setupFakeK8sEnvironment(t, client, []runtime.Object{pvc, pv, testVacObject})
+
+	// Drain the initial add event, then simulate the informer resync update.
+	for ctrl.claimQueue.Len() > 0 {
+		key, _ := ctrl.claimQueue.Get()
+		ctrl.claimQueue.Done(key)
+	}
+	ctrl.updatePVC(pvc, pvc.DeepCopy())
+
+	if got := ctrl.claimQueue.Len(); got != 1 {
+		t.Fatalf("expected pending PVC resync to enqueue one item, got %d", got)
+	}
+}
+
 func TestSyncPVC(t *testing.T) {
 	basePVC := createTestPVC(pvcName, targetVac /*vacName*/, testVac /*curVacName*/, testVac /*targetVacName*/)
 	basePV := createTestPV(1, pvcName, pvcNamespace, "foobaz" /*pvcUID*/, &fsVolumeMode, testVac)
