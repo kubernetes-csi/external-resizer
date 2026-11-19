@@ -17,10 +17,14 @@ limitations under the License.
 package controller
 
 import (
+	"context"
 	"fmt"
+	"slices"
 
 	"github.com/kubernetes-csi/external-resizer/v2/pkg/util"
 	v1 "k8s.io/api/core/v1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/klog/v2"
@@ -164,6 +168,57 @@ func (ctrl *resizeController) markOverallExpansionAsFinished(
 	pvc *v1.PersistentVolumeClaim,
 	newSize resource.Quantity) (*v1.PersistentVolumeClaim, error) {
 
+	updatedPVC, err := ctrl.patchFinishedExpansion(pvc, newSize)
+	if apierrors.IsConflict(err) {
+		// The driver has already expanded the volume. Retry the status write
+		// once if the concurrent update did not affect the resize.
+		current, getErr := ctrl.kubeClient.CoreV1().PersistentVolumeClaims(pvc.Namespace).
+			Get(context.TODO(), pvc.Name, metav1.GetOptions{})
+		if getErr != nil {
+			return pvc, fmt.Errorf("refresh PVC %q after resize conflict: %w", klog.KObj(pvc), getErr)
+		}
+		if canRetryFinishedExpansion(pvc, current) {
+			updatedPVC, err = ctrl.patchFinishedExpansion(current, newSize)
+		}
+	}
+	if err != nil {
+		return pvc, fmt.Errorf("mark PVC %q as resize finished failed: %w", klog.KObj(pvc), err)
+	}
+
+	err = ctrl.claims.Update(updatedPVC)
+	if err != nil {
+		return updatedPVC, fmt.Errorf("error updating PVC %s in local cache: %v", klog.KObj(updatedPVC), err)
+	}
+
+	klog.V(4).InfoS("Resize PVC finished", "PVC", klog.KObj(pvc))
+	ctrl.eventRecorder.Eventf(pvc, v1.EventTypeNormal, util.VolumeResizeSuccess, "Resize volume succeeded")
+
+	return updatedPVC, nil
+}
+
+func canRetryFinishedExpansion(previous, current *v1.PersistentVolumeClaim) bool {
+	if previous.UID != current.UID || current.DeletionTimestamp != nil ||
+		!apiequality.Semantic.DeepEqual(previous.Spec, current.Spec) ||
+		!apiequality.Semantic.DeepEqual(previous.Annotations, current.Annotations) {
+		return false
+	}
+
+	// The PVC protection controller owns Unused. Its status does not affect
+	// expansion, and patchFinishedExpansion preserves it.
+	isUnused := func(condition v1.PersistentVolumeClaimCondition) bool {
+		return condition.Type == v1.PersistentVolumeClaimUnused
+	}
+	previousStatus := previous.Status.DeepCopy()
+	previousStatus.Conditions = slices.DeleteFunc(previousStatus.Conditions, isUnused)
+	currentStatus := current.Status.DeepCopy()
+	currentStatus.Conditions = slices.DeleteFunc(currentStatus.Conditions, isUnused)
+	return apiequality.Semantic.DeepEqual(previousStatus, currentStatus)
+}
+
+func (ctrl *resizeController) patchFinishedExpansion(
+	pvc *v1.PersistentVolumeClaim,
+	newSize resource.Quantity) (*v1.PersistentVolumeClaim, error) {
+
 	newPVC := pvc.DeepCopy()
 	newPVC.Status.Capacity[v1.ResourceStorage] = newSize
 	newPVC.Status.Conditions = util.MergeResizeConditionsOfPVC(pvc.Status.Conditions,
@@ -180,20 +235,7 @@ func (ctrl *resizeController) markOverallExpansionAsFinished(
 	// this will ensure that kubelet does not try to resize volume again
 	newPVC = ctrl.addNodeExpansionNotRequiredAnnotation(newPVC)
 
-	updatedPVC, err := util.PatchClaim(ctrl.kubeClient, pvc, newPVC, true /* addResourceVersionCheck */)
-	if err != nil {
-		return pvc, fmt.Errorf("mark PVC %q as resize finished failed: %v", klog.KObj(pvc), err)
-	}
-
-	err = ctrl.claims.Update(updatedPVC)
-	if err != nil {
-		return updatedPVC, fmt.Errorf("error updating PVC %s in local cache: %v", klog.KObj(newPVC), err)
-	}
-
-	klog.V(4).InfoS("Resize PVC finished", "PVC", klog.KObj(pvc))
-	ctrl.eventRecorder.Eventf(pvc, v1.EventTypeNormal, util.VolumeResizeSuccess, "Resize volume succeeded")
-
-	return updatedPVC, nil
+	return util.PatchClaim(ctrl.kubeClient, pvc, newPVC, true /* addResourceVersionCheck */)
 }
 
 func mergeStorageResourceStatus(pvc *v1.PersistentVolumeClaim, status v1.ClaimResourceStatus) *v1.PersistentVolumeClaim {

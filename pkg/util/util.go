@@ -221,7 +221,7 @@ func PatchClaim(kubeClient kubernetes.Interface, oldPVC, newPVC *v1.PersistentVo
 	updatedClaim, updateErr := kubeClient.CoreV1().PersistentVolumeClaims(oldPVC.Namespace).
 		Patch(context.TODO(), oldPVC.Name, types.StrategicMergePatchType, patchBytes, metav1.PatchOptions{}, "status")
 	if updateErr != nil {
-		return oldPVC, fmt.Errorf("can't patch status of  PVC %s with %v", klog.KObj(oldPVC), updateErr)
+		return oldPVC, fmt.Errorf("can't patch status of  PVC %s with %w", klog.KObj(oldPVC), updateErr)
 	}
 
 	return updatedClaim, nil
